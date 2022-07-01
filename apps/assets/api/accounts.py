@@ -62,6 +62,7 @@ class AccountViewSet(OrgBulkModelViewSet):
     filterset_class = AccountFilterSet
     serializer_classes = {
         'default': serializers.AccountSerializer,
+        'mini': serializers.MiniAccountSerializer,
         'verify_account': serializers.AssetTaskSerializer
     }
     rbac_perms = {
@@ -70,7 +71,19 @@ class AccountViewSet(OrgBulkModelViewSet):
     }
 
     def get_queryset(self):
-        queryset = AuthBook.get_queryset()
+        fields_size = self.request.query_params.get('action')
+        if fields_size == 'mini':
+            # username不仅在数据库字段中，也有可能存在系统用户中，所以手动去重
+            id_name_tuple = AuthBook.objects.values_list('id', 'name', 'systemuser__name')
+            name_set = set()
+            id_list = []
+            for account_id, name, systemuser_name in id_name_tuple:
+                if name not in name_set and systemuser_name not in name_set:
+                    id_list.append(account_id)
+                    name_set.add(name or systemuser_name)
+            queryset = AuthBook.get_queryset().filter(id__in=id_list)
+        else:
+            queryset = AuthBook.get_queryset()
         return queryset
 
     @action(methods=['post'], detail=True, url_path='verify')

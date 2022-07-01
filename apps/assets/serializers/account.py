@@ -9,6 +9,16 @@ from common.utils.encode import ssh_pubkey_gen
 from common.drf.serializers import SecretReadableMixin
 
 
+class MiniAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AuthBook
+        fields = ['username']
+
+    def to_representation(self, instance):
+        instance.load_auth()
+        return super().to_representation(instance)
+
+
 class AccountSerializer(AuthSerializerMixin, BulkOrgResourceModelSerializer):
     ip = serializers.ReadOnlyField(label=_("IP"))
     hostname = serializers.ReadOnlyField(label=_("Hostname"))

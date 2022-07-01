@@ -11,6 +11,7 @@ __all__ = [
     'AssetSerializer', 'AssetSimpleSerializer', 'MiniAssetSerializer',
     'ProtocolsField', 'PlatformSerializer',
     'AssetTaskSerializer', 'AssetsTaskSerializer', 'ProtocolsField',
+    'AssetOptionsSerializer'
 ]
 
 
@@ -164,6 +165,21 @@ class AssetSerializer(BulkOrgResourceModelSerializer):
         instance = super().update(instance, validated_data)
         self.perform_nodes_display_create(instance, nodes_display)
         return instance
+
+
+class AssetOptionsSerializer(AssetSerializer):
+    try:
+        PLATFORM = [
+            (item.id, item.name) for item in Platform.objects.all()
+        ]
+    except:
+        PLATFORM = []
+    platform = serializers.ChoiceField(
+        choices=PLATFORM, label=_("Platform")
+    )
+
+    class Meta(AssetSerializer.Meta):
+        fields = AssetSerializer.Meta.fields
 
 
 class MiniAssetSerializer(serializers.ModelSerializer):

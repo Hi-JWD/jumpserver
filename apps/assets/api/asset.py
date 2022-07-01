@@ -5,6 +5,7 @@ from rest_framework.generics import RetrieveAPIView, ListAPIView
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
+from assets.models import AuthBook
 from common.utils import get_logger, get_object_or_none
 from common.mixins.api import SuggestionMixin
 from users.models import User, UserGroup
@@ -42,6 +43,7 @@ class AssetViewSet(SuggestionMixin, FilterAssetByNodeMixin, OrgBulkModelViewSet)
     filterset_fields = {
         'hostname': ['exact'],
         'ip': ['exact'],
+        'platform': ['exact'],
         'system_users__id': ['exact'],
         'platform__base': ['exact'],
         'is_active': ['exact'],
@@ -58,6 +60,21 @@ class AssetViewSet(SuggestionMixin, FilterAssetByNodeMixin, OrgBulkModelViewSet)
         'match': 'assets.match_asset'
     }
     extra_filter_backends = [FilterAssetByNodeFilterBackend, LabelFilterBackend, IpInFilterBackend]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        username = self.request.query_params.get('username')
+        if username:
+            asset_list = AuthBook.objects.filter(
+                Q(systemuser__username=username) | Q(username=username)
+            ).values_list('asset_id', flat=True)
+            if asset_list:
+                queryset = queryset.filter(id__in=asset_list)
+        return queryset
+
+    @staticmethod
+    def get_option_serializer():
+        return serializers.AssetOptionsSerializer()
 
     def set_assets_node(self, assets):
         if not isinstance(assets, list):

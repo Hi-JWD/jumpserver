@@ -1,7 +1,9 @@
 from typing import List
 
+from django.db.models import Q
+
 from common.utils.common import timeit
-from assets.models import Node, Asset
+from assets.models import Node, Asset, AuthBook
 from assets.pagination import NodeAssetTreePagination
 from common.utils import lazyproperty
 from assets.utils import get_node, is_query_node_all_assets
@@ -13,7 +15,17 @@ class SerializeToTreeNodeMixin:
     def serialize_nodes(self, nodes: List[Node], with_asset_amount=False):
         if with_asset_amount:
             def _name(node: Node):
-                return '{} ({})'.format(node.value, node.assets_amount)
+                asset_amount = node.assets_amount
+                username = self.request.query_params.get('username')
+                if username:
+                    # 这里要优化一下，不能每次查询都走数据库
+                    node_assets = node.get_all_assets()
+                    asset_list = AuthBook.objects.filter(
+                        Q(systemuser__username=username) | Q(username=username)
+                    ).values_list('asset_id', flat=True)
+                    if asset_list:
+                        asset_amount = node_assets.filter(id__in=asset_list).count()
+                return '{} ({})'.format(node.value, asset_amount)
         else:
             def _name(node: Node):
                 return node.value

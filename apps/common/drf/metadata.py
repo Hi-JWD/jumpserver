@@ -50,7 +50,10 @@ class SimpleMetadataWithFilters(SimpleMetadata):
             else:
                 # If user has appropriate permissions for the view, include
                 # appropriate metadata about the fields that should be supplied.
-                serializer = view.get_serializer()
+                get_serializer_func = getattr(view, 'get_serializer')
+                if hasattr(view, 'get_option_serializer'):
+                    get_serializer_func = getattr(view, 'get_option_serializer')
+                serializer = get_serializer_func()
                 actions[method] = self.get_serializer_info(serializer)
             finally:
                 view.request = request
