@@ -63,9 +63,14 @@ class AssetViewSet(SuggestionMixin, FilterAssetByNodeMixin, OrgBulkModelViewSet)
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        auth_book_qs = AuthBook.objects.all()
         username = self.request.query_params.get('username')
+        allow_change_auth = self.request.query_params.get('allow_change_auth')
+
+        if allow_change_auth == '1':
+            auth_book_qs = auth_book_qs.filter(allow_change_auth=True)
         if username:
-            asset_list = AuthBook.objects.filter(
+            asset_list = auth_book_qs.filter(
                 Q(systemuser__username=username) | Q(username=username)
             ).values_list('asset_id', flat=True)
             if asset_list:

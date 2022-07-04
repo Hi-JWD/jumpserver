@@ -99,7 +99,8 @@ class Account(BaseUser):
 
     @classmethod
     def get_queryset(cls):
-        queryset = cls.objects.all() \
+        queryset = cls.objects.all()
+        queryset = queryset \
             .annotate(type=F('app__type')) \
             .annotate(app_display=F('app__name')) \
             .annotate(systemuser_display=F('systemuser__name')) \

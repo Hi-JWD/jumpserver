@@ -15,12 +15,16 @@ class SerializeToTreeNodeMixin:
     def serialize_nodes(self, nodes: List[Node], with_asset_amount=False):
         if with_asset_amount:
             def _name(node: Node):
+                auth_book_qs = AuthBook.objects.all()
                 asset_amount = node.assets_amount
                 username = self.request.query_params.get('username')
+                allow_change_auth = self.request.query_params.get('allow_change_auth')
+                if allow_change_auth == '1':
+                    auth_book_qs = auth_book_qs.filter(allow_change_auth=True)
                 if username:
                     # 这里要优化一下，不能每次查询都走数据库
                     node_assets = node.get_all_assets()
-                    asset_list = AuthBook.objects.filter(
+                    asset_list = auth_book_qs.filter(
                         Q(systemuser__username=username) | Q(username=username)
                     ).values_list('asset_id', flat=True)
                     if asset_list:

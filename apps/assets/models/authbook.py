@@ -19,6 +19,7 @@ class AuthBook(BaseUser, AbsConnectivity):
     asset = models.ForeignKey('assets.Asset', on_delete=models.CASCADE, verbose_name=_('Asset'))
     systemuser = models.ForeignKey('assets.SystemUser', on_delete=models.CASCADE, null=True, verbose_name=_("System user"))
     version = models.IntegerField(default=1, verbose_name=_('Version'))
+    allow_change_auth = models.BooleanField(default=True, verbose_name=_('Allow change auth'))
     history = HistoricalRecords()
 
     auth_attrs = ['username', 'password', 'private_key', 'public_key']
