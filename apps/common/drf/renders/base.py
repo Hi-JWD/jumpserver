@@ -59,10 +59,6 @@ class BaseFileRenderer(BaseRenderer):
 
         if self.template == 'import':
             results = [results[0]] if results else results
-
-        else:
-            # 限制数据数量
-            results = results[:10000]
         # 会将一些 UUID 字段转化为 string
         results = json.loads(json.dumps(results, cls=encoders.JSONEncoder))
         return results
