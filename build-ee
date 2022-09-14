@@ -1,0 +1,13 @@
+#!/bin/bash
+
+if [ ! "$1" ]; then
+  echo "Error: Not version ! eg: ./build-ee.sh v2.25.5"
+fi
+
+VERSION=$1
+
+echo ""
+date
+echo "Build: jumpserver/core:${VERSION}"
+
+docker buildx build --platform linux/amd64 --build-arg VERSION=${VERSION} -t jumpserver/core:${VERSION} -f Dockerfile-ee . --load
