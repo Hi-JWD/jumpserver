@@ -10,29 +10,29 @@ from redis import Redis
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APPS_DIR = os.path.join(BASE_DIR, 'apps')
+CERTS_DIR = os.path.join(BASE_DIR, 'data', 'certs')
 
-sys.path.insert(0, BASE_DIR)
 sys.path.insert(0, APPS_DIR)
-from apps.jumpserver.const import CONFIG
-from apps.jumpserver.settings import base as jms_settings
+from jumpserver import settings
 
 os.environ.setdefault('PYTHONOPTIMIZE', '1')
 if os.getuid() == 0:
     os.environ.setdefault('C_FORCE_ROOT', '1')
 
 params = {
-    'host': CONFIG.REDIS_HOST,
-    'port': CONFIG.REDIS_PORT,
-    'password': CONFIG.REDIS_PASSWORD,
-    "ssl": CONFIG.REDIS_USE_SSL,
-    'ssl_cert_reqs': CONFIG.REDIS_SSL_REQUIRED,
-    "ssl_keyfile": jms_settings.REDIS_SSL_KEYFILE,
-    "ssl_certfile": jms_settings.REDIS_SSL_CERTFILE,
-    "ssl_ca_certs": jms_settings.REDIS_SSL_CA_CERTS
+    'host': settings.REDIS_HOST,
+    'port': settings.REDIS_PORT,
+    'password': settings.REDIS_PASSWORD,
+    'ssl': settings.REDIS_USE_SSL,
+    'ssl_cert_reqs': settings.REDIS_SSL_REQUIRED,
+    'ssl_keyfile': settings.REDIS_SSL_KEY,
+    'ssl_certfile': settings.REDIS_SSL_CERT,
+    'ssl_ca_certs': settings.REDIS_SSL_CA
 }
+print("Pamras: ", params)
 redis = Redis(**params)
 scheduler = "django_celery_beat.schedulers:DatabaseScheduler"
-
+processes = []
 cmd = [
     'celery',
     '-A', 'ops',
@@ -41,8 +41,6 @@ cmd = [
     '--scheduler', scheduler,
     '--max-interval', '60'
 ]
-
-processes = []
 
 
 def stop_beat_process(sig, frame):

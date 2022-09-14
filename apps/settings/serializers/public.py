@@ -8,13 +8,13 @@ __all__ = ['PublicSettingSerializer', 'PrivateSettingSerializer']
 
 class PublicSettingSerializer(serializers.Serializer):
     XPACK_ENABLED = serializers.BooleanField()
-    LOGIN_TITLE = serializers.CharField()
-    LOGO_URLS = serializers.DictField()
+    INTERFACE = serializers.DictField()
 
 
 class PrivateSettingSerializer(PublicSettingSerializer):
     WINDOWS_SKIP_ALL_MANUAL_PASSWORD = serializers.BooleanField()
     OLD_PASSWORD_HISTORY_LIMIT_COUNT = serializers.IntegerField()
+    TICKET_AUTHORIZE_DEFAULT_TIME = serializers.IntegerField()
     SECURITY_MAX_IDLE_TIME = serializers.IntegerField()
     SECURITY_VIEW_AUTH_NEED_MFA = serializers.BooleanField()
     SECURITY_MFA_VERIFY_TTL = serializers.IntegerField()
@@ -42,5 +42,5 @@ class PrivateSettingSerializer(PublicSettingSerializer):
 
     ANNOUNCEMENT_ENABLED = serializers.BooleanField()
     ANNOUNCEMENT = serializers.DictField()
-    
+
     TICKETS_ENABLED = serializers.BooleanField()

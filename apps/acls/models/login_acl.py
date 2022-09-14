@@ -44,87 +44,49 @@ class LoginACL(BaseACL):
     def __str__(self):
         return self.name
 
-    @property
-    def action_reject(self):
-        return self.action == self.ActionChoices.reject
-
-    @property
-    def action_allow(self):
-        return self.action == self.ActionChoices.allow
+    def is_action(self, action):
+        return self.action == action
 
     @classmethod
     def filter_acl(cls, user):
         return user.login_acls.all().valid().distinct()
 
     @staticmethod
-    def allow_user_confirm_if_need(user, ip):
-        acl = LoginACL.filter_acl(user).filter(
-            action=LoginACL.ActionChoices.confirm
-        ).first()
-        acl = acl if acl and acl.reviewers.exists() else None
-        if not acl:
-            return False, acl
-        ip_group = acl.rules.get('ip_group')
-        time_periods = acl.rules.get('time_period')
-        is_contain_ip = contains_ip(ip, ip_group)
-        is_contain_time_period = contains_time_period(time_periods)
-        return is_contain_ip and is_contain_time_period, acl
+    def match(user, ip):
+        acls = LoginACL.filter_acl(user)
+        if not acls:
+            return
 
-    @staticmethod
-    def allow_user_to_login(user, ip):
-        acl = LoginACL.filter_acl(user).exclude(
-            action=LoginACL.ActionChoices.confirm
-        ).first()
-        if not acl:
-            return True, ''
-        ip_group = acl.rules.get('ip_group')
-        time_periods = acl.rules.get('time_period')
-        is_contain_ip = contains_ip(ip, ip_group)
-        is_contain_time_period = contains_time_period(time_periods)
+        for acl in acls:
+            if acl.is_action(LoginACL.ActionChoices.confirm) and not acl.reviewers.exists():
+                continue
+            ip_group = acl.rules.get('ip_group')
+            time_periods = acl.rules.get('time_period')
+            is_contain_ip = contains_ip(ip, ip_group)
+            is_contain_time_period = contains_time_period(time_periods)
+            if is_contain_ip and is_contain_time_period:
+                # 满足条件，则返回
+                return acl
 
-        reject_type = ''
-        if is_contain_ip and is_contain_time_period:
-            # 满足条件
-            allow = acl.action_allow
-            if not allow:
-                reject_type = 'ip' if is_contain_ip else 'time'
-        else:
-            # 不满足条件
-            # 如果acl本身允许，那就拒绝；如果本身拒绝，那就允许
-            allow = not acl.action_allow
-            if not allow:
-                reject_type = 'ip' if not is_contain_ip else 'time'
-
-        return allow, reject_type
-
-    @staticmethod
-    def construct_confirm_ticket_meta(request=None):
+    def create_confirm_ticket(self, request):
+        from tickets import const
+        from tickets.models import ApplyLoginTicket
+        from orgs.models import Organization
+        title = _('Login confirm') + ' {}'.format(self.user)
         login_ip = get_request_ip(request) if request else ''
         login_ip = login_ip or '0.0.0.0'
         login_city = get_ip_city(login_ip)
         login_datetime = local_now_display()
-        ticket_meta = {
-            'apply_login_ip': login_ip,
-            'apply_login_city': login_city,
-            'apply_login_datetime': login_datetime,
-        }
-        return ticket_meta
-
-    def create_confirm_ticket(self, request=None):
-        from tickets import const
-        from tickets.models import Ticket
-        from orgs.models import Organization
-        ticket_title = _('Login confirm') + ' {}'.format(self.user)
-        ticket_meta = self.construct_confirm_ticket_meta(request)
         data = {
-            'title': ticket_title,
-            'type': const.TicketType.login_confirm.value,
-            'meta': ticket_meta,
+            'title': title,
+            'type': const.TicketType.login_confirm,
+            'applicant': self.user,
+            'apply_login_city': login_city,
+            'apply_login_ip': login_ip,
+            'apply_login_datetime': login_datetime,
             'org_id': Organization.ROOT_ID,
         }
-        ticket = Ticket.objects.create(**data)
-        applicant = self.user
+        ticket = ApplyLoginTicket.objects.create(**data)
         assignees = self.reviewers.all()
-        ticket.create_process_map_and_node(assignees, applicant)
-        ticket.open(applicant)
+        ticket.open_by_system(assignees)
         return ticket
