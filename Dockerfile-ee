@@ -97,6 +97,8 @@ RUN cd utils \
     && rm -rf /tmp/build \
     && echo > /opt/jumpserver/config.yml
 
+COPY ./extend_files/su.py /usr/local/lib/python3.8/site-packages/ansible/plugins/become/su.py
+
 COPY --from=build-xpack /opt/xpack /opt/jumpserver/apps/xpack
 
 WORKDIR /opt/jumpserver
