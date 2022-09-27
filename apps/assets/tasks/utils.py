@@ -8,7 +8,7 @@ from common.utils import get_logger
 logger = get_logger(__file__)
 __all__ = [
     'check_asset_can_run_ansible', 'clean_ansible_task_hosts',
-    'group_asset_by_platform',
+    'group_asset_by_platform', 'group_asset_by_auth_type', 'color_string'
 ]
 
 
@@ -63,3 +63,23 @@ def group_asset_by_platform(asset):
         return 'windows'
     else:
         return 'other'
+
+
+def group_asset_by_auth_type(assets):
+    custom_asset = []
+    ansible_asset = []
+    for asset in assets:
+        if asset.is_bind_custom_command:
+            custom_asset.append(asset)
+        else:
+            ansible_asset.append(asset)
+    return custom_asset, ansible_asset
+
+
+def color_string(string, color='green'):
+    color_map = {
+        'red': '31m',
+        'green': '32m'
+    }
+    color_ = color_map.get(color, '32m')
+    return u'\033[{}{}\033[0m'.format(color_, string)

@@ -14,7 +14,7 @@ from .models import Task, AdHoc
 logger = get_logger(__file__)
 
 DEFAULT_TASK_OPTIONS = {
-    'timeout': 10,
+    'timeout': 600,
     'forks': 10,
 }
 

@@ -9,14 +9,16 @@ from assets.models import Asset
 from common.utils import get_logger
 from orgs.utils import tmp_to_org, org_aware_func
 from ..models import SystemUser, Connectivity, AuthBook
+from ..tasks.client import CustomSSHClient
 from . import const
 from .utils import (
-    clean_ansible_task_hosts, group_asset_by_platform
+    clean_ansible_task_hosts, group_asset_by_platform,
+    group_asset_by_auth_type, color_string
 )
 
 logger = get_logger(__name__)
 __all__ = [
-    'test_system_user_connectivity_util', 'test_system_user_connectivity_manual',
+    'test_system_user_connectivity_by_ansible', 'test_system_user_connectivity_manual',
     'test_system_user_connectivity_period', 'test_system_user_connectivity_a_asset',
     'test_system_users_connectivity_a_asset'
 ]
@@ -42,7 +44,7 @@ def set_assets_accounts_connectivity(system_user, assets, results_summary):
 
 
 @org_aware_func("system_user")
-def test_system_user_connectivity_util(system_user, assets, task_name):
+def test_system_user_connectivity_by_ansible(system_user, assets, task_name):
     """
     Test system cant connect his assets or not.
     :param system_user:
@@ -112,6 +114,57 @@ def test_system_user_connectivity_util(system_user, assets, task_name):
     return results_summary
 
 
+@org_aware_func('system_user')
+def test_system_user_connectivity_by_ssh(system_user, assets, task_name):
+    if system_user.username_same_with_user:
+        logger.error(_("Dynamic system user not support test"))
+        return
+
+    results_summary = {
+        'contacted': {}, 'dark': {}, 'success': True
+    }
+
+    if not assets:
+        logger.info('没有匹配到自定义平台的资产')
+        return results_summary
+
+    if task_name is None:
+        task_name = gettext_noop("Test assets connectivity")
+    logger.info(task_name)
+
+    ssh_client = CustomSSHClient()
+    for asset in assets:
+        contacted, dark = {}, {}
+        system_user.load_asset_special_auth(asset)
+        connect_params = {
+            'hostname': asset.ip,
+            'port': asset.port,
+            'username': system_user.username,
+            'password': system_user.password,
+            'allow_agent': False,
+            'look_for_keys': False
+        }
+        dark_msg = ssh_client.connect(**connect_params)
+        ssh_client.close()
+        if dark_msg:
+            dark = {asset.hostname: dark_msg}
+            success = False
+        else:
+            contacted = {asset.hostname: gettext_noop('Connectable')}
+            success = True
+
+        results_summary['success'] &= success
+        results_summary['contacted'].update(contacted)
+        results_summary['dark'].update(dark)
+
+    set_assets_accounts_connectivity(system_user, assets, results_summary)
+    logger.info('\r\n\t可连接: {}\r\n\t不可连接: {}'.format(
+        color_string(results_summary['contacted']),
+        color_string(results_summary['dark'], 'red')
+    ))
+    return results_summary
+
+
 @shared_task(queue="ansible")
 @org_aware_func("system_user")
 def test_system_user_connectivity_manual(system_user, asset_ids=None):
@@ -120,7 +173,11 @@ def test_system_user_connectivity_manual(system_user, asset_ids=None):
         assets = Asset.objects.filter(id__in=asset_ids)
     else:
         assets = system_user.get_related_assets()
-    test_system_user_connectivity_util(system_user, assets, task_name)
+    custom_assets, ansible_assets = group_asset_by_auth_type(assets)
+    if ansible_assets:
+        test_system_user_connectivity_by_ansible(system_user, ansible_assets, task_name)
+    if custom_assets:
+        test_system_user_connectivity_by_ssh(system_user, custom_assets, task_name)
 
 
 @shared_task(queue="ansible")
@@ -129,7 +186,10 @@ def test_system_user_connectivity_a_asset(system_user, asset):
     task_name = gettext_noop("Test system user connectivity: ") + "{} => {}".format(
         system_user, asset
     )
-    test_system_user_connectivity_util(system_user, [asset], task_name)
+    if asset.is_bind_custom_command:
+        test_system_user_connectivity_by_ssh(system_user, [asset], task_name)
+    else:
+        test_system_user_connectivity_by_ansible(system_user, [asset], task_name)
 
 
 @shared_task(queue="ansible")
@@ -148,4 +208,4 @@ def test_system_user_connectivity_period():
         task_name = gettext_noop("Test system user connectivity period: ") + str(system_user)
         with tmp_to_org(org):
             assets = system_user.get_related_assets()
-            test_system_user_connectivity_util(system_user, assets, task_name)
+            test_system_user_connectivity_by_ansible(system_user, assets, task_name)

@@ -91,7 +91,7 @@ class AssetPlatformRetrieveApi(RetrieveAPIView):
 class AssetPlatformViewSet(ModelViewSet, RenderToJsonMixin):
     queryset = Platform.objects.all()
     serializer_class = serializers.PlatformSerializer
-    filterset_fields = ['name', 'base']
+    filterset_fields = ['name', 'base', 'internal']
     search_fields = ['name']
 
     def check_object_permissions(self, request, obj):

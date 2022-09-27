@@ -8,13 +8,14 @@ from orgs.utils import org_aware_func
 from ..models import Connectivity
 from . import const
 from .utils import check_asset_can_run_ansible
+from . import test_asset_connectivity_by_ssh
 
 
 logger = get_logger(__file__)
 
 
 __all__ = [
-    'test_account_connectivity_util', 'test_accounts_connectivity_manual',
+    'test_account_connectivity_by_ansible', 'test_accounts_connectivity_manual',
     'get_test_account_connectivity_tasks', 'test_user_connectivity',
     'run_adhoc',
 ]
@@ -72,7 +73,7 @@ def test_user_connectivity(task_name, asset, username, password=None, private_ke
 
 
 @org_aware_func("account")
-def test_account_connectivity_util(account, task_name):
+def test_account_connectivity_by_ansible(account, task_name):
     """
     :param account: <AuthBook>对象
     :param task_name:
@@ -98,6 +99,19 @@ def test_account_connectivity_util(account, task_name):
         account.set_connectivity(Connectivity.failed)
 
 
+@org_aware_func("account")
+def test_account_connectivity_by_ssh(account, task_name):
+    account.load_auth()
+    summary = test_asset_connectivity_by_ssh(
+        [account.asset], username=account.username, password=account.password
+    )
+
+    if summary.get('success'):
+        account.set_connectivity(Connectivity.ok)
+    else:
+        account.set_connectivity(Connectivity.failed)
+
+
 @shared_task(queue="ansible")
 def test_accounts_connectivity_manual(accounts):
     """
@@ -105,5 +119,8 @@ def test_accounts_connectivity_manual(accounts):
     """
     for account in accounts:
         task_name = gettext_noop("Test account connectivity: ") + str(account)
-        test_account_connectivity_util(account, task_name)
+        if account.asset.is_bind_custom_command:
+            test_account_connectivity_by_ssh(account, task_name)
+        else:
+            test_account_connectivity_by_ansible(account, task_name)
         print(".\n")

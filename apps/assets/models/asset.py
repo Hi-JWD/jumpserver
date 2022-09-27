@@ -8,6 +8,7 @@ from functools import reduce
 from collections import OrderedDict
 
 from django.db import models
+from django.utils.functional import cached_property
 from django.utils.translation import ugettext_lazy as _
 from rest_framework.exceptions import ValidationError
 
@@ -274,6 +275,23 @@ class Asset(AbsConnectivity, AbsHardwareInfo, ProtocolsMixin, NodesRelationMixin
         """
         return self.admin_user.username
 
+    def get_password(self, username=None):
+        password = ''
+        if username is None:
+            return password
+
+        from assets.models import AuthBook
+        ab = AuthBook.objects.filter(
+            asset=self, systemuser__username=username
+        ).order_by('-version').first()
+        if ab:
+            ab.load_auth()
+            password = ab.password
+        else:
+            if username == self.admin_user_username:
+                password = self.admin_user.password
+        return password
+
     def is_windows(self):
         return self.platform.is_windows()
 
@@ -281,7 +299,13 @@ class Asset(AbsConnectivity, AbsHardwareInfo, ProtocolsMixin, NodesRelationMixin
         return self.platform.is_unixlike()
 
     def is_support_ansible(self):
-        return self.has_protocol('ssh') and self.platform_base not in ("Other",)
+        return self.has_protocol('ssh') and \
+               self.platform_base not in ("Other",) and \
+               not self.is_bind_custom_command
+
+    @cached_property
+    def is_bind_custom_command(self):
+        return bool(self.platform.meta.get('custom_commands_data'))
 
     def get_auth_info(self, with_become=False):
         if not self.admin_user:

@@ -39,7 +39,7 @@ PING_WINDOWS_TASKS = [
 ]
 
 TASK_OPTIONS = {
-    'timeout': 10,
+    'timeout': 600,
     'forks': 10,
 }
 

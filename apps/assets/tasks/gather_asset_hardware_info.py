@@ -11,14 +11,14 @@ from common.utils import (
 )
 from orgs.utils import org_aware_func
 from . import const
-from .utils import clean_ansible_task_hosts
+from .utils import clean_ansible_task_hosts, group_asset_by_auth_type
 
 
 logger = get_logger(__file__)
 disk_pattern = re.compile(r'^hd|sd|xvd|vd|nv')
 __all__ = [
     'update_assets_hardware_info_util', 'update_asset_hardware_info_manual',
-    'update_assets_hardware_info_period',  'update_node_assets_hardware_info_manual',
+    'update_assets_hardware_info_period', 'update_node_assets_hardware_info_manual',
     'update_assets_hardware_info_manual',
 ]
 
@@ -117,8 +117,17 @@ def update_asset_hardware_info_manual(asset):
 
 @shared_task(queue="ansible")
 def update_assets_hardware_info_manual(assets):
-    task_name = gettext_noop("Update assets hardware info: ") + str([asset.hostname for asset in assets])
-    update_assets_hardware_info_util(assets, task_name=task_name)
+    custom_assets, ansible_assets = group_asset_by_auth_type(assets)
+    if custom_assets:
+        logger.info(
+            _('Asset may not be support ansible, skipped: {}').format(
+                [asset.hostname for asset in custom_assets]
+            )
+        )
+    if ansible_assets:
+        task_name = _("Update assets hardware info: {}"). \
+            format([asset.hostname for asset in ansible_assets])
+        update_assets_hardware_info_util(assets, task_name=task_name)
 
 
 @shared_task(queue="ansible")
@@ -136,5 +145,12 @@ def update_assets_hardware_info_period():
 def update_node_assets_hardware_info_manual(node):
     task_name = gettext_noop("Update node asset hardware information: ") + str(node.name)
     assets = node.get_all_assets()
-    result = update_assets_hardware_info_util(assets, task_name=task_name)
+    custom_assets, ansible_assets = group_asset_by_auth_type(assets)
+    if custom_assets:
+        logger.info(
+            _('Asset may not be support ansible, skipped: {}').format(
+                [asset.hostname for asset in custom_assets]
+            )
+        )
+    result = update_assets_hardware_info_util(ansible_assets, task_name=task_name)
     return result

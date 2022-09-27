@@ -75,6 +75,7 @@ special_pid_mapper = {
     'xpack.changeauthplan': 'asset_change_plan_node',
     'xpack.changeauthplanexecution': 'asset_change_plan_node',
     'xpack.changeauthplantask': 'asset_change_plan_node',
+    'xpack.customauthcommand': 'asset_change_plan_node',
     "assets.gathereduser": "gather_account_node",
     'xpack.gatherusertask': 'gather_account_node',
     'xpack.gatherusertaskexecution': 'gather_account_node',
