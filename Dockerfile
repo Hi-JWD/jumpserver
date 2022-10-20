@@ -1,3 +1,16 @@
+FROM debian:bullseye-slim as build-xpack
+ARG TARGETARCH
+
+COPY apps/xpack /opt/xpack
+
+RUN set -ex \
+    && sed -i 's@http://.*.debian.org@http://mirrors.ustc.edu.cn@g' /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends wget ca-certificates \
+    && mkdir -p /opt/xpack/plugins/license/bin \
+    && wget -O /opt/xpack/plugins/license/bin/fit2license https://fit2cloud-support.oss-cn-beijing.aliyuncs.com/xpack-license/validator_linux_${TARGETARCH} \
+    && chmod 755 /opt/xpack/plugins/license/bin/fit2license
+
 FROM python:3.8-slim
 MAINTAINER JumpServer Team <ibuler@qq.com>
 
@@ -83,6 +96,8 @@ RUN cd utils \
     && mv ../release/jumpserver /opt/jumpserver \
     && rm -rf /tmp/build \
     && echo > /opt/jumpserver/config.yml
+
+COPY --from=build-xpack /opt/xpack /opt/jumpserver/apps/xpack
 
 WORKDIR /opt/jumpserver
 VOLUME /opt/jumpserver/data

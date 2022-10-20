@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 class BACKENDS(TextChoices):
     ALIBABA = 'alibaba', _('Alibaba cloud')
     TENCENT = 'tencent', _('Tencent cloud')
+    GUANGDA = 'guangda', _('Guangda')
     CMPP2 = 'cmpp2', _('CMPP v2.0')
 
 
@@ -41,8 +42,8 @@ class SMS:
         )
 
     def send_verify_code(self, phone_number, code):
-        sign_name = getattr(settings, f'{self.client.SIGN_AND_TMPL_SETTING_FIELD_PREFIX}_VERIFY_SIGN_NAME')
-        template_code = getattr(settings, f'{self.client.SIGN_AND_TMPL_SETTING_FIELD_PREFIX}_VERIFY_TEMPLATE_CODE')
+        sign_name = getattr(settings, f'{self.client.SIGN_AND_TMPL_SETTING_FIELD_PREFIX}_VERIFY_SIGN_NAME', None)
+        template_code = getattr(settings, f'{self.client.SIGN_AND_TMPL_SETTING_FIELD_PREFIX}_VERIFY_TEMPLATE_CODE', None)
 
         if self.client.need_pre_check() and not (sign_name and template_code):
             raise JMSException(

@@ -376,6 +376,12 @@ class Config(dict):
         'TENCENT_VERIFY_SIGN_NAME': '',
         'TENCENT_VERIFY_TEMPLATE_CODE': '',
 
+        'GUANGDA_HOST': '',
+        'GUANGDA_ACCOUNT': '',
+        'GUANGDA_CHANNEL_CODE': '',
+        'GUANGDA_CLASS_CODE': '',
+        'GUANGDA_VERIFY_TEMPLATE_CODE': '{code}',
+
         'CMPP2_HOST': '',
         'CMPP2_PORT': 7890,
         'CMPP2_SP_ID': '',

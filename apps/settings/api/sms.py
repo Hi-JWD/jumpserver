@@ -38,6 +38,7 @@ class SMSTestingAPI(GenericAPIView):
     backends_serializer = {
         'alibaba': serializers.AlibabaSMSSettingSerializer,
         'tencent': serializers.TencentSMSSettingSerializer,
+        'guangda': serializers.GuangdaSMSSettingSerializer,
         'cmpp2': serializers.CMPP2SMSSettingSerializer
     }
     rbac_perms = {
@@ -78,6 +79,19 @@ class SMSTestingAPI(GenericAPIView):
         send_sms_params = {
             'sign_name': data['TENCENT_VERIFY_SIGN_NAME'],
             'template_code': data['TENCENT_VERIFY_TEMPLATE_CODE'],
+            'template_param': OrderedDict(code='666666')
+        }
+        return init_params, send_sms_params
+
+    def get_guangda_params(self, data):
+        init_params = {
+            'host': data['GUANGDA_HOST'],
+            'account': data['GUANGDA_ACCOUNT'],
+            'channel_code': data['GUANGDA_CHANNEL_CODE'],
+            'class_code': data['GUANGDA_CLASS_CODE']
+        }
+        send_sms_params = {
+            'template_code': data['GUANGDA_VERIFY_TEMPLATE_CODE'],
             'template_param': OrderedDict(code='666666')
         }
         return init_params, send_sms_params
