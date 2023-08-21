@@ -62,7 +62,7 @@ class AssetFilterSet(BaseFilterSet):
         model = Asset
         fields = [
             "id", "name", "address", "is_active", "labels",
-            "type", "category", "platform",
+            "type", "category", "platform", "connectivity",
         ]
 
     @staticmethod
