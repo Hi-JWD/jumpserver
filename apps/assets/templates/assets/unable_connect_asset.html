@@ -1,0 +1,28 @@
+{% load i18n %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; justify-content: center; text-align: center; align-items: center;">
+    <h1 style="margin-top: 20px">{% trans 'Check unconnected assets' %}</h1>
+    <table style="text-align: center; border-collapse: collapse; width: 60%;">
+    {% for org, assets in data.items %}
+        <tr>
+            <th colspan="4" style="background-color: #00846b; color: white; border: 1px solid #00846b; padding: 5px;">{{ org }}</th>
+        </tr>
+        <tr>
+            <th style="border: 1px solid #00846b; padding: 5px;">{% trans 'Serial number' %}</th>
+            <th style="border: 1px solid #00846b; padding: 5px;">{% trans 'Name' %}</th>
+            <th style="border: 1px solid #00846b; padding: 5px;">{% trans 'Address' %}</th>
+            <th style="border: 1px solid #00846b; padding: 5px;">{% trans 'Connectivity' %}</th>
+        </tr>
+        {% for a in assets%}
+        <tr>
+            <td style="border: 1px solid #00846b; padding: 5px;">{{ forloop.counter }}</td>
+            <td style="border: 1px solid #00846b; padding: 5px;">{{ a.name }}</td>
+            <td style="border: 1px solid #00846b; padding: 5px;">{{ a.address }}</td>
+            <td style="border: 1px solid #00846b; padding: 5px;">{{ a.connectivity }}</td>
+        </tr>
+        {% endfor %}
+    {% endfor %}
+</table>
+</div>
+{% endblock %}

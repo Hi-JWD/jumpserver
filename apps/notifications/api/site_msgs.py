@@ -1,6 +1,7 @@
 from rest_framework.decorators import action
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.response import Response
+from rest_framework_bulk.mixins import BulkDestroyModelMixin
 
 from common.api import JMSGenericViewSet
 from common.const.http import GET, PATCH, POST
@@ -15,13 +16,16 @@ from ..site_msg import SiteMessageUtil
 __all__ = ('SiteMessageViewSet',)
 
 
-class SiteMessageViewSet(ListModelMixin, RetrieveModelMixin, JMSGenericViewSet):
+class SiteMessageViewSet(
+    ListModelMixin, RetrieveModelMixin, JMSGenericViewSet, BulkDestroyModelMixin
+):
     permission_classes = (IsValidUser,)
     serializer_classes = {
         'default': SiteMessageSerializer,
         'mark_as_read': SiteMessageIdsSerializer,
         'send': SiteMessageSendSerializer,
     }
+    search_fields = ("message",)
     filterset_fields = ('has_read',)
 
     def get_queryset(self):

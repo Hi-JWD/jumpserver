@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-07-26 19:26+0800\n"
+"POT-Creation-Date: 2023-08-22 17:01+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -493,9 +493,10 @@ msgstr "アカウントの確認"
 #: assets/models/platform.py:15 assets/models/platform.py:88
 #: assets/serializers/asset/common.py:146 assets/serializers/platform.py:110
 #: assets/serializers/platform.py:223
+#: assets/templates/assets/unable_connect_asset.html:12
 #: authentication/serializers/connect_token_secret.py:110 ops/mixin.py:21
 #: ops/models/adhoc.py:21 ops/models/celery.py:15 ops/models/celery.py:57
-#: ops/models/job.py:94 ops/models/playbook.py:23 ops/serializers/job.py:20
+#: ops/models/job.py:94 ops/models/playbook.py:28 ops/serializers/job.py:20
 #: orgs/models.py:80 perms/models/asset_permission.py:56 rbac/models/role.py:29
 #: settings/models.py:33 settings/serializers/sms.py:6
 #: terminal/models/applet/applet.py:32 terminal/models/component/endpoint.py:12
@@ -696,7 +697,7 @@ msgid "Key password"
 msgstr "キーパスワード"
 
 #: accounts/serializers/account/base.py:80
-#: assets/serializers/asset/common.py:309
+#: assets/serializers/asset/common.py:311
 msgid "Spec info"
 msgstr "特別情報"
 
@@ -839,7 +840,7 @@ msgid "Users"
 msgstr "ユーザー"
 
 #: acls/models/base.py:98 assets/models/automations/base.py:17
-#: assets/models/cmd_filter.py:38 assets/serializers/asset/common.py:308
+#: assets/models/cmd_filter.py:38 assets/serializers/asset/common.py:310
 #: rbac/tree.py:35
 msgid "Accounts"
 msgstr "アカウント"
@@ -1059,15 +1060,15 @@ msgstr "不明"
 msgid "Ok"
 msgstr "OK"
 
-#: assets/const/automation.py:12
+#: assets/const/automation.py:17
 msgid "Ping"
 msgstr "テスト"
 
-#: assets/const/automation.py:13
+#: assets/const/automation.py:18
 msgid "Ping gateway"
 msgstr "テストゲートウェイ"
 
-#: assets/const/automation.py:14
+#: assets/const/automation.py:19
 msgid "Gather facts"
 msgstr "資産情報の収集"
 
@@ -1237,7 +1238,7 @@ msgstr "SSHパブリックキー"
 #: assets/models/_user.py:27 assets/models/cmd_filter.py:40
 #: assets/models/cmd_filter.py:88 assets/models/group.py:20
 #: common/db/models.py:36 ops/models/adhoc.py:27 ops/models/job.py:113
-#: ops/models/playbook.py:26 rbac/models/role.py:37 settings/models.py:38
+#: ops/models/playbook.py:31 rbac/models/role.py:37 settings/models.py:38
 #: terminal/models/applet/applet.py:44 terminal/models/applet/applet.py:248
 #: terminal/models/applet/host.py:139 terminal/models/component/endpoint.py:24
 #: terminal/models/component/endpoint.py:102
@@ -1348,6 +1349,7 @@ msgid "Port"
 msgstr "ポート"
 
 #: assets/models/asset/common.py:150 assets/serializers/asset/common.py:147
+#: assets/templates/assets/unable_connect_asset.html:13
 msgid "Address"
 msgstr "アドレス"
 
@@ -1368,7 +1370,7 @@ msgstr "ドメイン"
 msgid "Labels"
 msgstr "ラベル"
 
-#: assets/models/asset/common.py:158 assets/serializers/asset/common.py:310
+#: assets/models/asset/common.py:158 assets/serializers/asset/common.py:312
 #: assets/serializers/asset/host.py:11
 msgid "Gathered info"
 msgstr "資産ハードウェア情報の収集"
@@ -1450,6 +1452,7 @@ msgid "Ping asset"
 msgstr "テストアセット"
 
 #: assets/models/base.py:19
+#: assets/templates/assets/unable_connect_asset.html:14
 msgid "Connectivity"
 msgstr "接続性"
 
@@ -1681,13 +1684,17 @@ msgstr "カスタムフィールド"
 msgid "%(value)s is not an even number"
 msgstr "%(value)s は偶数ではありません"
 
-#: assets/notifications.py:12
+#: assets/notifications.py:13
 msgid ""
 "Batch update platform in assets, skipping assets that do not meet platform "
 "type"
 msgstr ""
 "プラットフォームタイプがスキップされた資産に合致しない、資産内の一括更新プ"
 "ラットフォーム"
+
+#: assets/notifications.py:38
+msgid "The following assets have connectivity problems, please check."
+msgstr "以下の資産の接続性に問題がありますのでチェックしてください"
 
 #: assets/serializers/asset/common.py:124 assets/serializers/platform.py:129
 #: authentication/serializers/connect_token_secret.py:29
@@ -1702,19 +1709,19 @@ msgid "Node path"
 msgstr "ノードパスです"
 
 #: assets/serializers/asset/common.py:145
-#: assets/serializers/asset/common.py:311
+#: assets/serializers/asset/common.py:313
 msgid "Auto info"
 msgstr "自動情報"
 
-#: assets/serializers/asset/common.py:234
+#: assets/serializers/asset/common.py:236
 msgid "Platform not exist"
 msgstr "プラットフォームが存在しません"
 
-#: assets/serializers/asset/common.py:270
+#: assets/serializers/asset/common.py:272
 msgid "port out of range (0-65535)"
 msgstr "ポート番号が範囲外です (0-65535)"
 
-#: assets/serializers/asset/common.py:277
+#: assets/serializers/asset/common.py:279
 msgid "Protocol is required: {}"
 msgstr "プロトコルが必要です: {}"
 
@@ -1882,7 +1889,7 @@ msgstr "タイプ このフィールドは必須です."
 msgid "Protocols is required"
 msgstr "同意が必要です"
 
-#: assets/signal_handlers/asset.py:26 assets/tasks/ping.py:35
+#: assets/signal_handlers/asset.py:26 assets/tasks/ping.py:43
 msgid "Test assets connectivity "
 msgstr "アセット接続のテスト。"
 
@@ -1921,13 +1928,17 @@ msgstr ""
 msgid "Periodic check the amount of assets under the node"
 msgstr "ノードの下にあるアセットの数を定期的に確認する"
 
-#: assets/tasks/ping.py:20 assets/tasks/ping.py:26
+#: assets/tasks/ping.py:28 assets/tasks/ping.py:34
 msgid "Test assets connectivity"
 msgstr "アセット接続のテスト。"
 
-#: assets/tasks/ping.py:42
+#: assets/tasks/ping.py:50
 msgid "Test if the assets under the node are connectable "
 msgstr "ノード配下のアセットが接続できるかテストする"
+
+#: assets/tasks/ping.py:57 assets/templates/assets/unable_connect_asset.html:5
+msgid "Check unconnected assets"
+msgstr "アセット接続性検査です"
 
 #: assets/tasks/ping_gateway.py:19 assets/tasks/ping_gateway.py:25
 #: assets/tasks/ping_gateway.py:34
@@ -2149,7 +2160,7 @@ msgstr "ユーザーエージェント"
 #: audits/models.py:191 audits/serializers.py:47
 #: authentication/templates/authentication/_mfa_confirm_modal.html:14
 #: users/forms/profile.py:65 users/models/user.py:776
-#: users/serializers/profile.py:126
+#: users/serializers/profile.py:130
 msgid "MFA"
 msgstr "MFA"
 
@@ -2250,19 +2261,19 @@ msgstr ""
 msgid "Anonymous account is not supported for this asset"
 msgstr "匿名アカウントはこのプロパティではサポートされていません"
 
-#: authentication/api/connection_token.py:323
+#: authentication/api/connection_token.py:320
 msgid "Account not found"
 msgstr "アカウントが見つかりません"
 
-#: authentication/api/connection_token.py:326
+#: authentication/api/connection_token.py:323
 msgid "Permission expired"
 msgstr "承認の有効期限が切れています"
 
-#: authentication/api/connection_token.py:340
+#: authentication/api/connection_token.py:337
 msgid "ACL action is reject: {}({})"
 msgstr "ACL アクションは拒否です: {}({})"
 
-#: authentication/api/connection_token.py:344
+#: authentication/api/connection_token.py:341
 msgid "ACL action is review"
 msgstr "ACL アクションはレビューです"
 
@@ -2287,7 +2298,7 @@ msgstr ""
 "ユーザーは {}からです。対応するシステムにアクセスしてパスワードを変更してくだ"
 "さい。"
 
-#: authentication/api/password.py:60
+#: authentication/api/password.py:64
 #: authentication/templates/authentication/login.html:305
 #: users/templates/users/forgot_password.html:27
 #: users/templates/users/forgot_password.html:28
@@ -2718,11 +2729,11 @@ msgstr "ユーザーなしまたは期限切れのユーザー"
 msgid "No asset or inactive asset"
 msgstr "アセットがないか、有効化されていないアセット"
 
-#: authentication/models/connection_token.py:269
+#: authentication/models/connection_token.py:280
 msgid "Can view super connection token secret"
 msgstr "スーパー接続トークンのシークレットを表示できます"
 
-#: authentication/models/connection_token.py:271
+#: authentication/models/connection_token.py:282
 msgid "Super connection token"
 msgstr "スーパー接続トークン"
 
@@ -2831,13 +2842,13 @@ msgstr "表示"
 
 #: authentication/templates/authentication/_access_key_modal.html:66
 #: settings/serializers/security.py:39 users/models/user.py:601
-#: users/serializers/profile.py:116
+#: users/serializers/profile.py:117
 #: users/templates/users/user_verify_mfa.html:36
 msgid "Disable"
 msgstr "無効化"
 
 #: authentication/templates/authentication/_access_key_modal.html:67
-#: users/models/user.py:602 users/serializers/profile.py:117
+#: users/models/user.py:602 users/serializers/profile.py:118
 #: users/templates/users/mfa_setting.html:26
 #: users/templates/users/mfa_setting.html:68
 msgid "Enable"
@@ -3524,7 +3535,7 @@ msgstr ""
 msgid "Notifications"
 msgstr "通知"
 
-#: notifications/backends/__init__.py:13
+#: notifications/backends/__init__.py:13 notifications/models/site_msg.py:37
 msgid "Site message"
 msgstr "サイトメッセージ"
 
@@ -3687,7 +3698,7 @@ msgid "Args"
 msgstr "アルグ"
 
 #: ops/models/adhoc.py:26 ops/models/base.py:16 ops/models/base.py:53
-#: ops/models/job.py:106 ops/models/job.py:192 ops/models/playbook.py:25
+#: ops/models/job.py:106 ops/models/job.py:192 ops/models/playbook.py:30
 #: terminal/models/session/sharing.py:23
 msgid "Creator"
 msgstr "作成者"
@@ -3782,11 +3793,11 @@ msgstr "Material を選択してオプションを設定します。"
 msgid "Job Execution"
 msgstr "ジョブ実行"
 
-#: ops/models/playbook.py:28
+#: ops/models/playbook.py:33
 msgid "CreateMethod"
 msgstr "创建方式"
 
-#: ops/models/playbook.py:29
+#: ops/models/playbook.py:34
 msgid "VCS URL"
 msgstr "VCS URL"
 
@@ -4170,7 +4181,7 @@ msgstr "組織の役割バインディング"
 msgid "System role binding"
 msgstr "システムロールバインディング"
 
-#: rbac/serializers/permission.py:26 users/serializers/profile.py:132
+#: rbac/serializers/permission.py:26 users/serializers/profile.py:136
 msgid "Perms"
 msgstr "パーマ"
 
@@ -6852,8 +6863,8 @@ msgstr "ここにid_rsa.pubを貼り付けます。"
 msgid "Public key should not be the same as your old one."
 msgstr "公開鍵は古いものと同じであってはなりません。"
 
-#: users/forms/profile.py:162 users/serializers/profile.py:100
-#: users/serializers/profile.py:183 users/serializers/profile.py:210
+#: users/forms/profile.py:162 users/serializers/profile.py:101
+#: users/serializers/profile.py:187 users/serializers/profile.py:214
 msgid "Not a valid ssh public key"
 msgstr "有効なssh公開鍵ではありません"
 
@@ -6862,7 +6873,7 @@ msgstr "有効なssh公開鍵ではありません"
 msgid "Public key"
 msgstr "公開キー"
 
-#: users/models/user.py:603 users/serializers/profile.py:118
+#: users/models/user.py:603 users/serializers/profile.py:119
 msgid "Force enable"
 msgstr "強制有効"
 
@@ -6878,7 +6889,8 @@ msgstr "アバター"
 msgid "Wechat"
 msgstr "微信"
 
-#: users/models/user.py:773 users/serializers/user.py:108
+#: users/models/user.py:773 users/serializers/profile.py:122
+#: users/serializers/user.py:108
 msgid "Phone"
 msgstr "電話"
 
@@ -6895,7 +6907,7 @@ msgstr "ssh秘密鍵"
 msgid "Secret key"
 msgstr "秘密キー"
 
-#: users/models/user.py:794 users/serializers/profile.py:149
+#: users/models/user.py:794 users/serializers/profile.py:153
 #: users/serializers/user.py:168
 msgid "Is first login"
 msgstr "最初のログインです"
@@ -6963,19 +6975,19 @@ msgstr "SSHキーのリセット"
 msgid "Reset MFA"
 msgstr "MFAのリセット"
 
-#: users/serializers/profile.py:29
+#: users/serializers/profile.py:30
 msgid "The old password is incorrect"
 msgstr "古いパスワードが正しくありません"
 
-#: users/serializers/profile.py:36 users/serializers/profile.py:197
+#: users/serializers/profile.py:37 users/serializers/profile.py:201
 msgid "Password does not match security rules"
 msgstr "パスワードがセキュリティルールと一致しない"
 
-#: users/serializers/profile.py:40
+#: users/serializers/profile.py:41
 msgid "The new password cannot be the last {} passwords"
 msgstr "新しいパスワードを最後の {} 個のパスワードにすることはできません"
 
-#: users/serializers/profile.py:48 users/serializers/profile.py:71
+#: users/serializers/profile.py:49 users/serializers/profile.py:72
 msgid "The newly set password is inconsistent"
 msgstr "新しく設定されたパスワードが一致しない"
 

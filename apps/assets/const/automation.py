@@ -7,6 +7,11 @@ class Connectivity(TextChoices):
     OK = 'ok', _('Ok')
     ERR = 'err', _('Error')
 
+    @classmethod
+    def get_label(cls, k):
+        label = dict(cls.choices).get(k)
+        return label
+
 
 class AutomationTypes(TextChoices):
     ping = 'ping', _('Ping')

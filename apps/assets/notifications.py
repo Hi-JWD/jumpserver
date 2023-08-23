@@ -1,4 +1,5 @@
 from django.utils.translation import ugettext as _
+from django.template.loader import render_to_string
 
 from notifications.notifications import UserMessage
 
@@ -23,3 +24,20 @@ class BulkUpdatePlatformSkipAssetUserMsg(UserMessage):
         user = User.objects.first()
         assets = Asset.objects.all()[:10]
         return cls(user, assets)
+
+
+class UnableConnectAssetUserMsg(UserMessage):
+    def __init__(self, user, assets):
+        """
+        assets => {'org': ['asset_id',]}
+        """
+        super().__init__(user)
+        self.assets = assets
+
+    def get_html_msg(self) -> dict:
+        subject = _("The following assets have connectivity problems, please check.")
+        message = render_to_string('assets/unable_connect_asset.html', {'data': self.assets})
+        return {
+            'subject': subject,
+            'message': message
+        }

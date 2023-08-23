@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JumpServer 0.3.3\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-07-26 19:26+0800\n"
+"POT-Creation-Date: 2023-08-22 17:00+0800\n"
 "PO-Revision-Date: 2021-05-20 10:54+0800\n"
 "Last-Translator: ibuler <ibuler@qq.com>\n"
 "Language-Team: JumpServer team<ibuler@qq.com>\n"
@@ -492,9 +492,10 @@ msgstr "账号验证"
 #: assets/models/platform.py:15 assets/models/platform.py:88
 #: assets/serializers/asset/common.py:146 assets/serializers/platform.py:110
 #: assets/serializers/platform.py:223
+#: assets/templates/assets/unable_connect_asset.html:12
 #: authentication/serializers/connect_token_secret.py:110 ops/mixin.py:21
 #: ops/models/adhoc.py:21 ops/models/celery.py:15 ops/models/celery.py:57
-#: ops/models/job.py:94 ops/models/playbook.py:23 ops/serializers/job.py:20
+#: ops/models/job.py:94 ops/models/playbook.py:28 ops/serializers/job.py:20
 #: orgs/models.py:80 perms/models/asset_permission.py:56 rbac/models/role.py:29
 #: settings/models.py:33 settings/serializers/sms.py:6
 #: terminal/models/applet/applet.py:32 terminal/models/component/endpoint.py:12
@@ -692,7 +693,7 @@ msgid "Key password"
 msgstr "密钥密码"
 
 #: accounts/serializers/account/base.py:80
-#: assets/serializers/asset/common.py:309
+#: assets/serializers/asset/common.py:311
 msgid "Spec info"
 msgstr "特殊信息"
 
@@ -835,7 +836,7 @@ msgid "Users"
 msgstr "用户管理"
 
 #: acls/models/base.py:98 assets/models/automations/base.py:17
-#: assets/models/cmd_filter.py:38 assets/serializers/asset/common.py:308
+#: assets/models/cmd_filter.py:38 assets/serializers/asset/common.py:310
 #: rbac/tree.py:35
 msgid "Accounts"
 msgstr "账号管理"
@@ -1052,15 +1053,15 @@ msgstr "未知"
 msgid "Ok"
 msgstr "成功"
 
-#: assets/const/automation.py:12
+#: assets/const/automation.py:17
 msgid "Ping"
 msgstr "测试"
 
-#: assets/const/automation.py:13
+#: assets/const/automation.py:18
 msgid "Ping gateway"
 msgstr "测试网关"
 
-#: assets/const/automation.py:14
+#: assets/const/automation.py:19
 msgid "Gather facts"
 msgstr "收集资产信息"
 
@@ -1230,7 +1231,7 @@ msgstr "SSH公钥"
 #: assets/models/_user.py:27 assets/models/cmd_filter.py:40
 #: assets/models/cmd_filter.py:88 assets/models/group.py:20
 #: common/db/models.py:36 ops/models/adhoc.py:27 ops/models/job.py:113
-#: ops/models/playbook.py:26 rbac/models/role.py:37 settings/models.py:38
+#: ops/models/playbook.py:31 rbac/models/role.py:37 settings/models.py:38
 #: terminal/models/applet/applet.py:44 terminal/models/applet/applet.py:248
 #: terminal/models/applet/host.py:139 terminal/models/component/endpoint.py:24
 #: terminal/models/component/endpoint.py:102
@@ -1341,6 +1342,7 @@ msgid "Port"
 msgstr "端口"
 
 #: assets/models/asset/common.py:150 assets/serializers/asset/common.py:147
+#: assets/templates/assets/unable_connect_asset.html:13
 msgid "Address"
 msgstr "地址"
 
@@ -1361,7 +1363,7 @@ msgstr "网域"
 msgid "Labels"
 msgstr "标签管理"
 
-#: assets/models/asset/common.py:158 assets/serializers/asset/common.py:310
+#: assets/models/asset/common.py:158 assets/serializers/asset/common.py:312
 #: assets/serializers/asset/host.py:11
 msgid "Gathered info"
 msgstr "收集资产硬件信息"
@@ -1443,6 +1445,7 @@ msgid "Ping asset"
 msgstr "测试资产"
 
 #: assets/models/base.py:19
+#: assets/templates/assets/unable_connect_asset.html:14
 msgid "Connectivity"
 msgstr "可连接性"
 
@@ -1674,11 +1677,15 @@ msgstr "自定义属性"
 msgid "%(value)s is not an even number"
 msgstr "%(value)s is not an even number"
 
-#: assets/notifications.py:12
+#: assets/notifications.py:13
 msgid ""
 "Batch update platform in assets, skipping assets that do not meet platform "
 "type"
 msgstr "资产中批量更新平台，不符合平台类型跳过的资产"
+
+#: assets/notifications.py:38
+msgid "The following assets have connectivity problems, please check."
+msgstr "以下资产的可连接性存在问题，请检查"
 
 #: assets/serializers/asset/common.py:124 assets/serializers/platform.py:129
 #: authentication/serializers/connect_token_secret.py:29
@@ -1693,19 +1700,19 @@ msgid "Node path"
 msgstr "节点路径"
 
 #: assets/serializers/asset/common.py:145
-#: assets/serializers/asset/common.py:311
+#: assets/serializers/asset/common.py:313
 msgid "Auto info"
 msgstr "自动化信息"
 
-#: assets/serializers/asset/common.py:234
+#: assets/serializers/asset/common.py:236
 msgid "Platform not exist"
 msgstr "平台不存在"
 
-#: assets/serializers/asset/common.py:270
+#: assets/serializers/asset/common.py:272
 msgid "port out of range (0-65535)"
 msgstr "端口超出范围 (0-65535)"
 
-#: assets/serializers/asset/common.py:277
+#: assets/serializers/asset/common.py:279
 msgid "Protocol is required: {}"
 msgstr "协议是必填的: {}"
 
@@ -1868,7 +1875,7 @@ msgstr "类型 该字段是必填项。"
 msgid "Protocols is required"
 msgstr "协议是必填的"
 
-#: assets/signal_handlers/asset.py:26 assets/tasks/ping.py:35
+#: assets/signal_handlers/asset.py:26 assets/tasks/ping.py:43
 msgid "Test assets connectivity "
 msgstr "测试资产可连接性"
 
@@ -1905,13 +1912,17 @@ msgstr "自检程序已经在运行，不能重复启动"
 msgid "Periodic check the amount of assets under the node"
 msgstr "周期性检查节点下资产数量"
 
-#: assets/tasks/ping.py:20 assets/tasks/ping.py:26
+#: assets/tasks/ping.py:28 assets/tasks/ping.py:34
 msgid "Test assets connectivity"
 msgstr "测试资产可连接性"
 
-#: assets/tasks/ping.py:42
+#: assets/tasks/ping.py:50
 msgid "Test if the assets under the node are connectable "
 msgstr "测试节点下资产是否可连接"
+
+#: assets/tasks/ping.py:57 assets/templates/assets/unable_connect_asset.html:5
+msgid "Check unconnected assets"
+msgstr "资产可连接性检查"
 
 #: assets/tasks/ping_gateway.py:19 assets/tasks/ping_gateway.py:25
 #: assets/tasks/ping_gateway.py:34
@@ -2133,7 +2144,7 @@ msgstr "用户代理"
 #: audits/models.py:191 audits/serializers.py:47
 #: authentication/templates/authentication/_mfa_confirm_modal.html:14
 #: users/forms/profile.py:65 users/models/user.py:776
-#: users/serializers/profile.py:126
+#: users/serializers/profile.py:130
 msgid "MFA"
 msgstr "MFA"
 
@@ -2232,19 +2243,19 @@ msgstr "不允许使用可重复使用的连接令牌，未启用全局设置"
 msgid "Anonymous account is not supported for this asset"
 msgstr "匿名账号不支持当前资产"
 
-#: authentication/api/connection_token.py:323
+#: authentication/api/connection_token.py:320
 msgid "Account not found"
 msgstr "账号未找到"
 
-#: authentication/api/connection_token.py:326
+#: authentication/api/connection_token.py:323
 msgid "Permission expired"
 msgstr "授权已过期"
 
-#: authentication/api/connection_token.py:340
+#: authentication/api/connection_token.py:337
 msgid "ACL action is reject: {}({})"
 msgstr "ACL 动作是拒绝: {}({})"
 
-#: authentication/api/connection_token.py:344
+#: authentication/api/connection_token.py:341
 msgid "ACL action is review"
 msgstr "ACL 动作是复核"
 
@@ -2267,7 +2278,7 @@ msgid ""
 "password"
 msgstr "用户来自 {} 请去相应系统修改密码"
 
-#: authentication/api/password.py:60
+#: authentication/api/password.py:64
 #: authentication/templates/authentication/login.html:305
 #: users/templates/users/forgot_password.html:27
 #: users/templates/users/forgot_password.html:28
@@ -2686,11 +2697,11 @@ msgstr "没有用户或用户失效"
 msgid "No asset or inactive asset"
 msgstr "没有资产或资产未激活"
 
-#: authentication/models/connection_token.py:269
+#: authentication/models/connection_token.py:280
 msgid "Can view super connection token secret"
 msgstr "可以查看超级连接令牌密文"
 
-#: authentication/models/connection_token.py:271
+#: authentication/models/connection_token.py:282
 msgid "Super connection token"
 msgstr "超级连接令牌"
 
@@ -2799,13 +2810,13 @@ msgstr "显示"
 
 #: authentication/templates/authentication/_access_key_modal.html:66
 #: settings/serializers/security.py:39 users/models/user.py:601
-#: users/serializers/profile.py:116
+#: users/serializers/profile.py:117
 #: users/templates/users/user_verify_mfa.html:36
 msgid "Disable"
 msgstr "禁用"
 
 #: authentication/templates/authentication/_access_key_modal.html:67
-#: users/models/user.py:602 users/serializers/profile.py:117
+#: users/models/user.py:602 users/serializers/profile.py:118
 #: users/templates/users/mfa_setting.html:26
 #: users/templates/users/mfa_setting.html:68
 msgid "Enable"
@@ -3477,7 +3488,7 @@ msgstr ""
 msgid "Notifications"
 msgstr "通知"
 
-#: notifications/backends/__init__.py:13
+#: notifications/backends/__init__.py:13 notifications/models/site_msg.py:37
 msgid "Site message"
 msgstr "站内信"
 
@@ -3640,7 +3651,7 @@ msgid "Args"
 msgstr "参数"
 
 #: ops/models/adhoc.py:26 ops/models/base.py:16 ops/models/base.py:53
-#: ops/models/job.py:106 ops/models/job.py:192 ops/models/playbook.py:25
+#: ops/models/job.py:106 ops/models/job.py:192 ops/models/playbook.py:30
 #: terminal/models/session/sharing.py:23
 msgid "Creator"
 msgstr "创建者"
@@ -3735,11 +3746,11 @@ msgstr "Material 类型"
 msgid "Job Execution"
 msgstr "作业执行"
 
-#: ops/models/playbook.py:28
+#: ops/models/playbook.py:33
 msgid "CreateMethod"
 msgstr "创建方式"
 
-#: ops/models/playbook.py:29
+#: ops/models/playbook.py:34
 msgid "VCS URL"
 msgstr "VCS URL"
 
@@ -4121,7 +4132,7 @@ msgstr "组织角色绑定"
 msgid "System role binding"
 msgstr "系统角色绑定"
 
-#: rbac/serializers/permission.py:26 users/serializers/profile.py:132
+#: rbac/serializers/permission.py:26 users/serializers/profile.py:136
 msgid "Perms"
 msgstr "权限"
 
@@ -6754,8 +6765,8 @@ msgstr "复制你的公钥到这里"
 msgid "Public key should not be the same as your old one."
 msgstr "不能和原来的密钥相同"
 
-#: users/forms/profile.py:162 users/serializers/profile.py:100
-#: users/serializers/profile.py:183 users/serializers/profile.py:210
+#: users/forms/profile.py:162 users/serializers/profile.py:101
+#: users/serializers/profile.py:187 users/serializers/profile.py:214
 msgid "Not a valid ssh public key"
 msgstr "SSH密钥不合法"
 
@@ -6764,7 +6775,7 @@ msgstr "SSH密钥不合法"
 msgid "Public key"
 msgstr "SSH公钥"
 
-#: users/models/user.py:603 users/serializers/profile.py:118
+#: users/models/user.py:603 users/serializers/profile.py:119
 msgid "Force enable"
 msgstr "强制启用"
 
@@ -6780,7 +6791,8 @@ msgstr "头像"
 msgid "Wechat"
 msgstr "微信"
 
-#: users/models/user.py:773 users/serializers/user.py:108
+#: users/models/user.py:773 users/serializers/profile.py:122
+#: users/serializers/user.py:108
 msgid "Phone"
 msgstr "手机"
 
@@ -6797,7 +6809,7 @@ msgstr "ssh私钥"
 msgid "Secret key"
 msgstr "Secret key"
 
-#: users/models/user.py:794 users/serializers/profile.py:149
+#: users/models/user.py:794 users/serializers/profile.py:153
 #: users/serializers/user.py:168
 msgid "Is first login"
 msgstr "首次登录"
@@ -6865,19 +6877,19 @@ msgstr "重置 SSH 密钥"
 msgid "Reset MFA"
 msgstr "重置 MFA"
 
-#: users/serializers/profile.py:29
+#: users/serializers/profile.py:30
 msgid "The old password is incorrect"
 msgstr "旧密码错误"
 
-#: users/serializers/profile.py:36 users/serializers/profile.py:197
+#: users/serializers/profile.py:37 users/serializers/profile.py:201
 msgid "Password does not match security rules"
 msgstr "密码不满足安全规则"
 
-#: users/serializers/profile.py:40
+#: users/serializers/profile.py:41
 msgid "The new password cannot be the last {} passwords"
 msgstr "新密码不能是最近 {} 次的密码"
 
-#: users/serializers/profile.py:48 users/serializers/profile.py:71
+#: users/serializers/profile.py:49 users/serializers/profile.py:72
 msgid "The newly set password is inconsistent"
 msgstr "两次密码不一致"
 

@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import ugettext_lazy as _
 
 from common.db.models import JMSBaseModel
 
@@ -31,3 +32,9 @@ class MessageContent(JMSBaseModel):
 
     has_read = False
     read_at = None
+
+    class Meta:
+        verbose_name = _("Site message")
+
+    def __str__(self):
+        return self.message[:100]
