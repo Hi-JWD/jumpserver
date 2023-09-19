@@ -5,6 +5,8 @@ from django.conf import settings
 from django.core.mail import send_mail, EmailMultiAlternatives
 from django.utils.translation import gettext_lazy as _
 
+from ops.ansible import PlaybookRunner
+
 from .utils import get_logger
 
 logger = get_logger(__file__)
@@ -63,3 +65,15 @@ def send_mail_attachment_async(subject, message, recipient_list, attachment_list
         return email.send()
     except Exception as e:
         logger.error("Sending mail attachment error: {}".format(e))
+
+
+def send_file_to_asset_by_ansible(
+        inventory, playbook, project_dir, **kwargs
+):
+    cb = None
+    try:
+        runner = PlaybookRunner(inventory, playbook, project_dir,)
+        cb = runner.run(**kwargs)
+    except Exception as e:
+        logger.error("Sending sftp file error: {}".format(e))
+    return cb

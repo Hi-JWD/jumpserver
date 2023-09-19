@@ -23,17 +23,14 @@ class AccountBackupSerializer(PeriodTaskSerializerMixin, BulkOrgResourceModelSer
             'periodic_display', 'executed_amount'
         ]
         fields = read_only_fields + [
-            'id', 'name', 'is_periodic', 'interval', 'crontab',
-            'comment', 'types', 'recipients_part_one', 'recipients_part_two'
+            'id', 'name', 'is_periodic', 'interval', 'crontab', 'comment', 'types',
+            'recipients_part_one', 'recipients_part_two',
+            'receiving_asset_one', 'receiving_asset_two'
         ]
         extra_kwargs = {
             'name': {'required': True},
             'periodic_display': {'label': _('Periodic perform')},
             'executed_amount': {'label': _('Executed amount')},
-            'recipients': {
-                'label': _('Recipient'),
-                'help_text': _('Currently only mail sending is supported')
-            },
             'types': {'label': _('Asset type')}
         }
 

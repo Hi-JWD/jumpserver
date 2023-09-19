@@ -30,6 +30,14 @@ class AccountBackupAutomation(PeriodTaskModelMixin, JMSOrgBaseModel):
         'users.User', related_name='recipient_part_two_plans', blank=True,
         verbose_name=_("Recipient part two")
     )
+    receiving_asset_one = models.ManyToManyField(
+        'assets.Asset', related_name='receiving_asset_one_plans', blank=True,
+        verbose_name=_('Receiving asset one')
+    )
+    receiving_asset_two = models.ManyToManyField(
+        'assets.Asset', related_name='receiving_asset_two_plans', blank=True,
+        verbose_name=_('Receiving asset one')
+    )
 
     def __str__(self):
         return f'{self.name}({self.org_id})'
@@ -55,6 +63,7 @@ class AccountBackupAutomation(PeriodTaskModelMixin, JMSOrgBaseModel):
             'crontab': self.crontab,
             'org_id': self.org_id,
             'created_by': self.created_by,
+            'type': 'backup_accounts',
             'types': self.types,
             'recipients_part_one': {
                 str(user.id): (str(user), bool(user.secret_key))
@@ -63,7 +72,13 @@ class AccountBackupAutomation(PeriodTaskModelMixin, JMSOrgBaseModel):
             'recipients_part_two': {
                 str(user.id): (str(user), bool(user.secret_key))
                 for user in self.recipients_part_two.all()
-            }
+            },
+            'receiving_asset_one': [
+                str(asset.id) for asset in self.receiving_asset_one.all()
+            ],
+            'receiving_asset_two': [
+                str(asset.id) for asset in self.receiving_asset_two.all()
+            ]
         }
 
     @property
@@ -130,7 +145,7 @@ class AccountBackupExecution(OrgModelMixin):
 
     @property
     def manager_type(self):
-        return 'backup_account'
+        return 'backup_accounts'
 
     def start(self):
         from accounts.automations.endpoint import ExecutionManager

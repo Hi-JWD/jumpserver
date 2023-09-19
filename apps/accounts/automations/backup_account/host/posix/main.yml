@@ -1,0 +1,10 @@
+- hosts: demo
+  gather_facts: no
+  vars:
+    file_list: "{{ params.file_list }}"
+  tasks:
+    - name: "Transfer file to {{ jms_asset.host }}"
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+      with_items: "{{ file_list }}"
