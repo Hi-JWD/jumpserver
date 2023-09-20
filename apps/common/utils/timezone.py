@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from django.utils import timezone as dj_timezone
+from django.utils.translation import gettext_lazy as _
 from rest_framework.fields import DateTimeField
 
 
@@ -31,6 +32,24 @@ def local_zero_hour(fmt='%Y-%m-%d'):
 def local_monday():
     zero_hour_time = local_zero_hour()
     return zero_hour_time - timedelta(zero_hour_time.weekday())
+
+
+def format_seconds(seconds):
+    minutes = seconds // 60
+    seconds %= 60
+    hours = minutes // 60
+    minutes %= 60
+    days = hours // 24
+    hours %= 24
+    result = ''
+    if days:
+        result += _('%s 天 ') % days
+    if hours:
+        result += _('%s 小时 ') % hours
+    if minutes:
+        result += _('%s 分钟 ') % minutes
+    result += _('%s 秒') % seconds
+    return result.strip()
 
 
 _rest_dt_field = DateTimeField()

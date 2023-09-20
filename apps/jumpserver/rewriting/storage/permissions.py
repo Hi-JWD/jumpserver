@@ -5,7 +5,8 @@ path_perms_map = {
     'settings': '*',
     'replay': 'default',
     'applets': 'terminal.view_applet',
-    'playbooks': 'ops.view_playbook'
+    'playbooks': 'ops.view_playbook',
+    'reports': 'reports.add_reportexecution'
 }
 
 

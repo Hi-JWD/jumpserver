@@ -99,7 +99,7 @@ class AssetPermission(JMSOrgBaseModel):
             return True
         return False
 
-    def get_all_users(self):
+    def get_all_users(self, flat=False):
         from users.models import User
         user_ids = self.users.all().values_list('id', flat=True)
         group_ids = self.user_groups.all().values_list('id', flat=True)
@@ -108,6 +108,8 @@ class AssetPermission(JMSOrgBaseModel):
         qs1_ids = User.objects.filter(id__in=user_ids).distinct().values_list('id', flat=True)
         qs2_ids = User.objects.filter(groups__id__in=group_ids).distinct().values_list('id', flat=True)
         qs_ids = list(qs1_ids) + list(qs2_ids)
+        if flat:
+            return qs_ids
         qs = User.objects.filter(id__in=qs_ids)
         return qs
 

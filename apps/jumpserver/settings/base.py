@@ -132,6 +132,7 @@ INSTALLED_APPS = [
     'acls.apps.AclsConfig',
     'notifications.apps.NotificationsConfig',
     'rbac.apps.RBACConfig',
+    'reports.apps.ReportsConfig',
     'rest_framework',
     'rest_framework_swagger',
     'drf_yasg',
