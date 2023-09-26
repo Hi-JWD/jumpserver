@@ -88,15 +88,15 @@ class PDFDocument(object):
         if t_style := kwargs.get('table_style'):
             self.table_style += t_style
 
-    def _draw_chart(self, data, chart_type):
-        if not data:
+    def _draw_chart(self, data, chart_type, **kwargs):
+        if not data or len(data) > 10:
             return
         if chart_type == c.BAR:
-            self._draw_bar(data)
+            self._draw_bar(data, **kwargs)
         elif chart_type == c.LINE_PLOT:
-            self._draw_line_plot(data)
+            self._draw_line_plot(data, **kwargs)
         elif chart_type == c.PIE:
-            self._draw_pie(data)
+            self._draw_pie(data, **kwargs)
 
     def _draw_table(self, data, ident=None):
         if ident is None:
@@ -139,7 +139,7 @@ class PDFDocument(object):
             if serial_as_label:
                 label_name = str(serial)
                 alias_name = serial if alias else i[1]
-                comments.append(f'{i[0]}({alias_name})')
+                comments.append(f'{alias_name}: {i[0]}')
             else:
                 label_name = i[0]
                 if len(label_name) > threshold:
@@ -148,13 +148,13 @@ class PDFDocument(object):
             col.append(i[1])
         return row, col, comments
 
-    def _draw_bar(self, data):
+    def _draw_bar(self, data, **kwargs):
         # 创建柱状图
         labels, data, comments = self.__reverse_matrix(data)
         drawing = Drawing()
         bar = VerticalBarChart()
         max_data = max(data)
-        step = math.ceil(max_data // len(data) / 10) * 10
+        step = math.ceil(max_data // len(data) / 10) * 10 or 1
         bar.setProperties({
             'x': self.left_margin, 'y': 8 * mm,
             'width': A4[0] - self.right_margin - 30 * mm, 'height': 160,
@@ -170,10 +170,10 @@ class PDFDocument(object):
         drawing.add(bar)
         self.content.append(drawing)
         if comments:
-            comment_str = ' '.join(comments)
+            comment_str = '; '.join(comments)
             self.content.append(Paragraph(comment_str, self.text_style))
 
-    def _draw_line_plot(self, data):
+    def _draw_line_plot(self, data, **kwargs):
         # 创建柱状图
         labels, data, comments = self.__reverse_matrix(data)
         drawing = Drawing()
@@ -208,7 +208,7 @@ class PDFDocument(object):
         ]
         return list(zip(custom_colors[:len(comments)], comments))
 
-    def _draw_pie(self, data):
+    def _draw_pie(self, data, **kwargs):
         labels, data, comments = self.__reverse_matrix(data, alias=False)
         drawing, pie, legend = Drawing(), Pie(), Legend()
         data_colors = self.get_color_comment(comments)
@@ -267,7 +267,7 @@ class PDFDocument(object):
                 sec_title, sec_data = sec_data['title'], sec_data['data']
                 self.content.append(Paragraph(f'{seria}.{sec_title}', self.h3_style))
                 for data in sec_data:
-                    _type, _data = data['type'], data['data']
+                    _type, _data, _params = data['type'], data['data'], data.get('params', {})
                     if _type == c.TEXT:
                         self._draw_text(_data)
                     elif _type == c.UNSIGNED_LIST:
@@ -275,7 +275,7 @@ class PDFDocument(object):
                     elif _type == c.TABLE:
                         self._draw_table(_data, ident=self.font_size * 2)
                     elif _type[:11] == c.TABLE_CHART:
-                        self._draw_chart(_data[1:], _type[12:])
+                        self._draw_chart(_data[1:], _type[12:], **_params)
                         self._draw_table(_data)
 
     def save(self):

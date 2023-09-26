@@ -79,6 +79,10 @@ class ReportExecution(JMSBaseModel):
     class Meta:
         ordering = ('-date_created',)
 
+    @property
+    def report_type(self):
+        return '_'.join(self.report.category)
+
     def start(self):
         try:
             filepath = ReportFileHandler(self).run()

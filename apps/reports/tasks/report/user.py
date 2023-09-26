@@ -70,7 +70,7 @@ class UserReport(BaseReport):
 
             if (local_now() - user.date_joined).days < self.time_period:
                 self.new_user_count += 1
-            user_source_counter.update([user.source])
+            user_source_counter.update([user.get_source_display()])
 
         self.user_source = '，'.join(_('%s: %s 个') % (k, v) for k, v in user_source_counter.items())
         data = [
@@ -81,8 +81,8 @@ class UserReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
-                'data': [[_('用户组名'), _('用户组用户个数'), _('组织名')], *user_groups_info]
+                'type': c.TABLE_BAR,
+                'data': [[_('用户组名'), _('用户组用户个数'), _('组织名')], *user_groups_info],
             },
         ]
         return data
@@ -99,11 +99,12 @@ class UserReport(BaseReport):
             else:
                 self.other_user_count += user_amount
             role_info.append((
-                role.name, role.scope, role.builtin, user_amount
+                role.display_name, role.get_scope_display(), user_amount,
+                _('Yes') if role.builtin else _('No')
             ))
             if user_amount > max_role['count']:
                 max_role = {
-                    'name': role.name, 'count': user_amount
+                    'name': role.display_name, 'count': user_amount
                 }
         return [
             {
@@ -113,8 +114,9 @@ class UserReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
-                'data': [[_('角色名称'), _('角色'), _('是否内置'), _('用户数量')], *role_info]
+                'type': c.TABLE_BAR,
+                'data': [[_('角色名称'), _('角色'), _('用户数量'), _('是否内置')], *role_info],
+                'params': {'label_index': 0, 'rank_index': 3}
             }
         ]
 
@@ -125,9 +127,9 @@ class UserReport(BaseReport):
                        .annotate(last=Max('date_start')).order_by('-total')[:limit]
 
         users_info, total_login = [], 0
-        for rank, session in enumerate(sessions, 1):
+        for session in sessions:
             users_info.append((
-                rank, session['user'], session['total'], Organization.get_instance(session['org_id'])
+                session['user'], session['total'], Organization.get_instance(session['org_id'])
             ))
             total_login += session['total']
         return [
@@ -138,8 +140,8 @@ class UserReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
-                'data': [[_('排名'), _('用户名'), _('登录次数'), _('组织')], *users_info]
+                'type': c.TABLE_BAR,
+                'data': [[_('用户名'), _('登录次数'), _('组织')], *users_info],
             }
         ]
 

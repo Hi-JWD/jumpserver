@@ -157,7 +157,7 @@ class AssetReport(BaseReport):
     def get_summary(self):
         self._get_other_data()
         return '''
-        当前共有资产 %s 个，共 %s 中类型资产，
+        当前共有资产 %s 个，共 %s 种类型资产，
         账号共 %s 个，其中特权账号 %s 个，普通账号 %s 个。
         ''' % (
             self.assets_count, self.asset_type_count,

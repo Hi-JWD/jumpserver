@@ -72,7 +72,7 @@ class SessionReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
+                'type': c.TABLE_BAR,
                 'data': [[_('用户名称'), _('连接数')], *user_session_info]
             }
         ]
@@ -89,7 +89,7 @@ class SessionReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
+                'type': c.TABLE_BAR,
                 'data': [[_('资产名称'), _('连接次数')], *active_asset_info]
             }
         ]
@@ -107,7 +107,7 @@ class SessionReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
+                'type': c.TABLE_BAR,
                 'data': [[_('协议类型'), _('连接次数')], *protocol_session_data]
             }
         ]
@@ -125,7 +125,7 @@ class SessionReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
+                'type': c.TABLE_BAR,
                 'data': [[_('连接方式'), _('连接次数')], *connect_method_data]
             }
         ]
@@ -146,7 +146,7 @@ class SessionReport(BaseReport):
                 )
             },
             {
-                'type': c.TABLE,
+                'type': c.TABLE_BAR,
                 'data': [[_('时长范围'), _('连接次数')], *session_duration_info]
             }
         ]

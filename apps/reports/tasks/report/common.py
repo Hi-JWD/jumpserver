@@ -5,13 +5,13 @@
 _report_templates = {}
 
 
-def get_report_templates(template_names=None, get_name=False):
-    if not template_names:
+def get_report_templates(template_class_names=None, get_name=False):
+    if not template_class_names:
         return _report_templates
 
     result = {}
     for class_name, item in _report_templates.items():
-        if class_name in template_names:
+        if class_name in template_class_names:
             item = item.NAME if get_name else item
             result[class_name] = item
     return result

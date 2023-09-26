@@ -31,7 +31,6 @@ class ReportViewSet(JMSModelViewSet):
         'categories': 'reports.view_report',
     }
 
-    # TODO 抽离成一个单独的APIView，改名为report_template
     @action(methods=['get'], detail=False, permission_classes=[RBACPermission])
     def categories(self, request, *args, **kwargs):
         templates = get_report_templates()
@@ -57,8 +56,6 @@ class ReportExecutionViewSet(ModelViewSet):
             task = execute_report_task.delay(rid=str(report_id), trigger=Trigger.manual)
             return Response({'task': task.id}, status=status.HTTP_201_CREATED)
         else:
-            import time
-            # time.sleep(2)
             execution = execute_report_task(
                 rid=str(report_id), trigger=Trigger.manual
             )
@@ -80,6 +77,6 @@ class ReportExecutionViewSet(ModelViewSet):
 
         response = FileResponse(file)
         response['Content-Type'] = 'application/octet-stream'
-        filename = escape_uri_path('%s-%s' % ('会话类型', local_now_display()))
+        filename = escape_uri_path(f'{instance.report_type}_{local_now_display()}')
         response["Content-Disposition"] = f"attachment; filename*=UTF-8''{filename}.pdf"
         return response
