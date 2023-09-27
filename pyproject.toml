@@ -139,6 +139,7 @@ netifaces = "^0.11.0"
 channels-redis = "4.1.0"
 daphne = "4.0.0"
 channels = "^4.0.0"
+reportlab = "^4.0.5"
 
 [tool.poetry.group.dev.dependencies]
 channels-redis = "^4.1.0"
