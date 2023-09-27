@@ -20,7 +20,7 @@ ASSET_REPORT_DESCRIPTION = """
 
 @register_report_template
 class AssetReport(BaseReport):
-    NAME = '资产基础数据报表'
+    NAME = _('Asset basic data report')
     DESCRIPTION = ASSET_REPORT_DESCRIPTION
 
     def __init__(self, *args, **kwargs):
@@ -52,14 +52,15 @@ class AssetReport(BaseReport):
             {
                 'type': c.TEXT,
                 'data': _(
-                    '当前共有 %s 种资产类型，资产最多的类型为 %s(%s 个)，如下所示：'
+                    _('There are currently %s asset types, '
+                      'and the largest asset type is %s(%s), as shown below: ')
                 ) % (
                     self.asset_type_count, max_type_name, max_type_count
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('资产类型'), _('资产数量')], *type_assets_info]
+                'data': [[_('Asset type'), _('Assets amount')], *type_assets_info]
             },
         ]
 
@@ -81,13 +82,15 @@ class AssetReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('当前共有一级节点 %s 个，其中节点 %s 下资产数最多，为 %s 台，如下所示：') % (
+                'data': _('Currently, there are a total of %s primary nodes, '
+                          'with the highest number of assets under node %s, '
+                          'which is %s, as shown below:') % (
                     len(primary_nodes), max_node_name, assets_amount
                 )
             },
             {
                 'type': c.TABLE_PIE,
-                'data': [[_('节点路径'), _('资产数'), _('组织')], *assets_node_info]
+                'data': [[_('Node Path'), _('Assets amount'), _('Organization')], *assets_node_info]
             }
         ]
 
@@ -119,13 +122,17 @@ class AssetReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('被授权给用户数量最多的资产为 %s，授权用户为 %s 人，如下所示：') % (
+                'data': _('The asset with the highest number of authorized users is %s, '
+                          'and the authorized users are %s, as shown below:') % (
                     max_perm['name'], max_perm['count']
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('资产名称'), _('授权人数'), _('组织')], *assets_perm_info]
+                'data': [
+                    [_('Asset display'), _('Authorized personnel'), _('Organization')],
+                    *assets_perm_info
+                ]
             }
         ]
 
@@ -141,25 +148,24 @@ class AssetReport(BaseReport):
     def get_pdf_data(self):
         return [
             {
-                'title': '各类型资产数',
+                'title': _('Number of assets by type'),
                 'data': self._get_type_of_assets_data()
             },
             {
-                'title': '各节点资产数',
+                'title': _('Number of assets on each node'),
                 'data': self._get_node_of_assets_data()
             },
             {
-                'title': '各资产授权用户 (Top 10)',
+                'title': _('Authorized Users by Asset (Top 10)'),
                 'data': self._get_perm_to_user_of_assets_data()
             },
         ]
 
     def get_summary(self):
         self._get_other_data()
-        return '''
-        当前共有资产 %s 个，共 %s 种类型资产，
-        账号共 %s 个，其中特权账号 %s 个，普通账号 %s 个。
-        ''' % (
+        return _('Currently, there are %s assets, %s types, '
+                 'and %s accounts, including %s privileged accounts '
+                 'and %s regular accounts.') % (
             self.assets_count, self.asset_type_count,
             self.accounts_count, self.pri_account_count,
             self.common_account_count

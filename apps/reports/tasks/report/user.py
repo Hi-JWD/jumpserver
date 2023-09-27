@@ -24,7 +24,7 @@ USER_REPORT_DESCRIPTION = """
 
 @register_report_template
 class UserReport(BaseReport):
-    NAME = '用户基础数据报表'
+    NAME = _('User Basic Data Report')
     DESCRIPTION = USER_REPORT_DESCRIPTION
 
     def __init__(self, *args, **kwargs):
@@ -72,17 +72,22 @@ class UserReport(BaseReport):
                 self.new_user_count += 1
             user_source_counter.update([user.get_source_display()])
 
-        self.user_source = '，'.join(_('%s: %s 个') % (k, v) for k, v in user_source_counter.items())
+        self.user_source = '，'.join(_('%s: %s') % (k, v) for k, v in user_source_counter.items())
         data = [
             {
                 'type': c.TEXT,
-                'data': _('当前共有用户组 %s 个, 组内用户最多的为 %s，如下所示：') % (
+                'data': _('There are currently %s user groups, '
+                          'with the highest number of users within '
+                          'the group being %s, as shown below:') % (
                     len(user_groups), max_user['name']
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('用户组名'), _('用户组用户个数'), _('组织名')], *user_groups_info],
+                'data': [
+                    [_('User group'), _('Number of users per user group'), _('Organization')],
+                    *user_groups_info
+                ],
             },
         ]
         return data
@@ -109,13 +114,14 @@ class UserReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('当前共有 %s 类角色，其中 %s 最多为 %s 人，如下所示：') % (
+                'data': _('There are currently %s types of roles, '
+                          'with %s maximum of %s people, as follows:') % (
                     len(roles), max_role['name'], max_role['count']
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('角色名称'), _('角色'), _('用户数量'), _('是否内置')], *role_info],
+                'data': [[_('Role display'), _('Role'), _('Users amount'), _('Is builtin')], *role_info],
                 'params': {'label_index': 0, 'rank_index': 3}
             }
         ]
@@ -135,28 +141,32 @@ class UserReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('近 %s 天内，登录 %s 次, 登录人数 %s 人，如下所示：') % (
+                'data': _('In the past %s days, logged in %s times '
+                          'with %s people, as shown below:') % (
                     self.time_period, total_login, len(sessions)
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('用户名'), _('登录次数'), _('组织')], *users_info],
+                'data': [
+                    [_('User display'), _('Number of logins'), _('Organization')],
+                    *users_info
+                ],
             }
         ]
 
     def get_pdf_data(self):
         return [
             {
-                'title': '各用户组用户数',
+                'title': _('Number of users per user group'),
                 'data': self._get_user_group_data()
             },
             {
-                'title': '各角色用户数',
+                'title': _('Number of users in each role'),
                 'data': self._get_user_role_data()
             },
             {
-                'title': '用户登录次数 (Top 10)',
+                'title': 'Number of user logins (Top 10)',
                 'data': self._get_user_active_data()
             },
         ]
@@ -173,11 +183,13 @@ class UserReport(BaseReport):
 
     def get_summary(self):
         self._get_other_data()
-        summary = '''
-        当前共有用户组 %s 个，用户 %s 个， 其中有效用户 %s 个，禁用用户 %s 个，
-        用户来源: %s, 系统管理员 %s 个，组织管理员 %s 个，其他用户 %s 个。
-        近 %s 内新增用户 %s 个， 用户产生登录行为 %s 次，成功 %s 次，失败 %s 次。
-        ''' % (
+        summary = _('There are currently %s user groups and %s users, '
+                    'including %s valid users and %s disabled users. '
+                    'User sources are %s, %s system administrators, '
+                    '%s organizational administrators, and %s other users. '
+                    '%s new users have been added in the past %s, '
+                    'and users have logged in %s times, successfully '
+                    '%s times, and failed %s times.') % (
             self.user_group_count, self.user_count, self.valid_user_count,
             self.disabled_user_count, self.user_source, self.system_admin_count,
             self.org_admin_count, self.other_user_count, self.time_period,

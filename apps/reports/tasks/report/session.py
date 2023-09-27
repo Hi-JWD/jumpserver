@@ -16,7 +16,7 @@ SESSION_REPORT_DESCRIPTION = '''
 
 @register_report_template
 class SessionReport(BaseReport):
-    NAME = '会话基础数据报表'
+    NAME = _('Session Basic Data Report')
     DESCRIPTION = SESSION_REPORT_DESCRIPTION
 
     def __init__(self, *args, **kwargs):
@@ -67,13 +67,15 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('近 %s 天，共有 %s 人产生会话，其中用户 %s 使用最频繁，产生会话 %s 个，如下所示：') % (
+                'data': _('In the past %s days, a total of %s people have generated sessions, '
+                          'with user %s being the most frequently used and generating %s sessions, '
+                          'as shown below:') % (
                     self.time_period, self.session_user_count, max_user_name, max_user_count
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('用户名称'), _('连接数')], *user_session_info]
+                'data': [[_('User display'), _('Connections')], *user_session_info]
             }
         ]
 
@@ -84,13 +86,14 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('近 %s 天内，共有 %s 个资产较为活跃，其中 %s 被连接 %s 次，如下所示：') % (
+                'data': _('In the past %s days, a total of %s assets have been active, '
+                          'of which %s have been connected %s times, as shown below:') % (
                     self.time_period, len(asset_counter.keys()), max_asset_name, max_asset_count
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('资产名称'), _('连接次数')], *active_asset_info]
+                'data': [[_('Asset display'), _('Connections')], *active_asset_info]
             }
         ]
 
@@ -102,13 +105,14 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('近 %s 天内，连接资产协议有 %s 种，如下所示：') % (
+                'data': _('There are %s types of connection asset agreements '
+                          'in the past %s days, as shown below:') % (
                     self.time_period, len(protocol_counter.keys())
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('协议类型'), _('连接次数')], *protocol_session_data]
+                'data': [[_('Protocol'), _('Connections')], *protocol_session_data]
             }
         ]
 
@@ -120,13 +124,14 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('近 %s 天内，连接资产方式有 %s 种，如下所示：') % (
+                'data': _('There are %s ways to connect '
+                          'assets in the past %s days, as follows:') % (
                     self.time_period, len(connect_counter.keys())
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('连接方式'), _('连接次数')], *connect_method_data]
+                'data': [[_('Connect method'), _('Connections')], *connect_method_data]
             }
         ]
 
@@ -134,52 +139,55 @@ class SessionReport(BaseReport):
         period_data = self._session_data['period_data']
         period_counter = period_data['period_counter']
         session_duration_info = [
-            (_('%s-%s 小时') % (int(period), int(period) + 1), count)
+            (_('%s-%s hours') % (int(period), int(period) + 1), count)
             for period, count in period_counter.items()
         ]
         return [
             {
                 'type': c.TEXT,
-                'data': _('近 %s 天内，共产生会话 %s 个，其中最长 %s，最短为 %s，如下所示：') % (
+                'data': _('In the past %s days, a total of %s sessions have '
+                          'been generated, with the longest being %s and the '
+                          'shortest being %s, as shown below:') % (
                     self.time_period, sum(period_counter.values()),
                     period_data['max_period'], period_data['min_period']
                 )
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('时长范围'), _('连接次数')], *session_duration_info]
+                'data': [[_('Duration range'), _('Connections')], *session_duration_info]
             }
         ]
 
     def get_pdf_data(self):
         return [
             {
-                'title': '各用户会话数',
+                'title': _('Number of sessions per user'),
                 'data': self._get_user_session_data()
             },
             {
-                'title': '活跃资产数',
+                'title': _('Number of active assets'),
                 'data': self._get_active_asset_data()
             },
             {
-                'title': '各协议会话数',
+                'title': _('Number of sessions per protocol'),
                 'data': self._get_protocol_of_session_data()
             },
             {
-                'title': '各连接方式产生会话数',
+                'title': _('Number of sessions per connection method'),
                 'data': self._get_connect_method_session_data()
             },
             {
-                'title': '会话时长数',
+                'title': _('Session duration'),
                 'data': self._get_session_duration_data()
             }
         ]
 
     def get_summary(self):
-        summary = '''
-        近 %s 天内，共产生会话 %s 个，连接会话人数 %s 人，
-        单个会话时间最长 %s，最短 %s，上传文件 %s 次，下载文件 %s 次。
-        ''' % (
+        summary = _('In the past %s days, a total of %s sessions '
+                    'have been generated, with %s connected sessions. '
+                    'The maximum duration of a single session is %s, '
+                    'and the minimum duration is %s. Files have been '
+                    'uploaded %s times and downloaded %s times.') % (
             self.time_period, self.session_count, self.session_user_count,
             self.max_conn_time, self.min_conn_time, self.upload_count,
             self.download_count

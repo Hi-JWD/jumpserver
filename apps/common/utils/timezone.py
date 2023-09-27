@@ -43,12 +43,12 @@ def format_seconds(seconds):
     hours %= 24
     result = ''
     if days:
-        result += _('%s 天 ') % int(days)
+        result += _('%s day ') % int(days)
     if hours:
-        result += _('%s 小时 ') % int(hours)
+        result += _('%s hour ') % int(hours)
     if minutes:
-        result += _('%s 分钟 ') % int(minutes)
-    result += _('%s 秒') % int(seconds)
+        result += _('%s minute ') % int(minutes)
+    result += _('%s second') % int(seconds)
     return result.strip()
 
 

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JumpServer 0.3.3\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-08-17 18:24+0800\n"
+"POT-Creation-Date: 2023-09-27 11:04+0800\n"
 "PO-Revision-Date: 2021-05-20 10:54+0800\n"
 "Last-Translator: ibuler <ibuler@qq.com>\n"
 "Language-Team: JumpServer team<ibuler@qq.com>\n"
@@ -25,7 +25,7 @@ msgstr "参数 'action' 必须是 [{}]"
 #: accounts/serializers/automations/change_secret.py:33
 #: assets/models/_user.py:24 audits/signal_handlers/login_log.py:28
 #: authentication/confirm/password.py:9 authentication/forms.py:32
-#: authentication/templates/authentication/login.html:274
+#: authentication/templates/authentication/login.html:286
 #: settings/serializers/auth/ldap.py:25 settings/serializers/auth/ldap.py:47
 #: users/forms/profile.py:22 users/serializers/user.py:104
 #: users/templates/users/_msg_user_created.html:13
@@ -69,7 +69,7 @@ msgstr "同名账号"
 msgid "Anonymous account"
 msgstr "匿名账号"
 
-#: accounts/const/account.py:25 users/models/user.py:733
+#: accounts/const/account.py:25 users/models/user.py:730
 msgid "Local"
 msgstr "数据库"
 
@@ -94,7 +94,8 @@ msgstr "更新"
 #: accounts/const/account.py:33
 #: accounts/serializers/automations/change_secret.py:156 audits/const.py:54
 #: audits/signal_handlers/activity_log.py:33 common/const/choices.py:19
-#: ops/const.py:61 terminal/const.py:77 xpack/plugins/cloud/const.py:43
+#: ops/const.py:61 reports/models.py:60 terminal/const.py:77
+#: xpack/plugins/cloud/const.py:43
 msgid "Failed"
 msgstr "失败"
 
@@ -115,74 +116,78 @@ msgid "Gather accounts"
 msgstr "收集账号"
 
 #: accounts/const/automation.py:26
+msgid "Backup accounts"
+msgstr "备份账号"
+
+#: accounts/const/automation.py:27
 msgid "Verify gateway account"
 msgstr "验证网关账号"
 
-#: accounts/const/automation.py:44
+#: accounts/const/automation.py:45
 msgid "Specific password"
 msgstr "指定"
 
-#: accounts/const/automation.py:45
+#: accounts/const/automation.py:46
 msgid "Random"
 msgstr "随机"
 
-#: accounts/const/automation.py:49 ops/const.py:13
+#: accounts/const/automation.py:50 ops/const.py:13
 msgid "Append SSH KEY"
 msgstr "追加"
 
-#: accounts/const/automation.py:50 ops/const.py:14
+#: accounts/const/automation.py:51 ops/const.py:14
 msgid "Empty and append SSH KEY"
 msgstr "清空所有并添加"
 
-#: accounts/const/automation.py:51 ops/const.py:15
+#: accounts/const/automation.py:52 ops/const.py:15
 msgid "Replace (Replace only keys pushed by JumpServer) "
 msgstr "替换 (只替换由 JumpServer 推送的密钥)"
 
-#: accounts/const/automation.py:56
+#: accounts/const/automation.py:57
 msgid "On asset create"
 msgstr "资产创建时"
 
-#: accounts/const/automation.py:59
+#: accounts/const/automation.py:60
 msgid "On perm add user"
 msgstr "授权变更时添加用户"
 
-#: accounts/const/automation.py:61
+#: accounts/const/automation.py:62
 msgid "On perm add user group"
 msgstr "授权变更时添加用户组"
 
-#: accounts/const/automation.py:63
+#: accounts/const/automation.py:64
 msgid "On perm add asset"
 msgstr "授权变更时添加资产"
 
-#: accounts/const/automation.py:65
+#: accounts/const/automation.py:66
 msgid "On perm add node"
 msgstr "授权变更时添加节点"
 
-#: accounts/const/automation.py:67
+#: accounts/const/automation.py:68
 msgid "On perm add account"
 msgstr "授权变更时添加账号"
 
-#: accounts/const/automation.py:69
+#: accounts/const/automation.py:70
 msgid "On asset join node"
 msgstr "资产变更时添加到节点"
 
-#: accounts/const/automation.py:71
+#: accounts/const/automation.py:72
 msgid "On user join group"
 msgstr "用户变更时添加到用户组"
 
-#: accounts/const/automation.py:79
+#: accounts/const/automation.py:80
 msgid "On perm change"
 msgstr "授权变更时"
 
-#: accounts/const/automation.py:86
+#: accounts/const/automation.py:87
 msgid "Inherit from group or node"
 msgstr "继承自用户组或资产节点"
 
-#: accounts/const/automation.py:94
+#: accounts/const/automation.py:95
 msgid "Create and push"
 msgstr "创建并推送"
 
-#: accounts/const/automation.py:95
+#: accounts/const/automation.py:96
 msgid "Only create"
 msgstr "仅创建"
 
@@ -230,7 +235,7 @@ msgid "Version"
 msgstr "版本"
 
 #: accounts/models/account.py:56 accounts/serializers/account/account.py:204
-#: users/models/user.py:838
+#: users/models/user.py:835
 msgid "Source"
 msgstr "来源"
 
@@ -279,12 +284,17 @@ msgstr "收件人部分一"
 msgid "Recipient part two"
 msgstr "收件人部分二"
 
-#: accounts/models/automations/backup_account.py:40
-#: accounts/models/automations/backup_account.py:110
+#: accounts/models/automations/backup_account.py:35
+#: accounts/models/automations/backup_account.py:39
+msgid "Receiving asset one"
+msgstr "收件人资产一"
+
+#: accounts/models/automations/backup_account.py:48
+#: accounts/models/automations/backup_account.py:125
 msgid "Account backup plan"
 msgstr "账号备份计划"
 
-#: accounts/models/automations/backup_account.py:91
+#: accounts/models/automations/backup_account.py:106
 #: assets/models/automations/base.py:115 audits/models.py:60
 #: ops/models/base.py:55 ops/models/celery.py:63 ops/models/job.py:228
 #: ops/templates/ops/celery_task_log.html:75
@@ -295,37 +305,38 @@ msgstr "账号备份计划"
 msgid "Date start"
 msgstr "开始日期"
 
-#: accounts/models/automations/backup_account.py:94
+#: accounts/models/automations/backup_account.py:109
 #: authentication/templates/authentication/_msg_oauth_bind.html:11
 #: notifications/notifications.py:186
 msgid "Time"
 msgstr "时间"
 
-#: accounts/models/automations/backup_account.py:98
+#: accounts/models/automations/backup_account.py:113
 msgid "Account backup snapshot"
 msgstr "账号备份快照"
 
-#: accounts/models/automations/backup_account.py:102
-#: accounts/serializers/account/backup.py:42
+#: accounts/models/automations/backup_account.py:117
+#: accounts/serializers/account/backup.py:39
 #: accounts/serializers/automations/base.py:55
 #: assets/models/automations/base.py:122
-#: assets/serializers/automations/base.py:40
+#: assets/serializers/automations/base.py:40 reports/models.py:66
+#: reports/serializers/report.py:34
 msgid "Trigger mode"
 msgstr "触发模式"
 
-#: accounts/models/automations/backup_account.py:105 audits/models.py:194
-#: terminal/models/session/sharing.py:121 xpack/plugins/cloud/models.py:205
+#: accounts/models/automations/backup_account.py:120 audits/models.py:194
+#: terminal/models/session/sharing.py:125 xpack/plugins/cloud/models.py:205
 msgid "Reason"
 msgstr "原因"
 
-#: accounts/models/automations/backup_account.py:107
+#: accounts/models/automations/backup_account.py:122
 #: accounts/serializers/automations/change_secret.py:111
 #: accounts/serializers/automations/change_secret.py:134
 #: ops/serializers/job.py:56 terminal/serializers/session.py:46
 msgid "Is success"
 msgstr "是否成功"
 
-#: accounts/models/automations/backup_account.py:115
+#: accounts/models/automations/backup_account.py:130
 msgid "Account backup execution"
 msgstr "账号备份执行"
 
@@ -396,8 +407,7 @@ msgid "SSH key change strategy"
 msgstr "SSH 密钥推送方式"
 
 #: accounts/models/automations/change_secret.py:64
-#: accounts/serializers/account/backup.py:34
-#: accounts/serializers/automations/change_secret.py:57
+#: accounts/serializers/automations/change_secret.py:57 reports/models.py:32
 msgid "Recipient"
 msgstr "收件人"
 
@@ -419,7 +429,7 @@ msgstr "开始日期"
 
 #: accounts/models/automations/change_secret.py:91
 #: assets/models/automations/base.py:116 ops/models/base.py:56
-#: ops/models/celery.py:64 ops/models/job.py:229
+#: ops/models/celery.py:64 ops/models/job.py:229 reports/models.py:77
 #: terminal/models/applet/host.py:141
 msgid "Date finished"
 msgstr "结束日期"
@@ -452,7 +462,7 @@ msgstr "最后登录日期"
 #: authentication/templates/authentication/_msg_different_city.html:9
 #: authentication/templates/authentication/_msg_oauth_bind.html:9
 #: users/forms/profile.py:32 users/forms/profile.py:115
-#: users/models/user.py:785 users/templates/users/_msg_user_created.html:12
+#: users/models/user.py:782 users/templates/users/_msg_user_created.html:12
 #: xpack/plugins/cloud/serializers/account_attrs.py:26
 msgid "Username"
 msgstr "用户名"
@@ -507,12 +517,12 @@ msgstr "账号验证"
 #: ops/models/adhoc.py:20 ops/models/celery.py:15 ops/models/celery.py:57
 #: ops/models/job.py:126 ops/models/playbook.py:28 ops/serializers/job.py:20
 #: orgs/models.py:82 perms/models/asset_permission.py:56 rbac/models/role.py:29
-#: settings/models.py:32 settings/serializers/msg.py:82
+#: reports/models.py:25 settings/models.py:32 settings/serializers/msg.py:82
 #: terminal/models/applet/applet.py:32 terminal/models/component/endpoint.py:12
 #: terminal/models/component/endpoint.py:94
 #: terminal/models/component/storage.py:26 terminal/models/component/task.py:13
 #: terminal/models/component/terminal.py:84 users/forms/profile.py:33
-#: users/models/group.py:13 users/models/user.py:787
+#: users/models/group.py:13 users/models/user.py:784
 #: xpack/plugins/cloud/models.py:32 xpack/plugins/cloud/models.py:273
 #: xpack/plugins/cloud/serializers/task.py:68
 msgid "Name"
@@ -576,17 +586,17 @@ msgid ""
 msgstr ""
 "连接资产时不使用用户名和密码的账号，仅支持 web类型 和 自定义类型 的资产"
 
-#: accounts/notifications.py:8
+#: accounts/notifications.py:10
 msgid "Notification of account backup route task results"
 msgstr "账号备份任务结果通知"
 
-#: accounts/notifications.py:18
+#: accounts/notifications.py:21
 msgid ""
 "{} - The account backup passage task has been completed. See the attachment "
 "for details"
 msgstr "{} - 账号备份任务已完成, 详情见附件"
 
-#: accounts/notifications.py:21
+#: accounts/notifications.py:24
 msgid ""
 "{} - The account backup passage task has been completed: the encryption "
 "password has not been set - please go to personal information -> file "
@@ -595,17 +605,17 @@ msgstr ""
 "{} - 账号备份任务已完成: 未设置加密密码 - 请前往个人信息 -> 文件加密密码中设"
 "置加密密码"
 
-#: accounts/notifications.py:33
+#: accounts/notifications.py:39
 msgid "Notification of implementation result of encryption change plan"
 msgstr "改密计划任务结果通知"
 
-#: accounts/notifications.py:43
+#: accounts/notifications.py:49
 msgid ""
 "{} - The encryption change task has been completed. See the attachment for "
 "details"
 msgstr "{} - 改密任务已完成, 详情见附件"
 
-#: accounts/notifications.py:46
+#: accounts/notifications.py:52
 msgid ""
 "{} - The encryption change task has been completed: the encryption password "
 "has not been set - please go to personal information -> file encryption "
@@ -626,7 +636,8 @@ msgstr "账号存在策略"
 #: assets/models/label.py:21 assets/models/platform.py:89
 #: assets/serializers/asset/common.py:121 assets/serializers/cagegory.py:8
 #: assets/serializers/platform.py:128 assets/serializers/platform.py:224
-#: perms/serializers/user_permission.py:26 settings/models.py:34
+#: perms/serializers/user_permission.py:26 reports/models.py:26
+#: reports/serializers/report.py:13 settings/models.py:34
 #: tickets/models/ticket/apply_application.py:13
 msgid "Category"
 msgstr "类别"
@@ -698,7 +709,7 @@ msgstr "账号已存在"
 msgid "ID"
 msgstr "ID"
 
-#: accounts/serializers/account/account.py:437 acls/serializers/base.py:116
+#: accounts/serializers/account/account.py:440 acls/serializers/base.py:116
 #: assets/models/cmd_filter.py:24 assets/models/label.py:16 audits/models.py:49
 #: audits/models.py:85 audits/models.py:163
 #: authentication/models/connection_token.py:32
@@ -708,39 +719,34 @@ msgstr "ID"
 #: perms/serializers/permission.py:30 rbac/builtin.py:123
 #: rbac/models/rolebinding.py:49 rbac/serializers/rolebinding.py:17
 #: terminal/backends/command/models.py:16 terminal/models/session/session.py:29
-#: terminal/models/session/sharing.py:33 terminal/notifications.py:156
+#: terminal/models/session/sharing.py:34 terminal/notifications.py:156
 #: terminal/notifications.py:205 terminal/serializers/command.py:16
 #: terminal/templates/terminal/_msg_command_warning.html:6
 #: terminal/templates/terminal/_msg_session_sharing.html:6
-#: tickets/models/comment.py:21 users/const.py:14 users/models/user.py:981
-#: users/models/user.py:1017 users/serializers/group.py:18
+#: tickets/models/comment.py:21 users/const.py:14 users/models/user.py:978
+#: users/models/user.py:1014 users/serializers/group.py:18
 msgid "User"
 msgstr "用户"
 
-#: accounts/serializers/account/account.py:438
+#: accounts/serializers/account/account.py:441
 #: authentication/templates/authentication/_access_key_modal.html:33
 #: terminal/notifications.py:158 terminal/notifications.py:207
 msgid "Date"
 msgstr "日期"
 
-#: accounts/serializers/account/backup.py:31
+#: accounts/serializers/account/backup.py:32
 #: accounts/serializers/automations/base.py:36
 #: assets/serializers/automations/base.py:34 ops/mixin.py:23 ops/mixin.py:103
 #: settings/serializers/auth/ldap.py:66
 msgid "Periodic perform"
 msgstr "定时执行"
 
-#: accounts/serializers/account/backup.py:32
+#: accounts/serializers/account/backup.py:33
 #: accounts/serializers/automations/base.py:37
 msgid "Executed amount"
 msgstr "执行次数"
 
-#: accounts/serializers/account/backup.py:35
-#: accounts/serializers/automations/change_secret.py:58
-msgid "Currently only mail sending is supported"
-msgstr "当前只支持邮件发送"
-
-#: accounts/serializers/account/backup.py:37
+#: accounts/serializers/account/backup.py:34 reports/tasks/report/asset.py:63
 msgid "Asset type"
 msgstr "资产类型"
 
@@ -766,11 +772,11 @@ msgstr ""
 #: assets/models/group.py:20 common/db/models.py:36 ops/models/adhoc.py:26
 #: ops/models/job.py:145 ops/models/playbook.py:31 rbac/models/role.py:37
 #: settings/models.py:37 terminal/models/applet/applet.py:44
-#: terminal/models/applet/applet.py:284 terminal/models/applet/host.py:142
+#: terminal/models/applet/applet.py:289 terminal/models/applet/host.py:142
 #: terminal/models/component/endpoint.py:24
 #: terminal/models/component/endpoint.py:104
 #: terminal/models/session/session.py:46 tickets/models/comment.py:32
-#: tickets/models/ticket/general.py:297 users/models/user.py:826
+#: tickets/models/ticket/general.py:297 users/models/user.py:823
 #: xpack/plugins/cloud/models.py:39 xpack/plugins/cloud/models.py:109
 msgid "Comment"
 msgstr "备注"
@@ -804,6 +810,10 @@ msgstr "自动化快照"
 msgid "SSH Key strategy"
 msgstr "SSH 密钥更改方式"
 
+#: accounts/serializers/automations/change_secret.py:58
+msgid "Currently only mail sending is supported"
+msgstr "当前只支持邮件发送"
+
 #: accounts/serializers/automations/change_secret.py:81
 msgid "* Please enter the correct password length"
 msgstr "* 请输入正确的密码长度"
@@ -820,8 +830,8 @@ msgstr "自动化任务执行历史"
 #: accounts/serializers/automations/change_secret.py:155 audits/const.py:53
 #: audits/models.py:59 audits/signal_handlers/activity_log.py:33
 #: common/const/choices.py:18 ops/const.py:59 ops/serializers/celery.py:40
-#: terminal/const.py:76 terminal/models/session/sharing.py:117
-#: tickets/views/approve.py:115
+#: reports/models.py:59 terminal/const.py:76
+#: terminal/models/session/sharing.py:121 tickets/views/approve.py:115
 msgid "Success"
 msgstr "成功"
 
@@ -914,8 +924,8 @@ msgstr "审批人"
 #: acls/models/base.py:43 authentication/models/access_key.py:17
 #: authentication/models/connection_token.py:53
 #: authentication/templates/authentication/_access_key_modal.html:32
-#: perms/models/asset_permission.py:76 terminal/models/session/sharing.py:28
-#: tickets/const.py:37
+#: perms/models/asset_permission.py:76 reports/models.py:35
+#: terminal/models/session/sharing.py:29 tickets/const.py:37
 msgid "Active"
 msgstr "激活中"
 
@@ -1357,18 +1367,18 @@ msgstr "SSH公钥"
 #: assets/models/_user.py:28 assets/models/automations/base.py:114
 #: assets/models/cmd_filter.py:41 assets/models/group.py:19
 #: common/db/models.py:34 ops/models/base.py:54 ops/models/job.py:227
-#: users/models/user.py:1018
+#: users/models/user.py:1015
 msgid "Date created"
 msgstr "创建日期"
 
 #: assets/models/_user.py:29 assets/models/cmd_filter.py:42
-#: common/db/models.py:35 users/models/user.py:847
+#: common/db/models.py:35 users/models/user.py:844
 msgid "Date updated"
 msgstr "更新日期"
 
 #: assets/models/_user.py:30 assets/models/cmd_filter.py:44
 #: assets/models/cmd_filter.py:91 assets/models/group.py:18
-#: common/db/models.py:32 users/models/user.py:833
+#: common/db/models.py:32 users/models/user.py:830
 #: users/serializers/group.py:29
 msgid "Created by"
 msgstr "创建者"
@@ -1395,8 +1405,9 @@ msgstr "用户名与用户相同"
 
 #: assets/models/_user.py:52 authentication/models/connection_token.py:41
 #: authentication/serializers/connect_token_secret.py:111
-#: terminal/models/applet/applet.py:41 terminal/serializers/session.py:19
-#: terminal/serializers/session.py:42 terminal/serializers/storage.py:70
+#: reports/tasks/report/session.py:115 terminal/models/applet/applet.py:41
+#: terminal/serializers/session.py:19 terminal/serializers/session.py:42
+#: terminal/serializers/storage.py:70
 msgid "Protocol"
 msgstr "协议"
 
@@ -1538,10 +1549,10 @@ msgstr "资产自动化任务"
 
 #: assets/models/automations/base.py:113 audits/models.py:199
 #: audits/serializers.py:50 ops/models/base.py:49 ops/models/job.py:220
-#: terminal/models/applet/applet.py:283 terminal/models/applet/host.py:139
-#: terminal/models/component/status.py:30 terminal/serializers/applet.py:18
-#: terminal/serializers/applet_host.py:115 tickets/models/ticket/general.py:283
-#: tickets/serializers/super_ticket.py:13
+#: reports/models.py:70 terminal/models/applet/applet.py:288
+#: terminal/models/applet/host.py:139 terminal/models/component/status.py:30
+#: terminal/serializers/applet.py:18 terminal/serializers/applet_host.py:115
+#: tickets/models/ticket/general.py:283 tickets/serializers/super_ticket.py:13
 #: tickets/serializers/ticket/ticket.py:20 xpack/plugins/cloud/models.py:201
 #: xpack/plugins/cloud/models.py:257
 msgid "Status"
@@ -1564,8 +1575,8 @@ msgid "Date verified"
 msgstr "校验日期"
 
 #: assets/models/cmd_filter.py:28 perms/models/asset_permission.py:61
-#: perms/serializers/permission.py:32 users/models/group.py:25
-#: users/models/user.py:793
+#: perms/serializers/permission.py:32 reports/tasks/report/user.py:88
+#: users/models/group.py:25 users/models/user.py:790
 msgid "User group"
 msgstr "用户组"
 
@@ -1615,11 +1626,11 @@ msgstr "默认"
 msgid "Default asset group"
 msgstr "默认资产组"
 
-#: assets/models/label.py:15 rbac/const.py:6 users/models/user.py:1003
+#: assets/models/label.py:15 rbac/const.py:6 users/models/user.py:1000
 msgid "System"
 msgstr "系统"
 
-#: assets/models/label.py:19 assets/models/node.py:544
+#: assets/models/label.py:19 assets/models/node.py:539
 #: assets/serializers/cagegory.py:7 assets/serializers/cagegory.py:14
 #: authentication/models/connection_token.py:29
 #: authentication/serializers/connect_token_secret.py:122
@@ -1640,28 +1651,28 @@ msgstr "标签"
 msgid "New node"
 msgstr "新节点"
 
-#: assets/models/node.py:472 audits/backends/db.py:55 audits/backends/db.py:56
+#: assets/models/node.py:467 audits/backends/db.py:55 audits/backends/db.py:56
 msgid "empty"
 msgstr "空"
 
-#: assets/models/node.py:543 perms/models/perm_node.py:28
+#: assets/models/node.py:538 perms/models/perm_node.py:28
 msgid "Key"
 msgstr "键"
 
-#: assets/models/node.py:545 assets/serializers/node.py:20
+#: assets/models/node.py:540 assets/serializers/node.py:20
 msgid "Full value"
 msgstr "全称"
 
-#: assets/models/node.py:549 perms/models/perm_node.py:30
+#: assets/models/node.py:544 perms/models/perm_node.py:30
 msgid "Parent key"
 msgstr "ssh私钥"
 
-#: assets/models/node.py:558 perms/serializers/permission.py:35
+#: assets/models/node.py:553 perms/serializers/permission.py:35
 #: tickets/models/ticket/apply_asset.py:14 xpack/plugins/cloud/models.py:322
 msgid "Node"
 msgstr "节点"
 
-#: assets/models/node.py:561
+#: assets/models/node.py:556
 msgid "Can match node"
 msgstr "可以匹配节点"
 
@@ -1914,7 +1925,8 @@ msgstr "类型"
 msgid "This field must be unique."
 msgstr "字段必须唯一"
 
-#: assets/serializers/label.py:12
+#: assets/serializers/label.py:12 reports/tasks/report/asset.py:63
+#: reports/tasks/report/asset.py:93
 msgid "Assets amount"
 msgstr "资产数量"
 
@@ -2110,8 +2122,8 @@ msgstr "创建"
 msgid "Connect"
 msgstr "连接"
 
-#: audits/const.py:29 authentication/templates/authentication/login.html:240
-#: authentication/templates/authentication/login.html:313
+#: audits/const.py:29 authentication/templates/authentication/login.html:252
+#: authentication/templates/authentication/login.html:325
 #: templates/_header_bar.html:89
 msgid "Login"
 msgstr "登录"
@@ -2147,11 +2159,11 @@ msgstr "任务"
 msgid "-"
 msgstr "-"
 
-#: audits/handler.py:117
+#: audits/handler.py:117 reports/tasks/report/user.py:108
 msgid "Yes"
 msgstr "是"
 
-#: audits/handler.py:117
+#: audits/handler.py:117 reports/tasks/report/user.py:108
 msgid "No"
 msgstr "否"
 
@@ -2160,7 +2172,7 @@ msgid "Job audit log"
 msgstr "作业审计日志"
 
 #: audits/models.py:51 audits/models.py:95 audits/models.py:166
-#: terminal/models/session/session.py:38 terminal/models/session/sharing.py:109
+#: terminal/models/session/session.py:38 terminal/models/session/sharing.py:113
 msgid "Remote addr"
 msgstr "远端地址"
 
@@ -2177,8 +2189,8 @@ msgid "File"
 msgstr "文件"
 
 #: audits/models.py:62 terminal/backends/command/models.py:21
-#: terminal/models/session/replay.py:9 terminal/models/session/sharing.py:19
-#: terminal/models/session/sharing.py:91
+#: terminal/models/session/replay.py:9 terminal/models/session/sharing.py:20
+#: terminal/models/session/sharing.py:95
 #: terminal/templates/terminal/_msg_command_alert.html:10
 #: terminal/templates/terminal/_msg_command_warning.html:17
 #: tickets/models/ticket/command_confirm.py:15
@@ -2247,7 +2259,7 @@ msgstr "用户代理"
 
 #: audits/models.py:191 audits/serializers.py:48
 #: authentication/templates/authentication/_mfa_confirm_modal.html:14
-#: users/forms/profile.py:65 users/models/user.py:810
+#: users/forms/profile.py:65 users/models/user.py:807
 #: users/serializers/profile.py:126
 msgid "MFA"
 msgstr "MFA"
@@ -2301,24 +2313,24 @@ msgid "Auth Token"
 msgstr "认证令牌"
 
 #: audits/signal_handlers/login_log.py:31 authentication/notifications.py:73
-#: authentication/views/login.py:75 authentication/views/wecom.py:159
+#: authentication/views/login.py:77 authentication/views/wecom.py:159
 #: notifications/backends/__init__.py:11 settings/serializers/auth/wecom.py:10
-#: users/models/user.py:740 users/models/user.py:848
+#: users/models/user.py:737 users/models/user.py:845
 msgid "WeCom"
 msgstr "企业微信"
 
 #: audits/signal_handlers/login_log.py:32 authentication/views/feishu.py:122
-#: authentication/views/login.py:87 notifications/backends/__init__.py:14
+#: authentication/views/login.py:89 notifications/backends/__init__.py:14
 #: settings/serializers/auth/feishu.py:10
-#: settings/serializers/auth/feishu.py:13 users/models/user.py:742
-#: users/models/user.py:850
+#: settings/serializers/auth/feishu.py:13 users/models/user.py:739
+#: users/models/user.py:847
 msgid "FeiShu"
 msgstr "飞书"
 
 #: audits/signal_handlers/login_log.py:33 authentication/views/dingtalk.py:159
-#: authentication/views/login.py:81 notifications/backends/__init__.py:12
-#: settings/serializers/auth/dingtalk.py:10 users/models/user.py:741
-#: users/models/user.py:849
+#: authentication/views/login.py:83 notifications/backends/__init__.py:12
+#: settings/serializers/auth/dingtalk.py:10 users/models/user.py:738
+#: users/models/user.py:846
 msgid "DingTalk"
 msgstr "钉钉"
 
@@ -2383,7 +2395,7 @@ msgid ""
 msgstr "用户来自 {} 请去相应系统修改密码"
 
 #: authentication/api/password.py:64
-#: authentication/templates/authentication/login.html:305
+#: authentication/templates/authentication/login.html:317
 #: users/templates/users/forgot_password.html:27
 #: users/templates/users/forgot_password.html:28
 #: users/templates/users/forgot_password_previewing.html:13
@@ -2741,6 +2753,7 @@ msgid "Input secret"
 msgstr "自定义密码"
 
 #: authentication/models/connection_token.py:42
+#: reports/tasks/report/session.py:134
 msgid "Connect method"
 msgstr "连接方式"
 
@@ -2749,10 +2762,12 @@ msgid "Connect options"
 msgstr "连接项"
 
 #: authentication/models/connection_token.py:44
+#: reports/tasks/report/session.py:78 reports/tasks/report/user.py:152
 msgid "User display"
 msgstr "用户名称"
 
 #: authentication/models/connection_token.py:45
+#: reports/tasks/report/asset.py:133 reports/tasks/report/session.py:96
 msgid "Asset display"
 msgstr "资产名称"
 
@@ -2763,7 +2778,7 @@ msgstr "可以重复使用"
 #: authentication/models/connection_token.py:47
 #: authentication/models/temp_token.py:13 perms/models/asset_permission.py:74
 #: tickets/models/ticket/apply_application.py:31
-#: tickets/models/ticket/apply_asset.py:20 users/models/user.py:831
+#: tickets/models/ticket/apply_asset.py:20 users/models/user.py:828
 msgid "Date expired"
 msgstr "失效日期"
 
@@ -2833,6 +2848,7 @@ msgid "binding reminder"
 msgstr "绑定提醒"
 
 #: authentication/serializers/connect_token_secret.py:113
+#: reports/tasks/report/user.py:124
 msgid "Is builtin"
 msgstr "内置的"
 
@@ -2874,7 +2890,7 @@ msgstr "已过期"
 #: authentication/serializers/password_mfa.py:24
 #: notifications/backends/__init__.py:10 settings/serializers/msg.py:22
 #: settings/serializers/msg.py:57 users/forms/profile.py:102
-#: users/forms/profile.py:109 users/models/user.py:789
+#: users/forms/profile.py:109 users/models/user.py:786
 #: users/templates/users/forgot_password.html:117
 #: users/views/profile/reset.py:73
 msgid "Email"
@@ -2912,13 +2928,13 @@ msgid "Show"
 msgstr "显示"
 
 #: authentication/templates/authentication/_access_key_modal.html:66
-#: users/models/user.py:635 users/serializers/profile.py:116
+#: users/models/user.py:632 users/serializers/profile.py:116
 #: users/templates/users/user_verify_mfa.html:36
 msgid "Disable"
 msgstr "禁用"
 
 #: authentication/templates/authentication/_access_key_modal.html:67
-#: users/models/user.py:636 users/serializers/profile.py:117
+#: users/models/user.py:633 users/serializers/profile.py:117
 #: users/templates/users/mfa_setting.html:26
 #: users/templates/users/mfa_setting.html:68
 msgid "Enable"
@@ -3017,7 +3033,7 @@ msgid "request new one"
 msgstr "重新申请"
 
 #: authentication/templates/authentication/_msg_reset_password_code.html:12
-#: terminal/models/session/sharing.py:26 terminal/models/session/sharing.py:93
+#: terminal/models/session/sharing.py:27 terminal/models/session/sharing.py:97
 #: terminal/templates/terminal/_msg_session_sharing.html:12
 #: users/forms/profile.py:107 users/templates/users/forgot_password.html:66
 msgid "Verify code"
@@ -3067,7 +3083,7 @@ msgstr "如果这次公钥更新不是由你发起的，那么你的账号可能
 msgid "Cancel"
 msgstr "取消"
 
-#: authentication/templates/authentication/login.html:320
+#: authentication/templates/authentication/login.html:332
 msgid "More login options"
 msgstr "其他方式登录"
 
@@ -3179,23 +3195,23 @@ msgstr "绑定 飞书 成功"
 msgid "Failed to get user from FeiShu"
 msgstr "从飞书获取用户失败"
 
-#: authentication/views/login.py:183
+#: authentication/views/login.py:204
 msgid "Redirecting"
 msgstr "跳转中"
 
-#: authentication/views/login.py:184
+#: authentication/views/login.py:205
 msgid "Redirecting to {} authentication"
 msgstr "正在跳转到 {} 认证"
 
-#: authentication/views/login.py:207
+#: authentication/views/login.py:228
 msgid "Login timeout, please try again."
 msgstr "登录超时，请重新登录"
 
-#: authentication/views/login.py:250
+#: authentication/views/login.py:271
 msgid "User email already exists ({})"
 msgstr "用户邮箱已存在 ({})"
 
-#: authentication/views/login.py:328
+#: authentication/views/login.py:349
 msgid ""
 "Wait for <b>{}</b> confirm, You also can copy link to her/him <br/>\n"
 "                  Don't close this page"
@@ -3203,15 +3219,15 @@ msgstr ""
 "等待 <b>{}</b> 确认, 你也可以复制链接发给他/她 <br/>\n"
 "                  不要关闭本页面"
 
-#: authentication/views/login.py:333
+#: authentication/views/login.py:354
 msgid "No ticket found"
 msgstr "没有发现工单"
 
-#: authentication/views/login.py:369
+#: authentication/views/login.py:390
 msgid "Logout success"
 msgstr "退出登录成功"
 
-#: authentication/views/login.py:370
+#: authentication/views/login.py:391
 msgid "Logout success, return login page"
 msgstr "退出登录成功，返回到登录页面"
 
@@ -3264,7 +3280,7 @@ msgstr "准备"
 msgid "Pending"
 msgstr "待定的"
 
-#: common/const/choices.py:17 ops/const.py:58
+#: common/const/choices.py:17 ops/const.py:58 reports/models.py:58
 msgid "Running"
 msgstr "运行中"
 
@@ -3348,7 +3364,7 @@ msgstr "忽略的"
 msgid "discard time"
 msgstr "忽略时间"
 
-#: common/db/models.py:33 users/models/user.py:834
+#: common/db/models.py:33 users/models/user.py:831
 msgid "Updated by"
 msgstr "最后更新者"
 
@@ -3497,11 +3513,11 @@ msgstr "错误的数据类型，应该是列表"
 msgid "Invalid choice: {}"
 msgstr "无效选项: {}"
 
-#: common/tasks.py:20 common/utils/verify_code.py:16
+#: common/tasks.py:22 common/utils/verify_code.py:16
 msgid "Send email"
 msgstr "发件邮件"
 
-#: common/tasks.py:47
+#: common/tasks.py:49
 msgid "Send email attachment"
 msgstr "发送邮件附件"
 
@@ -3512,6 +3528,28 @@ msgstr "无效 IP"
 #: common/utils/ip/utils.py:98
 msgid "Invalid address"
 msgstr "无效地址"
+
+#: common/utils/timezone.py:46
+#, python-format
+msgid "%s day "
+msgstr "%s 天 "
+
+#: common/utils/timezone.py:48
+#, fuzzy, python-format
+#| msgid "hour"
+msgid "%s hour "
+msgstr "%s 小时 "
+
+#: common/utils/timezone.py:50
+#, python-format
+msgid "%s minute "
+msgstr "%s 分钟 "
+
+#: common/utils/timezone.py:51
+#, fuzzy, python-format
+#| msgid "Unit: second"
+msgid "%s second"
+msgstr "%s 秒"
 
 #: common/utils/translate.py:45
 #, python-format
@@ -3619,11 +3657,11 @@ msgstr "发布站内消息"
 msgid "No account available"
 msgstr "无可用账号"
 
-#: ops/ansible/inventory.py:260
+#: ops/ansible/inventory.py:261
 msgid "Ansible disabled"
 msgstr "Ansible 已禁用"
 
-#: ops/ansible/inventory.py:276
+#: ops/ansible/inventory.py:277
 msgid "Skip hosts below:"
 msgstr "跳过以下主机: "
 
@@ -3639,13 +3677,33 @@ msgstr "任务 {} 不存在"
 msgid "Task {} args or kwargs error"
 msgstr "任务 {} 执行参数错误"
 
-#: ops/api/playbook.py:37
+#: ops/api/playbook.py:39
 msgid "Currently playbook is being used in a job"
 msgstr "当前 playbook 正在作业中使用"
 
-#: ops/api/playbook.py:91
+#: ops/api/playbook.py:93
 msgid "Unsupported file content"
 msgstr "不支持的文件内容"
+
+#: ops/api/playbook.py:95 ops/api/playbook.py:141 ops/api/playbook.py:189
+msgid "Invalid file path"
+msgstr "无效的文件路径"
+
+#: ops/api/playbook.py:167
+msgid "This file can not be rename"
+msgstr "此文件不能重命名"
+
+#: ops/api/playbook.py:186
+msgid "File already exists"
+msgstr "文件已存在"
+
+#: ops/api/playbook.py:204
+msgid "File key is required"
+msgstr "秘钥文件是必填项。"
+
+#: ops/api/playbook.py:207
+msgid "This file can not be delete"
+msgstr "此文件不能删除"
 
 #: ops/apps.py:9 ops/notifications.py:17 rbac/tree.py:55
 msgid "App ops"
@@ -3767,7 +3825,7 @@ msgstr "参数"
 
 #: ops/models/adhoc.py:25 ops/models/base.py:16 ops/models/base.py:53
 #: ops/models/job.py:138 ops/models/job.py:226 ops/models/playbook.py:30
-#: terminal/models/session/sharing.py:24
+#: terminal/models/session/sharing.py:25
 msgid "Creator"
 msgstr "创建者"
 
@@ -3783,8 +3841,8 @@ msgstr "最后执行"
 msgid "Date last run"
 msgstr "最后运行日期"
 
-#: ops/models/base.py:51 ops/models/job.py:224
-#: xpack/plugins/cloud/models.py:199
+#: ops/models/base.py:51 ops/models/job.py:224 reports/models.py:74
+#: reports/models.py:76 xpack/plugins/cloud/models.py:199
 msgid "Result"
 msgstr "结果"
 
@@ -3808,7 +3866,7 @@ msgstr "可以查看任务监控"
 msgid "Kwargs"
 msgstr "其它参数"
 
-#: ops/models/celery.py:61 terminal/models/session/sharing.py:124
+#: ops/models/celery.py:61 terminal/models/session/sharing.py:128
 #: tickets/const.py:25
 msgid "Finished"
 msgstr "结束"
@@ -4001,7 +4059,9 @@ msgstr "组织管理"
 
 #: orgs/mixins/models.py:57 orgs/mixins/serializers.py:25 orgs/models.py:91
 #: rbac/const.py:7 rbac/models/rolebinding.py:56
-#: rbac/serializers/rolebinding.py:44 settings/serializers/auth/ldap.py:63
+#: rbac/serializers/rolebinding.py:44 reports/tasks/report/asset.py:93
+#: reports/tasks/report/asset.py:133 reports/tasks/report/user.py:88
+#: reports/tasks/report/user.py:152 settings/serializers/auth/ldap.py:63
 #: terminal/templates/terminal/_msg_command_warning.html:21
 #: terminal/templates/terminal/_msg_session_sharing.html:14
 #: tickets/models/ticket/general.py:302 tickets/serializers/ticket/ticket.py:60
@@ -4218,7 +4278,7 @@ msgid "Scope"
 msgstr "范围"
 
 #: rbac/models/role.py:46 rbac/models/rolebinding.py:52
-#: users/models/user.py:797
+#: reports/tasks/report/user.py:124 users/models/user.py:794
 msgid "Role"
 msgstr "角色"
 
@@ -4256,7 +4316,8 @@ msgstr "系统角色绑定"
 msgid "Perms"
 msgstr "权限"
 
-#: rbac/serializers/role.py:27 users/serializers/group.py:30
+#: rbac/serializers/role.py:27 reports/tasks/report/user.py:124
+#: users/serializers/group.py:30
 msgid "Users amount"
 msgstr "用户数量"
 
@@ -4321,7 +4382,7 @@ msgid "My assets"
 msgstr "我的资产"
 
 #: rbac/tree.py:56 terminal/models/applet/applet.py:51
-#: terminal/models/applet/applet.py:280 terminal/models/applet/host.py:29
+#: terminal/models/applet/applet.py:285 terminal/models/applet/host.py:29
 #: terminal/serializers/applet.py:15
 msgid "Applet"
 msgstr "远程应用"
@@ -4342,6 +4403,213 @@ msgstr "一般设置"
 #: rbac/tree.py:126
 msgid "View permission tree"
 msgstr "查看授权树"
+
+#: reports/handler.py:51
+msgid "Report not activated"
+msgstr "报表未激活"
+
+#: reports/models.py:21
+msgid "PDF"
+msgstr "PDF"
+
+#: reports/models.py:29
+msgid "Report file type"
+msgstr "报表类型"
+
+#: reports/models.py:34
+msgid "Statistical cycle"
+msgstr "统计周期"
+
+#: reports/tasks/report/asset.py:23
+msgid "Asset basic data report"
+msgstr "资产基础数据报表"
+
+#: reports/tasks/report/asset.py:55
+#, python-format
+msgid ""
+"There are currently %s asset types, and the largest asset type is %s(%s), as "
+"shown below: "
+msgstr "当前共有 %s 种资产类型，资产最多的类型为 %s(%s 个)，如下所示："
+
+#: reports/tasks/report/asset.py:85
+#, python-format
+msgid ""
+"Currently, there are a total of %s primary nodes, with the highest number of "
+"assets under node %s, which is %s, as shown below:"
+msgstr "当前共有一级节点 %s 个，其中节点 %s 下资产数最多，为 %s 台，如下所示："
+
+#: reports/tasks/report/asset.py:93
+msgid "Node Path"
+msgstr "节点路径"
+
+#: reports/tasks/report/asset.py:125
+#, python-format
+msgid ""
+"The asset with the highest number of authorized users is %s, and the "
+"authorized users are %s, as shown below:"
+msgstr "被授权给用户数量最多的资产为 %s，授权用户为 %s 人，如下所示："
+
+#: reports/tasks/report/asset.py:133
+msgid "Authorized personnel"
+msgstr "授权人数"
+
+#: reports/tasks/report/asset.py:151
+msgid "Number of assets by type"
+msgstr "各类型资产数"
+
+#: reports/tasks/report/asset.py:155
+msgid "Number of assets on each node"
+msgstr "各节点资产数"
+
+#: reports/tasks/report/asset.py:159
+msgid "Authorized Users by Asset (Top 10)"
+msgstr "各资产授权用户 (Top 10)"
+
+#: reports/tasks/report/asset.py:166
+#, python-format
+msgid ""
+"Currently, there are %s assets, %s types, and %s accounts, including %s "
+"privileged accounts and %s regular accounts."
+msgstr "当前共有资产 %s 个，共 %s 种类型资产，账号共 %s 个，其中特权账号 %s 个，普通账号 %s 个。"
+
+#: reports/tasks/report/session.py:19
+msgid "Session Basic Data Report"
+msgstr "会话基础数据报表"
+
+#: reports/tasks/report/session.py:70
+#, python-format
+msgid ""
+"In the past %s days, a total of %s people have generated sessions, with user "
+"%s being the most frequently used and generating %s sessions, as shown below:"
+msgstr "近 %s 天，共有 %s 人产生会话，其中用户 %s 使用最频繁，产生会话 %s 个，如下所示："
+
+#: reports/tasks/report/session.py:78 reports/tasks/report/session.py:96
+#: reports/tasks/report/session.py:115 reports/tasks/report/session.py:134
+#: reports/tasks/report/session.py:157 terminal/models/component/status.py:19
+msgid "Connections"
+msgstr "连接数"
+
+#: reports/tasks/report/session.py:89
+#, python-format
+msgid ""
+"In the past %s days, a total of %s assets have been active, of which %s have "
+"been connected %s times, as shown below:"
+msgstr "近 %s 天内，共有 %s 个资产较为活跃，其中 %s 被连接 %s 次，如下所示："
+
+#: reports/tasks/report/session.py:108
+#, python-format
+msgid ""
+"There are %s types of connection asset agreements in the past %s days, as "
+"shown below:"
+msgstr "近 %s 天内，连接资产协议有 %s 种，如下所示："
+
+#: reports/tasks/report/session.py:127
+#, python-format
+msgid "There are %s ways to connect assets in the past %s days, as follows:"
+msgstr "近 %s 天内，连接资产方式有 %s 种，如下所示："
+
+#: reports/tasks/report/session.py:142
+#, python-format
+msgid "%s-%s hours"
+msgstr "%s-%s 小时"
+
+#: reports/tasks/report/session.py:148
+#, python-format
+msgid ""
+"In the past %s days, a total of %s sessions have been generated, with the "
+"longest being %s and the shortest being %s, as shown below:"
+msgstr "近 %s 天内，共产生会话 %s 个，其中最长 %s，最短为 %s，如下所示："
+
+#: reports/tasks/report/session.py:157
+msgid "Duration range"
+msgstr "时长范围"
+
+#: reports/tasks/report/session.py:164
+msgid "Number of sessions per user"
+msgstr "各用户会话数"
+
+#: reports/tasks/report/session.py:168
+msgid "Number of active assets"
+msgstr "活跃资产数"
+
+#: reports/tasks/report/session.py:172
+msgid "Number of sessions per protocol"
+msgstr "各协议会话数"
+
+#: reports/tasks/report/session.py:176
+msgid "Number of sessions per connection method"
+msgstr "各连接方式产生会话数"
+
+#: reports/tasks/report/session.py:180
+msgid "Session duration"
+msgstr "会话时长数"
+
+#: reports/tasks/report/session.py:186
+#, python-format
+msgid ""
+"In the past %s days, a total of %s sessions have been generated, with %s "
+"connected sessions. The maximum duration of a single session is %s, and the "
+"minimum duration is %s. Files have been uploaded %s times and downloaded %s "
+"times."
+msgstr "近 %s 天内，共产生会话 %s 个，连接会话人数 %s 人，单个会话时间最长 %s，最短 %s，上传文件 %s 次，下载文件 %s 次。"
+
+#: reports/tasks/report/user.py:27
+msgid "User Basic Data Report"
+msgstr "用户基础数据报表"
+
+#: reports/tasks/report/user.py:75
+#, python-format
+msgid "%s: %s"
+msgstr "%s: %s个"
+
+#: reports/tasks/report/user.py:79
+#, python-format
+msgid ""
+"There are currently %s user groups, with the highest number of users within "
+"the group being %s, as shown below:"
+msgstr "当前共有用户组 %s 个, 组内用户最多的为 %s，如下所示："
+
+#: reports/tasks/report/user.py:88 reports/tasks/report/user.py:161
+msgid "Number of users per user group"
+msgstr "各用户组用户数"
+
+#: reports/tasks/report/user.py:117
+#, python-format
+msgid ""
+"There are currently %s types of roles, with %s maximum of %s people, as "
+"follows:"
+msgstr "当前共有 %s 类角色，其中 %s 最多为 %s 人，如下所示："
+
+#: reports/tasks/report/user.py:124
+msgid "Role display"
+msgstr "角色名称"
+
+#: reports/tasks/report/user.py:144
+#, python-format
+msgid "In the past %s days, logged in %s times with %s people, as shown below:"
+msgstr "近 %s 天内，登录 %s 次, 登录人数 %s 人，如下所示："
+
+#: reports/tasks/report/user.py:152
+msgid "Number of logins"
+msgstr "登录次数"
+
+#: reports/tasks/report/user.py:165
+msgid "Number of users in each role"
+msgstr "各角色用户数"
+
+#: reports/tasks/report/user.py:186
+#, python-format
+msgid ""
+"There are currently %s user groups and %s users, including %s valid users "
+"and %s disabled users. User sources are %s, %s system administrators, %s "
+"organizational administrators, and %s other users. %s new users have been "
+"added in the past %s, and users have logged in %s times, successfully %s "
+"times, and failed %s times."
+msgstr "当前共有用户组 %s 个，用户 %s 个，其中有效用户 %s 个，禁用用户 %s 个，用户来源: %s, 系统管理员 %s 个，组织管理员 %s 个，其他用户 %s 个。近 %s 内新增用户 %s 个，用户产生登录行为 %s 次，成功 %s 次，失败 %s 次。"
+
+#: reports/tasks/tasks.py:12
+msgid "Execute report task"
+msgstr "执行报表任务"
 
 #: settings/api/dingtalk.py:31 settings/api/feishu.py:36
 #: settings/api/sms.py:153 settings/api/vault.py:40 settings/api/wecom.py:37
@@ -5955,7 +6223,7 @@ msgstr "只支持自定义平台"
 msgid "Missing type in platform.yml"
 msgstr "在 platform.yml 中缺少类型"
 
-#: terminal/models/applet/applet.py:282 terminal/models/applet/host.py:35
+#: terminal/models/applet/applet.py:287 terminal/models/applet/host.py:35
 #: terminal/models/applet/host.py:137
 msgid "Hosting"
 msgstr "宿主机"
@@ -6052,10 +6320,6 @@ msgstr "内存使用"
 msgid "Disk Used"
 msgstr "磁盘使用"
 
-#: terminal/models/component/status.py:19
-msgid "Connections"
-msgstr "连接数"
-
 #: terminal/models/component/status.py:20
 msgid "Threads"
 msgstr "线程数"
@@ -6114,7 +6378,7 @@ msgstr "可以下载会话录像"
 msgid "Account id"
 msgstr "账号 ID"
 
-#: terminal/models/session/session.py:36 terminal/models/session/sharing.py:114
+#: terminal/models/session/session.py:36 terminal/models/session/sharing.py:118
 msgid "Login from"
 msgstr "登录来源"
 
@@ -6150,61 +6414,61 @@ msgstr "可以终断会话"
 msgid "Can validate session action perm"
 msgstr "可以验证会话动作权限"
 
-#: terminal/models/session/sharing.py:31
+#: terminal/models/session/sharing.py:32
 msgid "Expired time (min)"
 msgstr "过期时间 (分)"
 
-#: terminal/models/session/sharing.py:35 terminal/serializers/sharing.py:20
+#: terminal/models/session/sharing.py:36 terminal/serializers/sharing.py:20
 #: terminal/serializers/sharing.py:52
 msgid "Action permission"
 msgstr "操作权限"
 
-#: terminal/models/session/sharing.py:37
+#: terminal/models/session/sharing.py:38
 msgid "Origin"
 msgstr "来源"
 
-#: terminal/models/session/sharing.py:41 terminal/models/session/sharing.py:96
+#: terminal/models/session/sharing.py:42 terminal/models/session/sharing.py:100
 #: terminal/notifications.py:261
 msgid "Session sharing"
 msgstr "会话分享"
 
-#: terminal/models/session/sharing.py:43
+#: terminal/models/session/sharing.py:44
 msgid "Can add super session sharing"
 msgstr "可以创建超级会话分享"
 
-#: terminal/models/session/sharing.py:79
+#: terminal/models/session/sharing.py:83
 msgid "Link not active"
 msgstr "链接失效"
 
-#: terminal/models/session/sharing.py:81
+#: terminal/models/session/sharing.py:85
 msgid "Link expired"
 msgstr "链接过期"
 
-#: terminal/models/session/sharing.py:83
+#: terminal/models/session/sharing.py:87
 msgid "User not allowed to join"
 msgstr "该用户无权加入会话"
 
-#: terminal/models/session/sharing.py:100 terminal/serializers/sharing.py:71
+#: terminal/models/session/sharing.py:104 terminal/serializers/sharing.py:71
 msgid "Joiner"
 msgstr "加入者"
 
-#: terminal/models/session/sharing.py:103
+#: terminal/models/session/sharing.py:107
 msgid "Date joined"
 msgstr "加入日期"
 
-#: terminal/models/session/sharing.py:106
+#: terminal/models/session/sharing.py:110
 msgid "Date left"
 msgstr "结束日期"
 
-#: terminal/models/session/sharing.py:129
+#: terminal/models/session/sharing.py:133
 msgid "Session join record"
 msgstr "会话加入记录"
 
-#: terminal/models/session/sharing.py:145
+#: terminal/models/session/sharing.py:149
 msgid "Invalid verification code"
 msgstr "验证码不正确"
 
-#: terminal/models/session/sharing.py:152
+#: terminal/models/session/sharing.py:156
 msgid "You have already joined this session"
 msgstr "您已经加入过此会话"
 
@@ -6992,78 +7256,78 @@ msgstr "不能和原来的密钥相同"
 msgid "Not a valid ssh public key"
 msgstr "SSH密钥不合法"
 
-#: users/forms/profile.py:173 users/models/user.py:820
+#: users/forms/profile.py:173 users/models/user.py:817
 #: xpack/plugins/cloud/serializers/account_attrs.py:203
 msgid "Public key"
 msgstr "SSH公钥"
 
-#: users/models/user.py:637 users/serializers/profile.py:118
+#: users/models/user.py:634 users/serializers/profile.py:118
 msgid "Force enable"
 msgstr "强制启用"
 
-#: users/models/user.py:799 users/serializers/user.py:171
+#: users/models/user.py:796 users/serializers/user.py:171
 msgid "Is service account"
 msgstr "服务账号"
 
-#: users/models/user.py:801
+#: users/models/user.py:798
 msgid "Avatar"
 msgstr "头像"
 
-#: users/models/user.py:804
+#: users/models/user.py:801
 msgid "Wechat"
 msgstr "微信"
 
-#: users/models/user.py:807 users/serializers/user.py:108
+#: users/models/user.py:804 users/serializers/user.py:108
 msgid "Phone"
 msgstr "手机"
 
-#: users/models/user.py:813
+#: users/models/user.py:810
 msgid "OTP secret key"
 msgstr "OTP 密钥"
 
-#: users/models/user.py:817
+#: users/models/user.py:814
 #: xpack/plugins/cloud/serializers/account_attrs.py:206
 msgid "Private key"
 msgstr "ssh私钥"
 
-#: users/models/user.py:823
+#: users/models/user.py:820
 msgid "Secret key"
 msgstr "Secret key"
 
-#: users/models/user.py:828 users/serializers/profile.py:149
+#: users/models/user.py:825 users/serializers/profile.py:149
 #: users/serializers/user.py:168
 msgid "Is first login"
 msgstr "首次登录"
 
-#: users/models/user.py:842
+#: users/models/user.py:839
 msgid "Date password last updated"
 msgstr "最后更新密码日期"
 
-#: users/models/user.py:845
+#: users/models/user.py:842
 msgid "Need update password"
 msgstr "需要更新密码"
 
-#: users/models/user.py:988
+#: users/models/user.py:985
 msgid "Can invite user"
 msgstr "可以邀请用户"
 
-#: users/models/user.py:989
+#: users/models/user.py:986
 msgid "Can remove user"
 msgstr "可以移除用户"
 
-#: users/models/user.py:990
+#: users/models/user.py:987
 msgid "Can match user"
 msgstr "可以匹配用户"
 
-#: users/models/user.py:999
+#: users/models/user.py:996
 msgid "Administrator"
 msgstr "管理员"
 
-#: users/models/user.py:1002
+#: users/models/user.py:999
 msgid "Administrator is the super user of system"
 msgstr "Administrator是初始的超级管理员"
 
-#: users/models/user.py:1027
+#: users/models/user.py:1024
 msgid "User password history"
 msgstr "用户密码历史"
 

@@ -36,7 +36,7 @@ class AccountBackupAutomation(PeriodTaskModelMixin, JMSOrgBaseModel):
     )
     receiving_asset_two = models.ManyToManyField(
         'assets.Asset', related_name='receiving_asset_two_plans', blank=True,
-        verbose_name=_('Receiving asset one')
+        verbose_name=_('Receiving asset two')
     )
 
     def __str__(self):
