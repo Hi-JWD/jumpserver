@@ -234,7 +234,7 @@ class PDFDocument(object):
         # 设置字体大小
         c.setFont(self.font_name, 30)
         # 绘制居中标题文本
-        c.drawCentredString(A4[0] / 2, A4[1] / 2, get_login_title())
+        c.drawCentredString(A4[0] / 2, A4[1] / 2, str(get_login_title()))
         # 绘制时间
         c.setFont(self.font_name, 15)
         c.drawCentredString(A4[0] / 2, A4[1] / 2 - 30, local_now_display())
@@ -247,7 +247,7 @@ class PDFDocument(object):
         c.rect(0, A4[1] - 8 * mm, A4[0], 8 * mm, stroke=0, fill=1)
         c.setFont(self.font_name, 10)
         c.setFillColor(colors.white)
-        c.drawCentredString(A4[0] / 2, A4[1] - 5 * mm, get_login_title())
+        c.drawCentredString(A4[0] / 2, A4[1] - 5 * mm, str(get_login_title()))
         # 设置页尾
         c.setFillColor(CLASSIC_GREEN)
         c.rect(0, 0, A4[0], 8 * mm, stroke=0, fill=1)

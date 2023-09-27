@@ -89,6 +89,8 @@ class ReportExecution(JMSBaseModel):
             self.status = TaskStatus.success
             self.result = {'filepath': filepath}
         except Exception as error:
+            import traceback
+            logger.error(f'Report generate failed: {traceback.format_exc()}')
             self.status = TaskStatus.failed
             self.result = {'message': str(error)}
         finally:

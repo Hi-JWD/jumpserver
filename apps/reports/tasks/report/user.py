@@ -104,7 +104,7 @@ class UserReport(BaseReport):
             else:
                 self.other_user_count += user_amount
             role_info.append((
-                role.display_name, role.get_scope_display(), user_amount,
+                role.display_name, user_amount, role.get_scope_display(),
                 _('Yes') if role.builtin else _('No')
             ))
             if user_amount > max_role['count']:
@@ -121,8 +121,7 @@ class UserReport(BaseReport):
             },
             {
                 'type': c.TABLE_BAR,
-                'data': [[_('Role display'), _('Role'), _('Users amount'), _('Is builtin')], *role_info],
-                'params': {'label_index': 0, 'rank_index': 3}
+                'data': [[_('Role display'), _('Users amount'), _('Role'), _('Is builtin')], *role_info],
             }
         ]
 
