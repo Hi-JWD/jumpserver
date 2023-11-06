@@ -1,16 +1,20 @@
 # -*- coding: utf-8 -*-
 #
+import uuid
+from datetime import timedelta
 
-from celery import shared_task
+from celery import shared_task, current_task
+from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, gettext_noop
 
+from audits.const import ActivityChoices
 from common.const.crontab import CRONTAB_AT_AM_TEN, CRONTAB_AT_PM_TWO
 from common.utils import get_logger
-from ops.celery.decorator import after_app_ready_start
-from ops.celery.utils import (
-    create_or_update_celery_periodic_tasks
-)
+from ops.celery.decorator import after_app_ready_start, register_as_period_task
+from ops.celery.utils import create_or_update_celery_periodic_tasks
+from orgs.utils import tmp_to_root_org
 from users.notifications import PasswordExpirationReminderMsg
 from users.notifications import UserExpirationReminderMsg
 from .models import User
@@ -75,3 +79,37 @@ def check_user_expired_periodic():
         }
     }
     create_or_update_celery_periodic_tasks(tasks)
+
+
+@shared_task(verbose_name=_('Check unused users'))
+@register_as_period_task(crontab=CRONTAB_AT_PM_TWO)
+@tmp_to_root_org()
+def check_unused_users():
+    uncommon_users_ttl = settings.SECURITY_UNCOMMON_USERS_TTL
+    seconds_to_subtract = uncommon_users_ttl * 24 * 60 * 60
+    t = timezone.now() - timedelta(seconds=seconds_to_subtract)
+    last_login_q = Q(last_login__lte=t) | Q(last_login__isnull=True)
+    api_key_q = Q(date_api_key_last_used__lte=t) | Q(date_api_key_last_used__isnull=True)
+
+    users = User.objects \
+        .filter(date_joined__lt=t) \
+        .filter(is_active=True) \
+        .filter(last_login_q) \
+        .filter(api_key_q)
+
+    if not users:
+        return
+    print("Some users are not used for a long time, and they will be disabled.")
+    resource_ids = []
+    for user in users:
+        resource_ids.append(user.id)
+        print('  - {}'.format(user.name))
+
+    users.update(is_active=False)
+    from audits.signal_handlers import create_activities
+    if current_task:
+        task_id = current_task.request.id
+    else:
+        task_id = str(uuid.uuid4())
+    detail = gettext_noop('The user has not logged in recently and has been disabled.')
+    create_activities(resource_ids, detail, task_id, action=ActivityChoices.task, org_id='')

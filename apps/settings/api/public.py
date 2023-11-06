@@ -2,15 +2,15 @@ from django.conf import settings
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
 
-from common.permissions import IsValidUserOrConnectionToken
+from authentication.permissions import IsValidUserOrConnectionToken
 from common.utils import get_logger, lazyproperty
-from jumpserver.utils import has_valid_xpack_license, get_xpack_license_info
+from common.utils.timezone import local_now
 from .. import serializers
 from ..utils import get_interface_setting_or_default
 
 logger = get_logger(__name__)
 
-__all__ = ['PublicSettingApi', 'OpenPublicSettingApi']
+__all__ = ['PublicSettingApi', 'OpenPublicSettingApi', 'ServerInfoApi']
 
 
 class OpenPublicSettingApi(generics.RetrieveAPIView):
@@ -35,8 +35,8 @@ class PublicSettingApi(OpenPublicSettingApi):
     def get_object(self):
         values = super().get_object()
         values.update({
-            "XPACK_LICENSE_IS_VALID": has_valid_xpack_license(),
-            "XPACK_LICENSE_INFO": get_xpack_license_info(),
+            "XPACK_LICENSE_IS_VALID": settings.XPACK_LICENSE_IS_VALID,
+            "XPACK_LICENSE_INFO": settings.XPACK_LICENSE_INFO,
             "PASSWORD_RULE": {
                 'SECURITY_PASSWORD_MIN_LENGTH': settings.SECURITY_PASSWORD_MIN_LENGTH,
                 'SECURITY_ADMIN_USER_PASSWORD_MIN_LENGTH': settings.SECURITY_ADMIN_USER_PASSWORD_MIN_LENGTH,
@@ -55,3 +55,13 @@ class PublicSettingApi(OpenPublicSettingApi):
             # 提前把异常爆出来
             values[name] = getattr(settings, name)
         return values
+
+
+class ServerInfoApi(generics.RetrieveAPIView):
+    permission_classes = (IsValidUserOrConnectionToken,)
+    serializer_class = serializers.ServerInfoSerializer
+
+    def get_object(self):
+        return {
+            "CURRENT_TIME": local_now(),
+        }

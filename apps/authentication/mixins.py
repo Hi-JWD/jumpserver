@@ -15,11 +15,11 @@ from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import reverse, redirect, get_object_or_404
 from django.utils.http import urlencode
-from django.utils.translation import ugettext as _
+from django.utils.translation import gettext as _
 from rest_framework.request import Request
 
 from acls.models import LoginACL
-from common.utils import get_request_ip, get_logger, bulk_get, FlashMessageUtil
+from common.utils import get_request_ip_or_data, get_request_ip, get_logger, bulk_get, FlashMessageUtil
 from users.models import User
 from users.utils import LoginBlockUtil, MFABlockUtils, LoginIpBlockUtil
 from . import errors
@@ -76,6 +76,12 @@ def authenticate(request=None, **credentials):
         if user is None:
             continue
 
+        if not user.is_valid:
+            temp_user = user
+            temp_user.backend = backend_path
+            request.error_message = _('User is invalid')
+            return temp_user
+
         # 检查用户是否允许认证
         if not backend.user_allow_authenticate(user):
             temp_user = user
@@ -101,13 +107,12 @@ auth.authenticate = authenticate
 
 class CommonMixin:
     request: Request
+    _ip = ''
 
     def get_request_ip(self):
-        ip = ''
-        if hasattr(self.request, 'data'):
-            ip = self.request.data.get('remote_addr', '')
-        ip = ip or get_request_ip(self.request)
-        return ip
+        if not self._ip:
+            self._ip = get_request_ip_or_data(self.request)
+        return self._ip
 
     def raise_credential_error(self, error):
         raise self.partial_credential_error(error=error)
@@ -132,11 +137,11 @@ class CommonMixin:
             return user
 
         user_id = self.request.session.get('user_id')
-        auth_password = self.request.session.get('auth_password')
+        auth_ok = self.request.session.get('auth_password')
         auth_expired_at = self.request.session.get('auth_password_expired_at')
         auth_expired = auth_expired_at < time.time() if auth_expired_at else False
 
-        if not user_id or not auth_password or auth_expired:
+        if not user_id or not auth_ok or auth_expired:
             raise errors.SessionEmptyError()
 
         user = get_object_or_404(User, pk=user_id)
@@ -355,6 +360,11 @@ class AuthACLMixin:
             self.request.session['auth_acl_id'] = str(acl.id)
             return
 
+        if acl.is_action(acl.ActionChoices.notice):
+            self.request.session['auth_notice_required'] = '1'
+            self.request.session['auth_acl_id'] = str(acl.id)
+            return
+
     def _check_third_party_login_acl(self):
         request = self.request
         error_message = getattr(request, 'error_message', None)
@@ -460,6 +470,7 @@ class AuthMixin(CommonMixin, AuthPreCheckMixin, AuthACLMixin, MFAMixin, AuthPost
         self._check_password_require_reset_or_not(user)
         self._check_passwd_is_too_simple(user, password)
         self._check_passwd_need_update(user)
+        user.cache_login_password_if_need(password)
 
         # 校验login-mfa, 如果登录页面上显示 mfa 的话
         self._check_login_page_mfa_if_need(user)
@@ -478,6 +489,7 @@ class AuthMixin(CommonMixin, AuthPreCheckMixin, AuthACLMixin, MFAMixin, AuthPost
         request.session['auto_login'] = auto_login
         if not auth_backend:
             auth_backend = getattr(user, 'backend', settings.AUTH_BACKEND_MODEL)
+
         request.session['auth_backend'] = auth_backend
 
     def check_oauth2_auth(self, user: User, auth_backend):
@@ -510,7 +522,9 @@ class AuthMixin(CommonMixin, AuthPreCheckMixin, AuthACLMixin, MFAMixin, AuthPost
 
     def clear_auth_mark(self):
         keys = [
-            'auth_password', 'user_id', 'auth_confirm_required', 'auth_ticket_id', 'auth_acl_id'
+            'auth_password', 'user_id', 'auth_confirm_required',
+            'auth_notice_required', 'auth_ticket_id', 'auth_acl_id',
+            'user_session_id', 'user_log_id', 'can_send_notifications'
         ]
         for k in keys:
             self.request.session.pop(k, '')

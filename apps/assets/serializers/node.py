@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
+from django.utils.translation import gettext as _
 from rest_framework import serializers
-from django.utils.translation import ugettext as _
 
 from orgs.mixins.serializers import BulkOrgResourceModelSerializer
 from ..models import Asset, Node
@@ -30,8 +30,9 @@ class NodeSerializer(BulkOrgResourceModelSerializer):
         if '/' in data:
             error = _("Can't contains: " + "/")
             raise serializers.ValidationError(error)
-        if self.instance:
-            instance = self.instance
+        view = self.context['view']
+        instance = self.instance or getattr(view, 'instance', None)
+        if instance:
             siblings = instance.get_siblings()
         else:
             instance = Node.org_root()

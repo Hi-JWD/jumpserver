@@ -1,15 +1,16 @@
-from rest_framework.views import APIView
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from users.models import User
-from common.utils import get_logger
-from common.permissions import UserConfirmation
-from common.api import RoleUserMixin, RoleAdminMixin
-from authentication.const import ConfirmType
 from authentication import errors
+from authentication.const import ConfirmType
+from authentication.permissions import UserConfirmation
+from common.api import RoleUserMixin, RoleAdminMixin
+from common.permissions import IsValidUser
+from common.utils import get_logger
+from users.models import User
 
-logger = get_logger(__file__)
+logger = get_logger(__name__)
 
 
 class FeiShuQRUnBindBase(APIView):
@@ -27,7 +28,7 @@ class FeiShuQRUnBindBase(APIView):
 
 
 class FeiShuQRUnBindForUserApi(RoleUserMixin, FeiShuQRUnBindBase):
-    permission_classes = (UserConfirmation.require(ConfirmType.ReLogin),)
+    permission_classes = (IsValidUser, UserConfirmation.require(ConfirmType.RELOGIN),)
 
 
 class FeiShuQRUnBindForAdminApi(RoleAdminMixin, FeiShuQRUnBindBase):
@@ -38,7 +39,7 @@ class FeiShuEventSubscriptionCallback(APIView):
     """
     # https://open.feishu.cn/document/ukTMukTMukTM/uUTNz4SN1MjL1UzM
     """
-    permission_classes = ()
+    permission_classes = (IsValidUser,)
 
     def post(self, request: Request, *args, **kwargs):
         return Response(data=request.data)

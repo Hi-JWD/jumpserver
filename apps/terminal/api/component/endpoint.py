@@ -1,13 +1,13 @@
 from django.shortcuts import get_object_or_404
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from assets.models import Asset
+from authentication.permissions import IsValidUserOrConnectionToken
 from common.api import JMSBulkModelViewSet
-from common.permissions import IsValidUserOrConnectionToken
 from orgs.utils import tmp_to_root_org
 from terminal import serializers
 from terminal.models import Session, Endpoint, EndpointRule

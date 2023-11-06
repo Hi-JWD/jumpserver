@@ -11,6 +11,7 @@ __all__ = ['Protocol']
 
 class Protocol(ChoicesMixin, models.TextChoices):
     ssh = 'ssh', 'SSH'
+    sftp = 'sftp', 'SFTP'
     rdp = 'rdp', 'RDP'
     telnet = 'telnet', 'Telnet'
     vnc = 'vnc', 'VNC'
@@ -21,6 +22,7 @@ class Protocol(ChoicesMixin, models.TextChoices):
     oracle = 'oracle', 'Oracle'
     postgresql = 'postgresql', 'PostgreSQL'
     sqlserver = 'sqlserver', 'SQLServer'
+    db2 = 'db2', 'DB2'
     clickhouse = 'clickhouse', 'ClickHouse'
     redis = 'redis', 'Redis'
     mongodb = 'mongodb', 'MongoDB'
@@ -36,17 +38,22 @@ class Protocol(ChoicesMixin, models.TextChoices):
             cls.ssh: {
                 'port': 22,
                 'secret_types': ['password', 'ssh_key'],
+            },
+            cls.sftp: {
+                'port': 22,
+                'secret_types': ['password', 'ssh_key'],
                 'setting': {
-                    'sftp_enabled': {
-                        'type': 'bool',
-                        'default': True,
-                        'label': _('SFTP enabled')
-                    },
                     'sftp_home': {
                         'type': 'str',
                         'default': '/tmp',
-                        'label': _('SFTP home')
-                    },
+                        'label': _('SFTP root'),
+                        'help_text': _(
+                            'SFTP root directory, Support variable: <br>'
+                            '- ${ACCOUNT} The connected account username <br>'
+                            '- ${HOME} The home directory of the connected account <br>'
+                            '- ${USER} The username of the user'
+                        )
+                    }
                 }
             },
             cls.rdp: {
@@ -81,6 +88,26 @@ class Protocol(ChoicesMixin, models.TextChoices):
             cls.telnet: {
                 'port': 23,
                 'secret_types': ['password'],
+                'setting': {
+                    'username_prompt': {
+                        'type': 'str',
+                        'default': 'username:|login:',
+                        'label': _('Username prompt'),
+                        'help_text': _('We will send username when we see this prompt')
+                    },
+                    'password_prompt': {
+                        'type': 'str',
+                        'default': 'password:',
+                        'label': _('Password prompt'),
+                        'help_text': _('We will send password when we see this prompt')
+                    },
+                    'success_prompt': {
+                        'type': 'str',
+                        'default': 'success|成功|#|>|\$',
+                        'label': _('Success prompt'),
+                        'help_text': _('We will consider login success when we see this prompt')
+                    }
+                }
             },
             cls.winrm: {
                 'port': 5985,
@@ -119,10 +146,33 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 'port': 1521,
                 'required': True,
                 'secret_types': ['password'],
-                'xpack': True
+                'xpack': True,
+                'setting': {
+                    'sysdba': {
+                        'type': 'bool',
+                        'default': False,
+                        'label': _('SYSDBA'),
+                        'help_text': _('Connect as SYSDBA')
+                    },
+                }
             },
             cls.sqlserver: {
                 'port': 1433,
+                'required': True,
+                'secret_types': ['password'],
+                'xpack': True,
+                'setting': {
+                    'version': {
+                        'type': 'choice',
+                        'choices': [('>=2014', '>= 2014'), ('<2014', '< 2014')],
+                        'default': '>=2014',
+                        'label': _('Version'),
+                        'help_text': _('SQL Server version, Different versions have different connection drivers')
+                    }
+                }
+            },
+            cls.db2: {
+                'port': 5000,
                 'required': True,
                 'secret_types': ['password'],
                 'xpack': True,
@@ -166,6 +216,15 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 'port_from_addr': True,
                 'secret_types': ['password'],
                 'setting': {
+                    'safe_mode': {
+                        'type': 'bool',
+                        'default': False,
+                        'label': _('Safe mode'),
+                        'help_text': _(
+                            'When safe mode is enabled, some operations will be disabled, such as: '
+                            'New tab, right click, visit other website, etc.'
+                        )
+                    },
                     'autofill': {
                         'label': _('Autofill'),
                         'type': 'choice',
@@ -217,7 +276,7 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 }
             }
         }
-        if settings.XPACK_ENABLED:
+        if settings.XPACK_LICENSE_IS_VALID:
             choices = protocols[cls.chatgpt]['setting']['api_mode']['choices']
             choices.extend([
                 ('gpt-4', 'GPT-4'),

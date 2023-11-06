@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.utils.module_loading import import_string
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from common.utils import get_logger
 from .base import BaseMFA
@@ -10,7 +10,7 @@ logger = get_logger(__file__)
 mfa_custom_method = None
 
 if settings.MFA_CUSTOM:
-    """ 保证自定义认证方法在服务运行时不能被更改，只在第一次调用时加载一次 """
+    """ 保证自定义的方法在服务运行时不能被更改，只在第一次调用时加载一次 """
     try:
         mfa_custom_method_path = 'data.mfa.main.check_code'
         mfa_custom_method = import_string(mfa_custom_method_path)

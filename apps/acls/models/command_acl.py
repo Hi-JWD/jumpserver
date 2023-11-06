@@ -3,7 +3,7 @@
 import re
 
 from django.db import models
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from common.utils import lazyproperty, get_logger
 from orgs.mixins.models import JMSOrgBaseModel
@@ -93,7 +93,10 @@ class CommandGroup(JMSOrgBaseModel):
 
 
 class CommandFilterACL(UserAssetAccountBaseACL):
-    command_groups = models.ManyToManyField(CommandGroup, verbose_name=_('Command group'))
+    command_groups = models.ManyToManyField(
+        CommandGroup, verbose_name=_('Command group'),
+        related_name='command_filters'
+    )
 
     class Meta(UserAssetAccountBaseACL.Meta):
         abstract = False

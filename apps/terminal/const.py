@@ -2,7 +2,7 @@
 #
 
 from django.db.models import TextChoices, IntegerChoices
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 
 class RiskLevelChoices(IntegerChoices):
@@ -86,5 +86,18 @@ class SessionType(TextChoices):
 
 
 class ActionPermission(TextChoices):
-    readonly = "readonly", _('Read Only')
+    readonly = "readonly", _('Read only')
     writable = "writable", _('Writable')
+
+
+class TaskNameType(TextChoices):
+    kill_session = "kill_session", _('Kill session')
+    lock_session = "lock_session", _('Lock session')
+    unlock_session = "unlock_session", _('Unlock session')
+
+
+class SessionErrorReason(TextChoices):
+    connect_failed = 'connect_failed', _('Connect failed')
+    replay_create_failed = 'replay_create_failed', _('Replay create failed')
+    replay_upload_failed = 'replay_upload_failed', _('Replay upload failed')
+    replay_convert_failed = 'replay_convert_failed', _('Replay convert failed')

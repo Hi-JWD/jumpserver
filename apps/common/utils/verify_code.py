@@ -67,7 +67,7 @@ class SendAndVerifyCodeUtil(object):
         return cache.get(self.key)
 
     def __generate(self):
-        code = random_string(4, lower=False, upper=False)
+        code = random_string(settings.SMS_CODE_LENGTH, lower=False, upper=False)
         self.code = code
         return code
 
@@ -90,4 +90,4 @@ class SendAndVerifyCodeUtil(object):
             self.__send_with_email()
 
         cache.set(self.key, self.code, self.timeout)
-        logger.info(f'Send verify code to {self.target}: {code}')
+        logger.debug(f'Send verify code to {self.target}')

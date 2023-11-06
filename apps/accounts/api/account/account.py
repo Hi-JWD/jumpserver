@@ -6,11 +6,12 @@ from rest_framework.status import HTTP_200_OK
 
 from accounts import serializers
 from accounts.filters import AccountFilterSet
+from accounts.mixins import AccountRecordViewLogMixin
 from accounts.models import Account
 from assets.models import Asset, Node
-from common.api import ExtraFilterFieldsMixin
-from common.permissions import UserConfirmation, ConfirmType, IsValidUser
-from common.views.mixins import RecordViewLogMixin
+from authentication.permissions import UserConfirmation, ConfirmType
+from common.api.mixin import ExtraFilterFieldsMixin
+from common.permissions import IsValidUser
 from orgs.mixins.api import OrgBulkModelViewSet
 from rbac.permissions import RBACPermission
 
@@ -22,10 +23,11 @@ __all__ = [
 
 class AccountViewSet(OrgBulkModelViewSet):
     model = Account
-    search_fields = ('username', 'name', 'asset__name', 'asset__address')
+    search_fields = ('username', 'name', 'asset__name', 'asset__address', 'comment')
     filterset_class = AccountFilterSet
     serializer_classes = {
         'default': serializers.AccountSerializer,
+        'retrieve': serializers.AccountDetailSerializer,
     }
     rbac_perms = {
         'partial_update': ['accounts.change_account'],
@@ -52,22 +54,23 @@ class AccountViewSet(OrgBulkModelViewSet):
         return Response(data=serializer.data)
 
     @action(
-        methods=['get'], detail=False, url_path='username-suggestions',
+        methods=['post'], detail=False, url_path='username-suggestions',
         permission_classes=[IsValidUser]
     )
     def username_suggestions(self, request, *args, **kwargs):
-        asset_ids = request.query_params.get('assets')
-        node_keys = request.query_params.get('keys')
-        username = request.query_params.get('username')
+        asset_ids = request.data.get('assets', [])
+        node_ids = request.data.get('nodes', [])
+        username = request.data.get('username', '')
 
-        assets = Asset.objects.all()
+        accounts = Account.objects.all()
+        if node_ids:
+            nodes = Node.objects.filter(id__in=node_ids)
+            node_asset_ids = Node.get_nodes_all_assets(*nodes).values_list('id', flat=True)
+            asset_ids.extend(node_asset_ids)
+
         if asset_ids:
-            assets = assets.filter(id__in=asset_ids.split(','))
-        if node_keys:
-            patten = Node.get_node_all_children_key_pattern(node_keys.split(','))
-            assets = assets.filter(nodes__key__regex=patten)
+            accounts = accounts.filter(asset_id__in=list(set(asset_ids)))
 
-        accounts = Account.objects.filter(asset__in=assets)
         if username:
             accounts = accounts.filter(username__icontains=username)
         usernames = list(accounts.values_list('username', flat=True).distinct()[:10])
@@ -84,7 +87,7 @@ class AccountViewSet(OrgBulkModelViewSet):
         return Response(status=HTTP_200_OK)
 
 
-class AccountSecretsViewSet(RecordViewLogMixin, AccountViewSet):
+class AccountSecretsViewSet(AccountRecordViewLogMixin, AccountViewSet):
     """
     因为可能要导出所有账号，所以单独建立了一个 viewset
     """
@@ -113,7 +116,7 @@ class AssetAccountBulkCreateApi(CreateAPIView):
         return Response(data=serializer.data, status=HTTP_200_OK)
 
 
-class AccountHistoriesSecretAPI(ExtraFilterFieldsMixin, RecordViewLogMixin, ListAPIView):
+class AccountHistoriesSecretAPI(ExtraFilterFieldsMixin, AccountRecordViewLogMixin, ListAPIView):
     model = Account.history.model
     serializer_class = serializers.AccountHistorySerializer
     http_method_names = ['get', 'options']
@@ -132,11 +135,12 @@ class AccountHistoriesSecretAPI(ExtraFilterFieldsMixin, RecordViewLogMixin, List
     def get_queryset(self):
         account = self.get_object()
         histories = account.history.all()
-        last_history = account.history.first()
-        if not last_history:
+        latest_history = account.history.first()
+        if not latest_history:
             return histories
-
-        if account.secret == last_history.secret \
-                and account.secret_type == last_history.secret_type:
-            histories = histories.exclude(history_id=last_history.history_id)
+        if account.secret != latest_history.secret:
+            return histories
+        if account.secret_type != latest_history.secret_type:
+            return histories
+        histories = histories.exclude(history_id=latest_history.history_id)
         return histories

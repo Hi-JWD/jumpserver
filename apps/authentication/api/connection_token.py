@@ -7,7 +7,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from rest_framework import status, serializers
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -15,15 +15,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from accounts.const import AliasAccount
+from acls.notifications import AssetLoginReminderMsg
 from common.api import JMSModelViewSet
 from common.exceptions import JMSException
-from common.utils import random_string, get_logger, get_request_ip
+from common.utils import random_string, get_logger, get_request_ip_or_data
 from common.utils.django import get_request_os
 from common.utils.http import is_true, is_false
 from orgs.mixins.api import RootOrgViewMixin
+from orgs.utils import tmp_to_org
 from perms.models import ActionChoices
 from terminal.connect_methods import NativeClient, ConnectMethodUtil
 from terminal.models import EndpointRule, Endpoint
+from users.const import FileNameConflictResolution
+from users.models import Preference
 from ..models import ConnectionToken, date_expired_default
 from ..serializers import (
     ConnectionTokenSerializer, ConnectionTokenSecretSerializer,
@@ -64,6 +68,15 @@ class RDPFileClientProtocolURLMixin:
             'use redirection server name:i': '0',
             'smart sizing:i': '1',
         }
+        # 设置多屏显示
+        multi_mon = is_true(self.request.query_params.get('multi_mon'))
+        if multi_mon:
+            rdp_options['use multimon:i'] = '1'
+
+        # 设置多屏显示
+        multi_mon = is_true(self.request.query_params.get('multi_mon'))
+        if multi_mon:
+            rdp_options['use multimon:i'] = '1'
 
         # 设置磁盘挂载
         drives_redirect = is_true(self.request.query_params.get('drives_redirect'))
@@ -117,12 +130,16 @@ class RDPFileClientProtocolURLMixin:
         return filename, content
 
     @staticmethod
-    def get_connect_filename(prefix_name):
-        prefix_name = prefix_name.replace('/', '_')
-        prefix_name = prefix_name.replace('\\', '_')
-        prefix_name = prefix_name.replace('.', '_')
+    def escape_name(name):
+        name = name.replace('/', '_')
+        name = name.replace('\\', '_')
+        name = name.replace('.', '_')
+        name = urllib.parse.quote(name)
+        return name
+
+    def get_connect_filename(self, prefix_name):
         filename = f'{prefix_name}-jumpserver'
-        filename = urllib.parse.quote(filename)
+        filename = self.escape_name(filename)
         return filename
 
     @staticmethod
@@ -136,15 +153,25 @@ class RDPFileClientProtocolURLMixin:
         connect_method_dict = ConnectMethodUtil.get_connect_method(
             token.connect_method, token.protocol, _os
         )
+        asset = token.asset
         if connect_method_dict is None:
             raise ValueError('Connect method not support: {}'.format(connect_method_name))
 
+        account = token.account or token.input_username
+        datetime = timezone.localtime(timezone.now()).strftime('%Y-%m-%d_%H:%M:%S')
+        name = account + '@' + str(asset) + '[' + datetime + ']'
         data = {
-            'id': str(token.id),
-            'value': token.value,
+            'version': 2,
+            'id': str(token.id),  # 兼容老的，未来几个版本删掉
+            'value': token.value,  # 兼容老的，未来几个版本删掉
+            'name': self.escape_name(name),
             'protocol': token.protocol,
-            'command': '',
-            'file': {}
+            'token': {
+                'id': str(token.id),
+                'value': token.value,
+            },
+            'file': {},
+            'command': ''
         }
 
         if connect_method_name == NativeClient.mstsc or connect_method_dict['type'] == 'applet':
@@ -159,10 +186,24 @@ class RDPFileClientProtocolURLMixin:
         else:
             endpoint = self.get_smart_endpoint(
                 protocol=connect_method_dict['endpoint_protocol'],
-                asset=token.asset
+                asset=asset
             )
-            cmd = NativeClient.get_launch_command(connect_method_name, token, endpoint)
-            data.update({'command': cmd})
+            data.update({
+                'asset': {
+                    'id': str(asset.id),
+                    'category': asset.category,
+                    'type': asset.type,
+                    'name': asset.name,
+                    'address': asset.address,
+                    'info': {
+                        **asset.spec_info,
+                    }
+                },
+                'endpoint': {
+                    'host': endpoint.host,
+                    'port': endpoint.get_port(token.asset, token.protocol),
+                }
+            })
         return data
 
     def get_smart_endpoint(self, protocol, asset=None):
@@ -259,6 +300,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         'get_rdp_file': 'authentication.add_connectiontoken',
         'get_client_protocol_url': 'authentication.add_connectiontoken',
     }
+    input_username = ''
 
     def get_queryset(self):
         queryset = ConnectionToken.objects \
@@ -273,11 +315,43 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         self.validate_serializer(serializer)
         return super().perform_create(serializer)
 
+    def _insert_connect_options(self, data, user):
+        connect_options = data.pop('connect_options', {})
+        default_name_opts = {
+            'file_name_conflict_resolution': FileNameConflictResolution.REPLACE,
+            'terminal_theme_name': 'Default',
+        }
+        preferences_query = Preference.objects.filter(
+            user=user, category='koko', name__in=default_name_opts.keys()
+        ).values_list('name', 'value')
+        preferences = dict(preferences_query)
+        for name in default_name_opts.keys():
+            value = preferences.get(name, default_name_opts[name])
+            connect_options[name] = value
+        data['connect_options'] = connect_options
+
+    @staticmethod
+    def get_input_username(data):
+        input_username = data.get('input_username', '')
+        if input_username:
+            return input_username
+
+        account = data.get('account', '')
+        if account == '@USER':
+            input_username = str(data.get('user', ''))
+        elif account == '@INPUT':
+            input_username = '@INPUT'
+        else:
+            input_username = account
+        return input_username
+
     def validate_serializer(self, serializer):
         data = serializer.validated_data
         user = self.get_user(serializer)
+        self._insert_connect_options(data, user)
         asset = data.get('asset')
         account_name = data.get('account')
+        self.input_username = self.get_input_username(data)
         _data = self._validate(user, asset, account_name)
         data.update(_data)
         return serializer
@@ -324,28 +398,62 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
             raise JMSException(code='perm_expired', detail=msg)
         return account
 
+    def _record_operate_log(self, acl, asset):
+        from audits.handler import create_or_update_operate_log
+        with tmp_to_org(asset.org_id):
+            after = {
+                str(_('Assets')): str(asset),
+                str(_('Account')): self.input_username
+            }
+            object_name = acl._meta.object_name
+            resource_type = acl._meta.verbose_name
+            create_or_update_operate_log(
+                acl.action, resource_type, resource=acl,
+                after=after, object_name=object_name
+            )
+
     def _validate_acl(self, user, asset, account):
         from acls.models import LoginAssetACL
-        acls = LoginAssetACL.filter_queryset(user, asset, account)
-        ip = get_request_ip(self.request)
+        acls = LoginAssetACL.filter_queryset(user=user, asset=asset, account=account)
+        ip = get_request_ip_or_data(self.request)
         acl = LoginAssetACL.get_match_rule_acls(user, ip, acls)
         if not acl:
             return
         if acl.is_action(acl.ActionChoices.accept):
+            self._record_operate_log(acl, asset)
             return
         if acl.is_action(acl.ActionChoices.reject):
+            self._record_operate_log(acl, asset)
             msg = _('ACL action is reject: {}({})'.format(acl.name, acl.id))
             raise JMSException(code='acl_reject', detail=msg)
         if acl.is_action(acl.ActionChoices.review):
             if not self.request.query_params.get('create_ticket'):
                 msg = _('ACL action is review')
                 raise JMSException(code='acl_review', detail=msg)
-
+            self._record_operate_log(acl, asset)
             ticket = LoginAssetACL.create_login_asset_review_ticket(
-                user=user, asset=asset, account_username=account.username,
+                user=user, asset=asset, account_username=self.input_username,
                 assignees=acl.reviewers.all(), org_id=asset.org_id
             )
             return ticket
+        if acl.is_action(acl.ActionChoices.notice):
+            reviewers = acl.reviewers.all()
+            if not reviewers:
+                return
+
+            self._record_operate_log(acl, asset)
+            for reviewer in reviewers:
+                AssetLoginReminderMsg(
+                    reviewer, asset, user, self.input_username
+                ).publish_async()
+
+    def create(self, request, *args, **kwargs):
+        try:
+            response = super().create(request, *args, **kwargs)
+        except JMSException as e:
+            data = {'code': e.detail.code, 'detail': e.detail}
+            return Response(data, status=e.status_code)
+        return response
 
 
 class SuperConnectionTokenViewSet(ConnectionTokenViewSet):

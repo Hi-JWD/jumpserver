@@ -1,9 +1,9 @@
 import os
 
-from django.utils.translation import ugettext_lazy as _
-from django.core.mail import send_mail, EmailMultiAlternatives
-from django.conf import settings
 from celery import shared_task
+from django.conf import settings
+from django.core.mail import send_mail, EmailMultiAlternatives
+from django.utils.translation import gettext_lazy as _
 
 from .utils import get_logger
 
@@ -36,8 +36,8 @@ def send_mail_async(*args, **kwargs):
         args[0] = (settings.EMAIL_SUBJECT_PREFIX or '') + args[0]
         from_email = settings.EMAIL_FROM or settings.EMAIL_HOST_USER
         args.insert(2, from_email)
-        args = tuple(args)
 
+    args = tuple(args)
     try:
         return send_mail(*args, **kwargs)
     except Exception as e:

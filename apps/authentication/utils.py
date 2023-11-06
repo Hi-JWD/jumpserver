@@ -4,12 +4,12 @@ import ipaddress
 from urllib.parse import urljoin, urlparse
 
 from django.conf import settings
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
-from common.utils import validate_ip, get_ip_city, get_request_ip
-from common.utils import get_logger
-from audits.models import UserLoginLog
 from audits.const import DEFAULT_CITY
+from audits.models import UserLoginLog
+from common.utils import get_logger
+from common.utils import validate_ip, get_ip_city, get_request_ip
 from .notifications import DifferentCityLoginMessage
 
 logger = get_logger(__file__)
@@ -20,19 +20,22 @@ def check_different_city_login_if_need(user, request):
         return
 
     ip = get_request_ip(request) or '0.0.0.0'
-    if not (ip and validate_ip(ip)):
-        city = DEFAULT_CITY
-    else:
-        city = get_ip_city(ip) or DEFAULT_CITY
-
     city_white = [_('LAN'), 'LAN']
     is_private = ipaddress.ip_address(ip).is_private
-    if not is_private:
-        last_user_login = UserLoginLog.objects.exclude(city__in=city_white) \
-            .filter(username=user.username, status=True).first()
+    if is_private:
+        return
+    last_user_login = UserLoginLog.objects.exclude(
+        city__in=city_white
+    ).filter(username=user.username, status=True).first()
+    if not last_user_login:
+        return
 
-        if last_user_login and last_user_login.city != city:
-            DifferentCityLoginMessage(user, ip, city).publish_async()
+    city = get_ip_city(ip)
+    last_city = get_ip_city(last_user_login.ip)
+    if city == last_city:
+        return
+
+    DifferentCityLoginMessage(user, ip, city).publish_async()
 
 
 def build_absolute_uri(request, path=None):

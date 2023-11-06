@@ -62,6 +62,7 @@ def check_asset_permission_expired():
     def set_attr(obj, attr, value):
         obj[attr] = value
         return obj
+
     logger.info(f'Check unconnected assets.')
     assets = list(Asset.objects.values('org_id', 'id', 'address', 'name'))
     assets.sort(key=lambda x: x['org_id'])

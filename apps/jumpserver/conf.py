@@ -21,7 +21,7 @@ from urllib.parse import urljoin, urlparse
 
 import yaml
 from django.urls import reverse_lazy
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from gmssl.sm4 import CryptSM4, SM4_ENCRYPT, SM4_DECRYPT
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -220,6 +220,9 @@ class Config(dict):
         'ANNOUNCEMENT_ENABLED': True,
         'ANNOUNCEMENT': {},
 
+        # Security
+        'X_FRAME_OPTIONS': 'DENY',
+
         # 未使用的配置
         'CAPTCHA_TEST_MODE': None,
         'DISPLAY_PER_PAGE': 25,
@@ -234,7 +237,7 @@ class Config(dict):
         'LOGIN_URL': reverse_lazy('authentication:login'),
 
         'CONNECTION_TOKEN_ONETIME_EXPIRATION': 5 * 60,  # 默认(new)
-        'CONNECTION_TOKEN_EXPIRATION':  5 * 60,  # 默认(old)
+        'CONNECTION_TOKEN_EXPIRATION': 5 * 60,  # 默认(old)
 
         'CONNECTION_TOKEN_REUSABLE_EXPIRATION': 60 * 60 * 24 * 30,  # 最大(new)
         'CONNECTION_TOKEN_EXPIRATION_MAX': 60 * 60 * 24 * 30,  # 最大(old)
@@ -244,12 +247,23 @@ class Config(dict):
         'AUTH_CUSTOM': False,
         'AUTH_CUSTOM_FILE_MD5': '',
 
-        # Custom Config
         'MFA_CUSTOM': False,
         'MFA_CUSTOM_FILE_MD5': '',
 
+        'SMS_CUSTOM_FILE_MD5': '',
+
         # 临时密码
         'AUTH_TEMP_TOKEN': False,
+
+        # Vault
+        'VAULT_ENABLED': False,
+        'VAULT_HCP_HOST': '',
+        'VAULT_HCP_TOKEN': '',
+        'VAULT_HCP_MOUNT_POINT': 'jumpserver',
+
+        # Cache login password
+        'CACHE_LOGIN_PASSWORD_ENABLED': False,
+        'CACHE_LOGIN_PASSWORD_TTL': 60 * 60 * 24,
 
         # Auth LDAP settings
         'AUTH_LDAP': False,
@@ -320,9 +334,9 @@ class Config(dict):
         'CAS_ROOT_PROXIED_AS': 'https://example.com',
         'CAS_LOGOUT_COMPLETELY': True,
         'CAS_VERSION': 3,
-        'CAS_USERNAME_ATTRIBUTE': 'uid',
+        'CAS_USERNAME_ATTRIBUTE': 'cas:user',
         'CAS_APPLY_ATTRIBUTES_TO_USER': False,
-        'CAS_RENAME_ATTRIBUTES': {'uid': 'username'},
+        'CAS_RENAME_ATTRIBUTES': {'cas:user': 'username'},
         'CAS_CREATE_USER': True,
 
         'AUTH_SSO': False,
@@ -369,6 +383,9 @@ class Config(dict):
         'AUTH_OAUTH2_USER_ATTR_MAP': {
             'name': 'name', 'username': 'username', 'email': 'email'
         },
+        'AUTH_PASSKEY': False,
+        'FIDO_SERVER_ID': '',
+        'FIDO_SERVER_NAME': 'JumpServer',
 
         # 企业微信
         'AUTH_WECOM': False,
@@ -393,6 +410,7 @@ class Config(dict):
 
         'SMS_ENABLED': False,
         'SMS_BACKEND': '',
+        'SMS_CODE_LENGTH': 4,
         'SMS_TEST_PHONE': '',
 
         'ALIBABA_ACCESS_KEY_ID': '',
@@ -423,7 +441,7 @@ class Config(dict):
         'CMPP2_VERIFY_TEMPLATE_CODE': '{code}',
 
         'CUSTOM_SMS_URL': '',
-        'CUSTOM_SMS_API_PARAMS': {'phone_numbers': '{phone_numbers}', 'code': '{code}'},
+        'CUSTOM_SMS_API_PARAMS': {'phone_numbers': '{phone_numbers}', 'content': _('The verification code is: {code}')},
         'CUSTOM_SMS_REQUEST_METHOD': 'get',
 
         # Email
@@ -443,11 +461,7 @@ class Config(dict):
         'TERMINAL_ASSET_LIST_PAGE_SIZE': 'auto',
         'TERMINAL_SESSION_KEEP_DURATION': 200,
         'TERMINAL_HOST_KEY': '',
-        'TERMINAL_TELNET_REGEX': '',
         'TERMINAL_COMMAND_STORAGE': {},
-        # Luna 页面
-        # 默认图形化分辨率
-        'TERMINAL_GRAPHICAL_RESOLUTION': 'Auto',
         # 未来废弃(目前迁移会用)
         'TERMINAL_RDP_ADDR': '',
         # 保留(Luna还在用)
@@ -466,6 +480,7 @@ class Config(dict):
         'SECURITY_SERVICE_ACCOUNT_REGISTRATION': True,
         'SECURITY_VIEW_AUTH_NEED_MFA': True,
         'SECURITY_MAX_IDLE_TIME': 30,
+        'SECURITY_MAX_SESSION_TIME': 24,
         'SECURITY_PASSWORD_EXPIRATION_TIME': 9999,
         'SECURITY_PASSWORD_MIN_LENGTH': 6,
         'SECURITY_ADMIN_USER_PASSWORD_MIN_LENGTH': 6,
@@ -482,6 +497,7 @@ class Config(dict):
         'SECURITY_LUNA_REMEMBER_AUTH': True,
         'SECURITY_WATERMARK_ENABLED': True,
         'SECURITY_MFA_VERIFY_TTL': 3600,
+        'SECURITY_UNCOMMON_USERS_TTL': 90,
         'VERIFY_CODE_TTL': 60,
         'SECURITY_SESSION_SHARE': True,
         'SECURITY_CHECK_DIFFERENT_CITY_LOGIN': True,
@@ -515,9 +531,9 @@ class Config(dict):
         'TIME_ZONE': 'Asia/Shanghai',
         'FORCE_SCRIPT_NAME': '',
         'SESSION_COOKIE_SECURE': False,
+        'DOMAINS': '',
         'CSRF_COOKIE_SECURE': False,
         'REFERER_CHECK_ENABLED': False,
-        'CSRF_TRUSTED_ORIGINS': '',
         'SESSION_ENGINE': 'cache',
         'SESSION_SAVE_EVERY_REQUEST': True,
         'SESSION_EXPIRE_AT_BROWSER_CLOSE_FORCE': False,
@@ -530,12 +546,12 @@ class Config(dict):
         'MAGNUS_ORACLE_PORTS': '30000-30030',
 
         # 记录清理清理
-        'LOGIN_LOG_KEEP_DAYS': 200,
-        'TASK_LOG_KEEP_DAYS': 90,
-        'OPERATE_LOG_KEEP_DAYS': 200,
-        'ACTIVITY_LOG_KEEP_DAYS': 200,
-        'FTP_LOG_KEEP_DAYS': 200,
-        'CLOUD_SYNC_TASK_EXECUTION_KEEP_DAYS': 30,
+        'LOGIN_LOG_KEEP_DAYS': 180,
+        'TASK_LOG_KEEP_DAYS': 180,
+        'OPERATE_LOG_KEEP_DAYS': 180,
+        'ACTIVITY_LOG_KEEP_DAYS': 180,
+        'FTP_LOG_KEEP_DAYS': 180,
+        'CLOUD_SYNC_TASK_EXECUTION_KEEP_DAYS': 180,
 
         'TICKETS_ENABLED': True,
 
@@ -549,6 +565,7 @@ class Config(dict):
         'TICKET_AUTHORIZE_DEFAULT_TIME': 7,
         'TICKET_AUTHORIZE_DEFAULT_TIME_UNIT': 'day',
         'PERIOD_TASK_ENABLED': True,
+        'TERMINAL_TELNET_REGEX': '',
 
         # 导航栏 帮助
         'HELP_DOCUMENT_URL': 'https://docs.jumpserver.org/zh/v3/',
@@ -564,7 +581,9 @@ class Config(dict):
         'FTP_FILE_MAX_STORE': 100,
 
         # API 请求次数限制
-        'MAX_LIMIT_PER_PAGE': 100
+        'MAX_LIMIT_PER_PAGE': 100,
+
+        'LIMIT_SUPER_PRIV': False,
     }
 
     old_config_map = {

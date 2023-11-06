@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from accounts.const import AliasAccount
-from accounts.models import Account
+from accounts.models import VirtualAccount
 from orgs.utils import tmp_to_org
 from .permission import AssetPermissionUtil
 
@@ -41,7 +41,6 @@ class PermAccountUtil(AssetPermissionUtil):
                 alias_date_expired_mapper[alias].append(perm.date_expired)
 
         asset_accounts = asset.accounts.all().active()
-        # username_accounts_mapper = {account.username: account for account in asset_accounts}
         username_accounts_mapper = defaultdict(list)
         for account in asset_accounts:
             username_accounts_mapper[account.username].append(account)
@@ -61,17 +60,12 @@ class PermAccountUtil(AssetPermissionUtil):
         for alias, action_bit in alias_action_bit_mapper.items():
             account = None
             _accounts = []
-            if alias == AliasAccount.USER:
-                if user.username in username_accounts_mapper:
-                    _accounts = username_accounts_mapper[user.username]
-                else:
-                    account = Account.get_user_account()
-            elif alias == AliasAccount.INPUT:
-                account = Account.get_manual_account()
-            elif alias == AliasAccount.ANON:
-                account = Account.get_anonymous_account()
+            if alias == AliasAccount.USER and user.username in username_accounts_mapper:
+                _accounts = username_accounts_mapper[user.username]
             elif alias in username_accounts_mapper:
                 _accounts = username_accounts_mapper[alias]
+            elif alias in ['@INPUT', '@ANON', '@USER']:
+                account = VirtualAccount.get_special_account(alias, user, asset, from_permed=True)
             elif alias.startswith('@'):
                 continue
 

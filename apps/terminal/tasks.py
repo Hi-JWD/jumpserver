@@ -43,6 +43,7 @@ def delete_terminal_status_period():
 @register_as_period_task(interval=600)
 @after_app_ready_start
 @after_app_shutdown_clean_periodic
+@tmp_to_root_org()
 def clean_orphan_session():
     active_sessions = Session.objects.filter(is_finished=False)
     for session in active_sessions:
@@ -98,12 +99,13 @@ def run_applet_host_deployment(did):
 
 @shared_task(
     verbose_name=_('Install applet'),
-    activity_callback=lambda self, did, applet_id, *args, **kwargs: ([did],)
+    activity_callback=lambda self, ids, applet_id, *args, **kwargs: (ids,)
 )
-def run_applet_host_deployment_install_applet(did, applet_id):
+def run_applet_host_deployment_install_applet(ids, applet_id):
     with tmp_to_builtin_org(system=1):
-        deployment = AppletHostDeployment.objects.get(id=did)
-        deployment.install_applet(applet_id)
+        for did in ids:
+            deployment = AppletHostDeployment.objects.get(id=did)
+            deployment.install_applet(applet_id)
 
 
 @shared_task(

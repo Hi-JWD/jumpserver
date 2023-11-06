@@ -3,7 +3,7 @@
 
 from functools import partial
 
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from common.serializers import CommonBulkSerializerMixin
@@ -56,14 +56,15 @@ class RolesSerializerMixin(serializers.Serializer):
         if request.user.is_anonymous:
             return fields
 
-        action = view.action or "list"
-        if action in ("partial_bulk_update", "bulk_update", "partial_update", "update"):
-            action = "create"
-
         model_cls_field_mapper = {
             SystemRoleBinding: ["system_roles"],
             OrgRoleBinding: ["org_roles"],
         }
+
+        update_actions = ("partial_bulk_update", "bulk_update", "partial_update", "update")
+        action = view.action or "list"
+        if action in update_actions:
+            action = "create"
 
         for model_cls, fields_names in model_cls_field_mapper.items():
             perms = RBACPermission.parse_action_model_perms(action, model_cls)
@@ -100,10 +101,7 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, serializer
         source="can_use_ssh_key_login", label=_("Can public key authentication"),
         read_only=True
     )
-    password = EncryptedField(
-        label=_("Password"), required=False, allow_blank=True,
-        allow_null=True, max_length=1024,
-    )
+    password = EncryptedField(label=_("Password"), required=False, allow_blank=True, allow_null=True, max_length=1024, )
     phone = PhoneField(
         validators=[PhoneValidator()], required=False, allow_blank=True, allow_null=True, label=_("Phone")
     )
@@ -127,8 +125,8 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, serializer
             "created_by", "updated_by", "comment",  # 通用字段
         ]
         fields_date = [
-            "date_expired", "date_joined",
-            "last_login", "date_updated"  # 日期字段
+            "date_expired", "date_joined", "last_login",
+            "date_updated", "date_api_key_last_used",
         ]
         fields_bool = [
             "is_superuser", "is_org_admin",
@@ -154,9 +152,9 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, serializer
         read_only_fields = [
             "date_joined", "last_login", "created_by",
             "is_first_login", "wecom_id", "dingtalk_id",
-            "feishu_id",
+            "feishu_id", "date_api_key_last_used",
         ]
-        disallow_self_update_fields = ["is_active"]
+        disallow_self_update_fields = ["is_active", "system_roles", "org_roles"]
         extra_kwargs = {
             "password": {
                 "write_only": True,
@@ -169,6 +167,7 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, serializer
             "is_active": {"label": _("Is active")},
             "is_valid": {"label": _("Is valid")},
             "is_service_account": {"label": _("Is service account")},
+            "is_org_admin": {"label": _("Is org admin")},
             "is_expired": {"label": _("Is expired")},
             "avatar_url": {"label": _("Avatar url")},
             "created_by": {"read_only": True, "allow_blank": True},
@@ -294,8 +293,8 @@ class ServiceAccountSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from authentication.serializers import AccessKeySerializer
-        self.fields["access_key"] = AccessKeySerializer(read_only=True)
+        from authentication.serializers import AccessKeyCreateSerializer
+        self.fields["access_key"] = AccessKeyCreateSerializer(read_only=True)
 
     def get_username(self):
         return self.initial_data.get("name")
