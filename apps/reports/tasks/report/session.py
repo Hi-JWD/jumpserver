@@ -47,6 +47,9 @@ class SessionReport(BaseReport):
             max_period = max(max_period, time_period)
             min_period = min(min_period, time_period)
             period_counter.update([time_period // 3600])
+
+        if len(sessions) == 0:
+            min_period = 0
         self.session_count = sessions.count()
         self.max_conn_time = format_seconds(max_period)
         self.min_conn_time = format_seconds(min_period)

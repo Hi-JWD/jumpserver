@@ -165,7 +165,7 @@ class UserReport(BaseReport):
                 'data': self._get_user_role_data()
             },
             {
-                'title': 'Number of user logins (Top 10)',
+                'title': _('Number of user logins (Top 10)'),
                 'data': self._get_user_active_data()
             },
         ]
