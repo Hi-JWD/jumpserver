@@ -4,22 +4,34 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from acls.serializers.rules import ip_group_child_validator, ip_group_help_text
 from common.utils import get_object_or_none, random_string
 from users.models import User
 from users.serializers import UserProfileSerializer
 from ..models import AccessKey, TempToken
 
 __all__ = [
-    'AccessKeySerializer',  'BearerTokenSerializer',
+    'AccessKeySerializer', 'BearerTokenSerializer',
     'SSOTokenSerializer', 'TempTokenSerializer',
+    'AccessKeyCreateSerializer'
 ]
 
 
 class AccessKeySerializer(serializers.ModelSerializer):
+    ip_group = serializers.ListField(
+        default=['*'], label=_('Access IP'), help_text=ip_group_help_text,
+        child=serializers.CharField(max_length=1024, validators=[ip_group_child_validator])
+    )
+
     class Meta:
         model = AccessKey
-        fields = ['id', 'secret', 'is_active', 'date_created']
-        read_only_fields = ['id', 'secret', 'date_created']
+        fields = ['id', 'is_active', 'date_created', 'date_last_used'] + ['ip_group']
+        read_only_fields = ['id', 'date_created', 'date_last_used']
+
+
+class AccessKeyCreateSerializer(AccessKeySerializer):
+    class Meta(AccessKeySerializer.Meta):
+        fields = AccessKeySerializer.Meta.fields + ['secret']
 
 
 class BearerTokenSerializer(serializers.Serializer):
@@ -37,7 +49,8 @@ class BearerTokenSerializer(serializers.Serializer):
     def get_keyword(obj):
         return 'Bearer'
 
-    def update_last_login(self, user):
+    @staticmethod
+    def update_last_login(user):
         user.last_login = timezone.now()
         user.save(update_fields=['last_login'])
 
@@ -96,7 +109,7 @@ class TempTokenSerializer(serializers.ModelSerializer):
         username = request.user.username
         kwargs = {
             'username': username, 'secret': secret,
-            'date_expired': timezone.now() + timezone.timedelta(seconds=5*60),
+            'date_expired': timezone.now() + timezone.timedelta(seconds=5 * 60),
         }
         token = TempToken(**kwargs)
         token.save()

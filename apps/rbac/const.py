@@ -79,7 +79,6 @@ exclude_permissions = (
     ('rbac', 'systemrolebinding', 'change', 'systemrolebinding'),
     ('rbac', 'orgrolebinding', 'change', 'orgrolebinding'),
     ('rbac', 'menupermission', '*', 'menupermission'),
-    ('rbac', 'role', '*', '*'),
     ('ops', 'adhocexecution', 'view,add,delete,change', '*'),
     ('ops', 'jobexecution', 'change,delete', 'jobexecution'),
     ('ops', 'historicaljob', '*', '*'),
@@ -92,6 +91,7 @@ exclude_permissions = (
     ('audits', 'activitylog', 'add,delete,change', 'activitylog'),
     ('audits', 'passwordchangelog', 'add,change,delete', 'passwordchangelog'),
     ('audits', 'userloginlog', 'add,change,delete,change', 'userloginlog'),
+    ('audits', 'usersession', 'add,delete,change', 'usersession'),
     ('audits', 'ftplog', 'delete', 'ftplog'),
     ('tickets', 'ticketassignee', '*', 'ticketassignee'),
     ('tickets', 'ticketflow', 'add,delete', 'ticketflow'),
@@ -119,8 +119,6 @@ exclude_permissions = (
     ('terminal', 'sessionsharing', 'view,add,change,delete', 'sessionsharing'),
     ('terminal', 'session', 'delete,share', 'session'),
     ('terminal', 'session', 'delete,change', 'command'),
-    ('terminal', 'appletpublication', '*', '*'),
-    ('terminal', 'applethostdeployment', '*', '*'),
     ('applications', '*', '*', '*'),
 )
 
@@ -131,7 +129,7 @@ only_system_permissions = (
     ('rbac', 'systemrole', '*', '*'),
     ('rbac', 'rolebinding', '*', '*'),
     ('rbac', 'systemrolebinding', '*', '*'),
-    ('rbac', 'orgrole', 'delete,add,change', '*'),
+    ('rbac', 'orgrole', 'delete,add,change', 'orgrole'),
     ('orgs', 'organization', '*', '*'),
     ('xpack', 'license', '*', '*'),
     ('settings', 'setting', '*', '*'),
@@ -147,10 +145,13 @@ only_system_permissions = (
     ('authentication', 'accesskey', '*', '*'),
     ('authentication', 'superconnectiontoken', '*', '*'),
     ('authentication', 'temptoken', '*', '*'),
+    ('authentication', 'passkey', '*', '*'),
     ('tickets', '*', '*', '*'),
     ('orgs', 'organization', 'view', 'rootorg'),
     ('terminal', 'applet', '*', '*'),
     ('terminal', 'applethost', '*', '*'),
+    ('terminal', 'appletpublication', '*', '*'),
+    ('terminal', 'applethostdeployment', '*', '*'),
     ('acls', 'loginacl', '*', '*'),
     ('acls', 'connectmethodacl', '*', '*')
 )

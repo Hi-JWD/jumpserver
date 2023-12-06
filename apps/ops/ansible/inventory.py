@@ -1,6 +1,7 @@
 # ~*~ coding: utf-8 ~*~
 import json
 import os
+import re
 from collections import defaultdict
 
 from django.utils.translation import gettext as _
@@ -77,9 +78,11 @@ class JMSInventory:
         return var
 
     @staticmethod
-    def make_custom_become_ansible_vars(account, platform):
+    def make_custom_become_ansible_vars(account, su_from_auth):
+        su_method = su_from_auth['ansible_become_method']
         var = {
-            'custom_become': True, 'custom_become_method': platform.su_method,
+            'custom_become': True,
+            'custom_become_method': su_method,
             'custom_become_user': account.su_from.username,
             'custom_become_password': account.su_from.secret,
             'custom_become_private_key_path': account.su_from.private_key_path
@@ -98,16 +101,9 @@ class JMSInventory:
 
         su_from = account.su_from
         if platform.su_enabled and su_from:
-            host.update(self.make_account_ansible_vars(su_from))
-            host.update(self.make_custom_become_ansible_vars(account, platform))
-            become_method = 'sudo' if platform.su_method != 'su' else 'su'
-            host['ansible_become'] = True
-            host['ansible_become_method'] = 'sudo'
-            host['ansible_become_user'] = account.username
-            if become_method == 'sudo':
-                host['ansible_become_password'] = su_from.secret
-            else:
-                host['ansible_become_password'] = account.secret
+            su_from_auth = account.get_ansible_become_auth()
+            host.update(su_from_auth)
+            host.update(self.make_custom_become_ansible_vars(account, su_from_auth))
         elif platform.su_enabled and not su_from and \
                 self.task_type in (AutomationTypes.change_secret, AutomationTypes.push_account):
             host.update(self.make_account_ansible_vars(account))
@@ -163,14 +159,16 @@ class JMSInventory:
 
         protocol = self.get_primary_protocol(ansible_config, protocols)
 
-        name = asset.name.replace(' ', '_').replace('[', '_').replace(']', '_')
+        tp, category = asset.type, asset.category
+        name = re.sub(r'[ \[\]/]', '_', asset.name)
+        secret_info = {k: v for k, v in asset.secret_info.items() if v}
         host = {
             'name': name,
             'jms_asset': {
                 'id': str(asset.id), 'name': asset.name, 'address': asset.address,
-                'type': asset.type, 'category': asset.category,
+                'type': tp, 'category': category,
                 'protocol': protocol.name, 'port': protocol.port,
-                'spec_info': asset.spec_info, 'secret_info': asset.secret_info,
+                'spec_info': asset.spec_info, 'secret_info': secret_info,
                 'protocols': [{'name': p.name, 'port': p.port} for p in protocols],
             },
             'jms_account': {
@@ -180,7 +178,7 @@ class JMSInventory:
             } if account else None
         }
 
-        if host['jms_account'] and asset.platform.type == 'oracle':
+        if host['jms_account'] and tp == 'oracle':
             host['jms_account']['mode'] = 'sysdba' if account.privileged else None
 
         ansible_config = self.fill_ansible_config(ansible_config, protocol)

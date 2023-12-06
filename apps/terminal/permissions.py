@@ -4,12 +4,13 @@ from common.utils import get_logger
 
 logger = get_logger(__file__)
 
+
 __all__ = ['IsSessionAssignee']
 
 
 class IsSessionAssignee(permissions.IsAuthenticated):
     def has_permission(self, request, view):
-        return False
+        return True
 
     def has_object_permission(self, request, view, obj):
         try:

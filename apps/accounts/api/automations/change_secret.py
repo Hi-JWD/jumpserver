@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 #
-
-from rest_framework import mixins
+from rest_framework import status, mixins
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from accounts import serializers
 from accounts.const import AutomationTypes
-from accounts.models import ChangeSecretAutomation, ChangeSecretRecord, AutomationExecution
-from common.utils import get_object_or_none
+from accounts.models import ChangeSecretAutomation, ChangeSecretRecord
+from accounts.tasks import execute_automation_record_task
 from orgs.mixins.api import OrgBulkModelViewSet, OrgGenericViewSet
 from .base import (
     AutomationAssetsListApi, AutomationRemoveAssetApi, AutomationAddAssetApi,
@@ -30,21 +31,27 @@ class ChangeSecretAutomationViewSet(OrgBulkModelViewSet):
 
 class ChangeSecretRecordViewSet(mixins.ListModelMixin, OrgGenericViewSet):
     serializer_class = serializers.ChangeSecretRecordSerializer
-    filter_fields = ['asset', 'execution_id']
-    search_fields = ['asset__hostname']
+    filterset_fields = ('asset_id', 'execution_id')
+    search_fields = ('asset__address',)
+    tp = AutomationTypes.change_secret
+    rbac_perms = {
+        'execute': 'accounts.add_changesecretexecution',
+    }
 
     def get_queryset(self):
-        return ChangeSecretRecord.objects.filter(
-            execution__automation__type=AutomationTypes.change_secret
-        )
+        return ChangeSecretRecord.objects.all()
 
-    def filter_queryset(self, queryset):
-        queryset = super().filter_queryset(queryset)
-        eid = self.request.query_params.get('execution_id')
-        execution = get_object_or_none(AutomationExecution, pk=eid)
-        if execution:
-            queryset = queryset.filter(execution=execution)
-        return queryset
+    @action(methods=['post'], detail=False, url_path='execute')
+    def execute(self, request, *args, **kwargs):
+        record_id = request.data.get('record_id')
+        record = self.get_queryset().filter(pk=record_id)
+        if not record:
+            return Response(
+                {'detail': 'record not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        task = execute_automation_record_task.delay(record_id, self.tp)
+        return Response({'task': task.id}, status=status.HTTP_200_OK)
 
 
 class ChangSecretExecutionViewSet(AutomationExecutionViewSet):

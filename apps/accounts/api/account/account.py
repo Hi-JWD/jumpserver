@@ -6,11 +6,12 @@ from rest_framework.status import HTTP_200_OK
 
 from accounts import serializers
 from accounts.filters import AccountFilterSet
+from accounts.mixins import AccountRecordViewLogMixin
 from accounts.models import Account
 from assets.models import Asset, Node
-from common.api import ExtraFilterFieldsMixin
-from common.permissions import UserConfirmation, ConfirmType, IsValidUser
-from common.views.mixins import RecordViewLogMixin
+from authentication.permissions import UserConfirmation, ConfirmType
+from common.api.mixin import ExtraFilterFieldsMixin
+from common.permissions import IsValidUser
 from orgs.mixins.api import OrgBulkModelViewSet
 from rbac.permissions import RBACPermission
 
@@ -57,19 +58,19 @@ class AccountViewSet(OrgBulkModelViewSet):
         permission_classes=[IsValidUser]
     )
     def username_suggestions(self, request, *args, **kwargs):
-        asset_ids = request.data.get('assets')
-        node_ids = request.data.get('nodes')
-        username = request.data.get('username')
+        asset_ids = request.data.get('assets', [])
+        node_ids = request.data.get('nodes', [])
+        username = request.data.get('username', '')
 
-        assets = Asset.objects.all()
-        if asset_ids:
-            assets = assets.filter(id__in=asset_ids)
+        accounts = Account.objects.all()
         if node_ids:
             nodes = Node.objects.filter(id__in=node_ids)
             node_asset_ids = Node.get_nodes_all_assets(*nodes).values_list('id', flat=True)
-            assets = assets.filter(id__in=set(list(asset_ids) + list(node_asset_ids)))
+            asset_ids.extend(node_asset_ids)
 
-        accounts = Account.objects.filter(asset__in=assets)
+        if asset_ids:
+            accounts = accounts.filter(asset_id__in=list(set(asset_ids)))
+
         if username:
             accounts = accounts.filter(username__icontains=username)
         usernames = list(accounts.values_list('username', flat=True).distinct()[:10])
@@ -86,7 +87,7 @@ class AccountViewSet(OrgBulkModelViewSet):
         return Response(status=HTTP_200_OK)
 
 
-class AccountSecretsViewSet(RecordViewLogMixin, AccountViewSet):
+class AccountSecretsViewSet(AccountRecordViewLogMixin, AccountViewSet):
     """
     因为可能要导出所有账号，所以单独建立了一个 viewset
     """
@@ -115,7 +116,7 @@ class AssetAccountBulkCreateApi(CreateAPIView):
         return Response(data=serializer.data, status=HTTP_200_OK)
 
 
-class AccountHistoriesSecretAPI(ExtraFilterFieldsMixin, RecordViewLogMixin, ListAPIView):
+class AccountHistoriesSecretAPI(ExtraFilterFieldsMixin, AccountRecordViewLogMixin, ListAPIView):
     model = Account.history.model
     serializer_class = serializers.AccountHistorySerializer
     http_method_names = ['get', 'options']
@@ -143,4 +144,3 @@ class AccountHistoriesSecretAPI(ExtraFilterFieldsMixin, RecordViewLogMixin, List
             return histories
         histories = histories.exclude(history_id=latest_history.history_id)
         return histories
-

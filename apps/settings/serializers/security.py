@@ -7,6 +7,7 @@ __all__ = [
     'SecurityPasswordRuleSerializer', 'SecuritySessionSerializer',
     'SecurityAuthSerializer', 'SecuritySettingSerializer',
     'SecurityLoginLimitSerializer', 'SecurityBasicSerializer',
+    'SecurityBlockIPSerializer'
 ]
 
 
@@ -127,7 +128,7 @@ class SecurityAuthSerializer(serializers.Serializer):
         required=False, max_length=16, label=_('OTP issuer name'),
     )
     OTP_VALID_WINDOW = serializers.IntegerField(
-        min_value=1, max_value=10,
+        min_value=0, max_value=10,
         label=_("OTP valid window")
     )
     SECURITY_MFA_VERIFY_TTL = serializers.IntegerField(
@@ -225,3 +226,8 @@ class SecuritySettingSerializer(
     SecurityLoginLimitSerializer,
 ):
     PREFIX_TITLE = _('Security')
+
+
+class SecurityBlockIPSerializer(serializers.Serializer):
+    id = serializers.UUIDField(required=False)
+    ip = serializers.CharField(max_length=1024, required=False, allow_blank=True)

@@ -22,11 +22,12 @@ class Protocol(ChoicesMixin, models.TextChoices):
     oracle = 'oracle', 'Oracle'
     postgresql = 'postgresql', 'PostgreSQL'
     sqlserver = 'sqlserver', 'SQLServer'
+    db2 = 'db2', 'DB2'
     clickhouse = 'clickhouse', 'ClickHouse'
     redis = 'redis', 'Redis'
     mongodb = 'mongodb', 'MongoDB'
 
-    k8s = 'k8s', 'K8S'
+    k8s = 'k8s', 'K8s'
     http = 'http', 'HTTP(s)'
 
     chatgpt = 'chatgpt', 'ChatGPT'
@@ -45,7 +46,13 @@ class Protocol(ChoicesMixin, models.TextChoices):
                     'sftp_home': {
                         'type': 'str',
                         'default': '/tmp',
-                        'label': _('SFTP home')
+                        'label': _('SFTP root'),
+                        'help_text': _(
+                            'SFTP root directory, Support variable: <br>'
+                            '- ${ACCOUNT} The connected account username <br>'
+                            '- ${HOME} The home directory of the connected account <br>'
+                            '- ${USER} The username of the user'
+                        )
                     }
                 }
             },
@@ -154,6 +161,21 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 'required': True,
                 'secret_types': ['password'],
                 'xpack': True,
+                'setting': {
+                    'version': {
+                        'type': 'choice',
+                        'choices': [('>=2014', '>= 2014'), ('<2014', '< 2014')],
+                        'default': '>=2014',
+                        'label': _('Version'),
+                        'help_text': _('SQL Server version, Different versions have different connection drivers')
+                    }
+                }
+            },
+            cls.db2: {
+                'port': 5000,
+                'required': True,
+                'secret_types': ['password'],
+                'xpack': True,
             },
             cls.clickhouse: {
                 'port': 9000,
@@ -254,7 +276,7 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 }
             }
         }
-        if settings.XPACK_ENABLED:
+        if settings.XPACK_LICENSE_IS_VALID:
             choices = protocols[cls.chatgpt]['setting']['api_mode']['choices']
             choices.extend([
                 ('gpt-4', 'GPT-4'),
@@ -274,10 +296,20 @@ class Protocol(ChoicesMixin, models.TextChoices):
 
     @classmethod
     @cached_method(ttl=600)
+    def protocols(cls):
+        protocols = []
+        xpack_enabled = settings.XPACK_ENABLED
+        for protocol, config in cls.settings().items():
+            if not xpack_enabled and config.get('xpack', False):
+                continue
+            protocols.append(protocol)
+        return protocols
+
+    @classmethod
+    @cached_method(ttl=600)
     def xpack_protocols(cls):
         return [
-            protocol
-            for protocol, config in cls.settings().items()
+            protocol for protocol, config in cls.settings().items()
             if config.get('xpack', False)
         ]
 

@@ -4,14 +4,13 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from accounts.const import (
-    AutomationTypes, DEFAULT_PASSWORD_RULES,
-    SecretType, SecretStrategy, SSHKeyStrategy
+    AutomationTypes, SecretType, SecretStrategy, SSHKeyStrategy
 )
 from accounts.models import (
     Account, ChangeSecretAutomation,
     ChangeSecretRecord, AutomationExecution
 )
-from accounts.serializers import AuthValidateMixin
+from accounts.serializers import AuthValidateMixin, PasswordRulesSerializer
 from assets.models import Asset
 from common.serializers.fields import LabeledChoiceField, ObjectRelatedField
 from common.utils import get_logger
@@ -42,7 +41,7 @@ class ChangeSecretAutomationSerializer(AuthValidateMixin, BaseAutomationSerializ
     ssh_key_change_strategy = LabeledChoiceField(
         choices=SSHKeyStrategy.choices, required=False, label=_('SSH Key strategy')
     )
-    password_rules = serializers.DictField(default=DEFAULT_PASSWORD_RULES)
+    password_rules = PasswordRulesSerializer(required=False, label=_('Password rules'))
     secret_type = LabeledChoiceField(choices=get_secret_types(), required=True, label=_('Secret type'))
 
     class Meta:
@@ -72,7 +71,6 @@ class ChangeSecretAutomationSerializer(AuthValidateMixin, BaseAutomationSerializ
             return password_rules
 
         length = password_rules.get('length')
-        symbol_set = password_rules.get('symbol_set', '')
 
         try:
             length = int(length)
@@ -85,10 +83,6 @@ class ChangeSecretAutomationSerializer(AuthValidateMixin, BaseAutomationSerializ
             msg = _('* Password length range 6-30 bits')
             raise serializers.ValidationError(msg)
 
-        if not isinstance(symbol_set, str):
-            symbol_set = str(symbol_set)
-
-        password_rules = {'length': length, 'symbol_set': ''.join(symbol_set)}
         return password_rules
 
     def validate(self, attrs):
@@ -118,8 +112,8 @@ class ChangeSecretRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChangeSecretRecord
         fields = [
-            'id', 'asset', 'account', 'date_started', 'date_finished',
-            'timedelta', 'is_success', 'error', 'execution',
+            'id', 'asset', 'account', 'date_finished',
+            'status', 'is_success', 'error', 'execution',
         ]
         read_only_fields = fields
 

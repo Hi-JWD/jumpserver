@@ -15,15 +15,20 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from accounts.const import AliasAccount
+from acls.notifications import AssetLoginReminderMsg
 from common.api import JMSModelViewSet
 from common.exceptions import JMSException
-from common.utils import random_string, get_logger, get_request_ip
+from common.utils import random_string, get_logger, get_request_ip_or_data
 from common.utils.django import get_request_os
 from common.utils.http import is_true, is_false
 from orgs.mixins.api import RootOrgViewMixin
+from orgs.utils import tmp_to_org
 from perms.models import ActionChoices
 from terminal.connect_methods import NativeClient, ConnectMethodUtil
 from terminal.models import EndpointRule, Endpoint
+from users.const import FileNameConflictResolution
+from users.const import RDPSmartSize
+from users.models import Preference
 from ..models import ConnectionToken, date_expired_default
 from ..serializers import (
     ConnectionTokenSerializer, ConnectionTokenSecretSerializer,
@@ -62,13 +67,7 @@ class RDPFileClientProtocolURLMixin:
             'autoreconnection enabled:i': '1',
             'bookmarktype:i': '3',
             'use redirection server name:i': '0',
-            'smart sizing:i': '1',
         }
-        # 设置多屏显示
-        multi_mon = is_true(self.request.query_params.get('multi_mon'))
-        if multi_mon:
-            rdp_options['use multimon:i'] = '1'
-
         # 设置多屏显示
         multi_mon = is_true(self.request.query_params.get('multi_mon'))
         if multi_mon:
@@ -102,6 +101,7 @@ class RDPFileClientProtocolURLMixin:
             rdp_options['dynamic resolution:i'] = '0'
 
         # 设置其他选项
+        rdp_options['smart sizing:i'] = self.request.query_params.get('rdp_smart_size', RDPSmartSize.DISABLE)
         rdp_options['session bpp:i'] = os.getenv('JUMPSERVER_COLOR_DEPTH', '32')
         rdp_options['audiomode:i'] = self.parse_env_bool('JUMPSERVER_DISABLE_AUDIO', 'false', '2', '0')
 
@@ -155,7 +155,7 @@ class RDPFileClientProtocolURLMixin:
 
         account = token.account or token.input_username
         datetime = timezone.localtime(timezone.now()).strftime('%Y-%m-%d_%H:%M:%S')
-        name = account + '@' + str(asset) + '[' + datetime + ']'
+        name = account + '@' + asset.name + '[' + datetime + ']'
         data = {
             'version': 2,
             'id': str(token.id),  # 兼容老的，未来几个版本删掉
@@ -296,6 +296,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         'get_rdp_file': 'authentication.add_connectiontoken',
         'get_client_protocol_url': 'authentication.add_connectiontoken',
     }
+    input_username = ''
 
     def get_queryset(self):
         queryset = ConnectionToken.objects \
@@ -310,12 +311,45 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         self.validate_serializer(serializer)
         return super().perform_create(serializer)
 
+    def _insert_connect_options(self, data, user):
+        connect_options = data.pop('connect_options', {})
+        default_name_opts = {
+            'file_name_conflict_resolution': FileNameConflictResolution.REPLACE,
+            'terminal_theme_name': 'Default',
+        }
+        preferences_query = Preference.objects.filter(
+            user=user, category='koko', name__in=default_name_opts.keys()
+        ).values_list('name', 'value')
+        preferences = dict(preferences_query)
+        for name in default_name_opts.keys():
+            value = preferences.get(name, default_name_opts[name])
+            connect_options[name] = value
+        data['connect_options'] = connect_options
+
+    @staticmethod
+    def get_input_username(data):
+        input_username = data.get('input_username', '')
+        if input_username:
+            return input_username
+
+        account = data.get('account', '')
+        if account == '@USER':
+            input_username = str(data.get('user', ''))
+        elif account == '@INPUT':
+            input_username = '@INPUT'
+        else:
+            input_username = account
+        return input_username
+
     def validate_serializer(self, serializer):
         data = serializer.validated_data
         user = self.get_user(serializer)
+        self._insert_connect_options(data, user)
         asset = data.get('asset')
         account_name = data.get('account')
-        _data = self._validate(user, asset, account_name)
+        protocol = data.get('protocol')
+        self.input_username = self.get_input_username(data)
+        _data = self._validate(user, asset, account_name, protocol)
         data.update(_data)
         return serializer
 
@@ -323,12 +357,12 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         user = token.user
         asset = token.asset
         account_name = token.account
-        _data = self._validate(user, asset, account_name)
+        _data = self._validate(user, asset, account_name, token.protocol)
         for k, v in _data.items():
             setattr(token, k, v)
         return token
 
-    def _validate(self, user, asset, account_name):
+    def _validate(self, user, asset, account_name, protocol):
         data = dict()
         data['org_id'] = asset.org_id
         data['user'] = user
@@ -337,7 +371,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         if account_name == AliasAccount.ANON and asset.category not in ['web', 'custom']:
             raise ValidationError(_('Anonymous account is not supported for this asset'))
 
-        account = self._validate_perm(user, asset, account_name)
+        account = self._validate_perm(user, asset, account_name, protocol)
         if account.has_secret:
             data['input_secret'] = ''
 
@@ -350,9 +384,9 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         return data
 
     @staticmethod
-    def _validate_perm(user, asset, account_name):
-        from perms.utils.account import PermAccountUtil
-        account = PermAccountUtil().validate_permission(user, asset, account_name)
+    def _validate_perm(user, asset, account_name, protocol):
+        from perms.utils.asset_perm import PermAssetDetailUtil
+        account = PermAssetDetailUtil(user, asset).validate_permission(account_name, protocol)
         if not account or not account.actions:
             msg = _('Account not found')
             raise JMSException(code='perm_account_invalid', detail=msg)
@@ -361,28 +395,62 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
             raise JMSException(code='perm_expired', detail=msg)
         return account
 
+    def _record_operate_log(self, acl, asset):
+        from audits.handler import create_or_update_operate_log
+        with tmp_to_org(asset.org_id):
+            after = {
+                str(_('Assets')): str(asset),
+                str(_('Account')): self.input_username
+            }
+            object_name = acl._meta.object_name
+            resource_type = acl._meta.verbose_name
+            create_or_update_operate_log(
+                acl.action, resource_type, resource=acl,
+                after=after, object_name=object_name
+            )
+
     def _validate_acl(self, user, asset, account):
         from acls.models import LoginAssetACL
-        acls = LoginAssetACL.filter_queryset(user, asset, account)
-        ip = get_request_ip(self.request)
+        acls = LoginAssetACL.filter_queryset(user=user, asset=asset, account=account)
+        ip = get_request_ip_or_data(self.request)
         acl = LoginAssetACL.get_match_rule_acls(user, ip, acls)
         if not acl:
             return
         if acl.is_action(acl.ActionChoices.accept):
+            self._record_operate_log(acl, asset)
             return
         if acl.is_action(acl.ActionChoices.reject):
+            self._record_operate_log(acl, asset)
             msg = _('ACL action is reject: {}({})'.format(acl.name, acl.id))
             raise JMSException(code='acl_reject', detail=msg)
         if acl.is_action(acl.ActionChoices.review):
             if not self.request.query_params.get('create_ticket'):
                 msg = _('ACL action is review')
                 raise JMSException(code='acl_review', detail=msg)
-
+            self._record_operate_log(acl, asset)
             ticket = LoginAssetACL.create_login_asset_review_ticket(
-                user=user, asset=asset, account_username=account.username,
+                user=user, asset=asset, account_username=self.input_username,
                 assignees=acl.reviewers.all(), org_id=asset.org_id
             )
             return ticket
+        if acl.is_action(acl.ActionChoices.notice):
+            reviewers = acl.reviewers.all()
+            if not reviewers:
+                return
+
+            self._record_operate_log(acl, asset)
+            for reviewer in reviewers:
+                AssetLoginReminderMsg(
+                    reviewer, asset, user, self.input_username
+                ).publish_async()
+
+    def create(self, request, *args, **kwargs):
+        try:
+            response = super().create(request, *args, **kwargs)
+        except JMSException as e:
+            data = {'code': e.detail.code, 'detail': e.detail}
+            return Response(data, status=e.status_code)
+        return response
 
 
 class SuperConnectionTokenViewSet(ConnectionTokenViewSet):

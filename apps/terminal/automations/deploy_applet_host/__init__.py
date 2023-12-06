@@ -1,5 +1,7 @@
 import datetime
 import os
+import re
+import shutil
 
 import yaml
 from django.conf import settings
@@ -58,7 +60,8 @@ class DeployAppletHostManager:
         download_host = download_host.rstrip("/")
 
         def handler(plays):
-            applet_host_name = self.deployment.host.name
+            # 替换所有的特殊字符为下划线 _ , 防止因主机名称造成任务执行失败
+            applet_host_name = re.sub(r'\W', '_', self.deployment.host.name, flags=re.UNICODE)
             hostname = '{}-{}'.format(applet_host_name, random_string(7))
             for play in plays:
                 play["vars"].update(options)
@@ -116,6 +119,11 @@ class DeployAppletHostManager:
         )
         return runner.run(**kwargs)
 
+    def delete_runtime_dir(self):
+        if settings.DEBUG_DEV:
+            return
+        shutil.rmtree(self.run_dir)
+
     def _run(self, cb_func: callable, **kwargs):
         try:
             self.deployment.date_start = timezone.now()
@@ -128,3 +136,4 @@ class DeployAppletHostManager:
             self.deployment.date_finished = timezone.now()
             with safe_db_connection():
                 self.deployment.save()
+        self.delete_runtime_dir()

@@ -1,6 +1,7 @@
 from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from common.serializers import (
     WritableNestedModelSerializer, type_field_map, MethodSerializer,
@@ -93,9 +94,16 @@ class PlatformProtocolSerializer(serializers.ModelSerializer):
         setting_fields = protocol_settings.get(protocol, {}).get('setting')
         if not setting_fields:
             return default_field
+
         setting_fields = [{'name': k, **v} for k, v in setting_fields.items()]
         name = '{}ProtocolSettingSerializer'.format(protocol.capitalize())
         return create_serializer_class(name, setting_fields)()
+
+    def validate(self, cleaned_data):
+        name = cleaned_data.get('name')
+        if name in ['winrm']:
+            cleaned_data['public'] = False
+        return cleaned_data
 
     def to_file_representation(self, data):
         return '{name}/{port}'.format(**data)
@@ -123,6 +131,10 @@ class PlatformSerializer(WritableNestedModelSerializer):
         ("super", "super 15"),
         ("super_level", "super level 15")
     ]
+    id = serializers.IntegerField(
+        label='ID', required=False,
+        validators=[UniqueValidator(queryset=Platform.objects.all())]
+    )
     charset = LabeledChoiceField(choices=Platform.CharsetChoices.choices, label=_("Charset"), default='utf-8')
     type = LabeledChoiceField(choices=AllTypes.choices(), label=_("Type"))
     category = LabeledChoiceField(choices=Category.choices, label=_("Category"))
@@ -213,7 +225,7 @@ class PlatformSerializer(WritableNestedModelSerializer):
     def validate_automation(self, automation):
         automation = automation or {}
         ansible_enabled = automation.get('ansible_enabled', False) \
-            and self.constraints['automation'].get('ansible_enabled', False)
+                          and self.constraints['automation'].get('ansible_enabled', False)
         automation['ansible_enable'] = ansible_enabled
         return automation
 

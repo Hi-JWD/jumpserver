@@ -1,3 +1,5 @@
+import copy
+
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
@@ -14,13 +16,23 @@ class SecretGenerator:
 
     @staticmethod
     def generate_ssh_key():
-        private_key, public_key = ssh_key_gen()
+        private_key, __ = ssh_key_gen()
         return private_key
 
     def generate_password(self):
-        length = int(self.password_rules.get('length', 0))
-        length = length if length else DEFAULT_PASSWORD_RULES['length']
-        return random_string(length, special_char=True)
+        password_rules = self.password_rules
+        if not password_rules or not isinstance(password_rules, dict):
+            password_rules = {}
+        rules = copy.deepcopy(DEFAULT_PASSWORD_RULES)
+        rules.update(password_rules)
+        rules = {
+            'length': rules['length'],
+            'lower': rules['lowercase'],
+            'upper': rules['uppercase'],
+            'digit': rules['digit'],
+            'special_char': rules['symbol']
+        }
+        return random_string(**rules)
 
     def get_secret(self):
         if self.secret_type == SecretType.SSH_KEY:
@@ -37,15 +49,15 @@ def validate_password_for_ansible(password):
     # validate password contains left double curly bracket
     # check password not contains `{{`
     # Ansible 推送的时候不支持
-    if '{{' in password:
-        raise serializers.ValidationError(_('Password can not contains `{{` '))
-    if '{%' in password:
-        raise serializers.ValidationError(_('Password can not contains `{%` '))
+    if '{{' in password or '}}' in password:
+        raise serializers.ValidationError(_('Password can not contains `{{` or `}}`'))
+    if '{%' in password or '%}' in password:
+        raise serializers.ValidationError(_('Password can not contains `{%` or `%}`'))
     # Ansible Windows 推送的时候不支持
-    if "'" in password:
-        raise serializers.ValidationError(_("Password can not contains `'` "))
-    if '"' in password:
-        raise serializers.ValidationError(_('Password can not contains `"` '))
+    # if "'" in password:
+    #     raise serializers.ValidationError(_("Password can not contains `'` "))
+    # if '"' in password:
+    #     raise serializers.ValidationError(_('Password can not contains `"` '))
 
 
 def validate_ssh_key(ssh_key, passphrase=None):

@@ -12,10 +12,12 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import AbstractUser
 from django.core.cache import cache
 from django.db import models
+from django.db.models import Count
 from django.shortcuts import reverse
 from django.utils import timezone
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
+from rest_framework.exceptions import PermissionDenied
 
 from common.db import fields, models as jms_models
 from common.utils import (
@@ -398,10 +400,17 @@ class RoleMixin:
         data = cache.get(key)
         if data:
             return data
+        console_orgs = RoleBinding.get_user_has_the_perm_orgs('rbac.view_console', self)
+        audit_orgs = RoleBinding.get_user_has_the_perm_orgs('rbac.view_audit', self)
+        workbench_orgs = RoleBinding.get_user_has_the_perm_orgs('rbac.view_workbench', self)
+
+        if settings.LIMIT_SUPER_PRIV:
+            audit_orgs = list(set(audit_orgs) - set(console_orgs))
+
         data = {
-            'console_orgs': RoleBinding.get_user_has_the_perm_orgs('rbac.view_console', self),
-            'audit_orgs': RoleBinding.get_user_has_the_perm_orgs('rbac.view_audit', self),
-            'workbench_orgs': RoleBinding.get_user_has_the_perm_orgs('rbac.view_workbench', self),
+            'console_orgs': console_orgs,
+            'audit_orgs': audit_orgs,
+            'workbench_orgs': workbench_orgs,
         }
         cache.set(key, data, 60 * 60)
         return data
@@ -539,6 +548,9 @@ class RoleMixin:
     def get_all_permissions(self):
         from rbac.models import RoleBinding
         perms = RoleBinding.get_user_perms(self)
+
+        if settings.LIMIT_SUPER_PRIV and 'view_console' in perms:
+            perms = [p for p in perms if p != "view_audit"]
         return perms
 
 
@@ -595,7 +607,8 @@ class TokenMixin:
 
     def generate_reset_token(self):
         token = random_string(50)
-        self.set_cache(token)
+        key = self.CACHE_KEY_USER_RESET_PASSWORD_PREFIX.format(token)
+        cache.set(key, {'id': self.id, 'email': self.email}, 3600)
         return token
 
     @classmethod
@@ -614,10 +627,6 @@ class TokenMixin:
         except (AttributeError, cls.DoesNotExist) as e:
             logger.error(e, exc_info=True)
             return None
-
-    def set_cache(self, token):
-        key = self.CACHE_KEY_USER_RESET_PASSWORD_PREFIX.format(token)
-        cache.set(key, {'id': self.id, 'email': self.email}, 3600)
 
     @classmethod
     def expired_reset_password_token(cls, token):
@@ -700,29 +709,29 @@ class MFAMixin:
 
 
 class JSONFilterMixin:
-    """
-    users = JSONManyToManyField('users.User', blank=True, null=True)
-    """
-
     @staticmethod
     def get_json_filter_attr_q(name, value, match):
         from rbac.models import RoleBinding
         from orgs.utils import current_org
 
+        kwargs = {}
         if name == 'system_roles':
-            user_id = RoleBinding.objects \
-                .filter(role__in=value, scope='system') \
-                .values_list('user_id', flat=True)
-            return models.Q(id__in=user_id)
+            kwargs['scope'] = 'system'
         elif name == 'org_roles':
-            kwargs = dict(role__in=value, scope='org')
+            kwargs['scope'] = 'org'
             if not current_org.is_root():
                 kwargs['org_id'] = current_org.id
+        else:
+            return None
 
-            user_id = RoleBinding.objects.filter(**kwargs) \
-                .values_list('user_id', flat=True)
-            return models.Q(id__in=user_id)
-        return None
+        bindings = RoleBinding.objects.filter(**kwargs, role__in=value)
+        if match == 'm2m_all':
+            user_id = bindings.values('user_id').annotate(count=Count('user_id')) \
+                .filter(count=len(value)).values_list('user_id', flat=True)
+        else:
+            user_id = bindings.values_list('user_id', flat=True)
+
+        return models.Q(id__in=user_id)
 
 
 class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, JSONFilterMixin, AbstractUser):
@@ -797,11 +806,11 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, JSONFilterMixin, Abstract
     avatar = models.ImageField(
         upload_to="avatar", null=True, verbose_name=_('Avatar')
     )
-    wechat = models.CharField(
+    wechat = fields.EncryptCharField(
         max_length=128, blank=True, verbose_name=_('Wechat')
     )
-    phone = models.CharField(
-        max_length=20, blank=True, null=True, verbose_name=_('Phone')
+    phone = fields.EncryptCharField(
+        max_length=128, blank=True, null=True, verbose_name=_('Phone')
     )
     mfa_level = models.SmallIntegerField(
         default=0, choices=MFAMixin.MFA_LEVEL_CHOICES, verbose_name=_('MFA')
@@ -816,9 +825,6 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, JSONFilterMixin, Abstract
     public_key = fields.EncryptTextField(
         blank=True, null=True, verbose_name=_('Public key')
     )
-    secret_key = fields.EncryptCharField(
-        max_length=256, blank=True, null=True, verbose_name=_('Secret key')
-    )
     comment = models.TextField(
         blank=True, null=True, verbose_name=_('Comment')
     )
@@ -829,11 +835,7 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, JSONFilterMixin, Abstract
     )
     created_by = models.CharField(max_length=30, default='', blank=True, verbose_name=_('Created by'))
     updated_by = models.CharField(max_length=30, default='', blank=True, verbose_name=_('Updated by'))
-    source = models.CharField(
-        max_length=30, default=Source.local,
-        choices=Source.choices,
-        verbose_name=_('Source')
-    )
+    source = models.CharField(max_length=30, default=Source.local, choices=Source.choices, verbose_name=_('Source'))
     date_password_last_updated = models.DateTimeField(
         auto_now_add=True, blank=True, null=True,
         verbose_name=_('Date password last updated')
@@ -841,6 +843,7 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, JSONFilterMixin, Abstract
     need_update_password = models.BooleanField(
         default=False, verbose_name=_('Need update password')
     )
+    date_api_key_last_used = models.DateTimeField(null=True, blank=True, verbose_name=_('Date api key used'))
     date_updated = models.DateTimeField(auto_now=True, verbose_name=_('Date updated'))
     wecom_id = models.CharField(null=True, default=None, max_length=128, verbose_name=_('WeCom'))
     dingtalk_id = models.CharField(null=True, default=None, max_length=128, verbose_name=_('DingTalk'))
@@ -850,6 +853,13 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, JSONFilterMixin, Abstract
 
     def __str__(self):
         return '{0.name}({0.username})'.format(self)
+
+    @property
+    def secret_key(self):
+        instance = self.preferences.filter(name='secret_key').first()
+        if not instance:
+            return
+        return instance.decrypt_value
 
     @property
     def receive_backends(self):
@@ -956,7 +966,7 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, JSONFilterMixin, Abstract
 
     def delete(self, using=None, keep_parents=False):
         if self.pk == 1 or self.username == 'admin':
-            return
+            raise PermissionDenied(_('Can not delete admin user'))
         return super(User, self).delete(using=using, keep_parents=keep_parents)
 
     @classmethod

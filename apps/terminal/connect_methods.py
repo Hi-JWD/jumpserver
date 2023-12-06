@@ -75,7 +75,7 @@ class NativeClient(TextChoices):
         xpack_protocols = Protocol.xpack_protocols()
 
         for protocol, _clients in clients_map.items():
-            if not settings.XPACK_ENABLED and protocol in xpack_protocols:
+            if not settings.XPACK_LICENSE_IS_VALID and protocol in xpack_protocols:
                 continue
             if isinstance(_clients, dict):
                 if os == 'all':
@@ -83,7 +83,7 @@ class NativeClient(TextChoices):
                 else:
                     _clients = _clients.get(os, _clients['default'])
             for client in _clients:
-                if not settings.XPACK_ENABLED and client in cls.xpack_methods():
+                if not settings.XPACK_LICENSE_IS_VALID and client in cls.xpack_methods():
                     continue
                 methods[protocol].append({
                     'value': client.value,
@@ -126,6 +126,9 @@ class ConnectMethodUtil:
                     Protocol.ssh, Protocol.telnet, Protocol.sftp,
                     Protocol.redis, Protocol.mongodb,
                     Protocol.k8s, Protocol.clickhouse,
+
+                    Protocol.mysql, Protocol.mariadb,
+                    Protocol.sqlserver, Protocol.postgresql,
                 ],
                 # 限制客户端的协议，比如 koko 虽然也支持 数据库的 ssh 连接，但是不再这里拉起
                 # Listen协议: [Asset协议]
@@ -141,7 +144,7 @@ class ConnectMethodUtil:
                 'support': [
                     Protocol.mysql, Protocol.postgresql,
                     Protocol.oracle, Protocol.sqlserver,
-                    Protocol.mariadb
+                    Protocol.mariadb, Protocol.db2
                 ],
                 'match': 'm2m'
             },

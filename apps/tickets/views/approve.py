@@ -4,6 +4,7 @@
 from __future__ import unicode_literals
 
 from django.core.cache import cache
+from django.http import HttpResponse
 from django.shortcuts import redirect, reverse
 from django.utils.translation import gettext as _
 from django.views.generic.base import TemplateView
@@ -63,27 +64,28 @@ class TicketDirectApproveView(TemplateView):
 
     def get_context_data(self, **kwargs):
         # 放入工单信息
-        token = kwargs.get('token')
-        content = cache.get(token, {}).get('content', [])
-        if self.request.user.is_authenticated:
-            prompt_msg = _('Click the button below to approve or reject')
-        else:
-            prompt_msg = _('After successful authentication, this ticket can be approved directly')
         kwargs.update({
-            'content': content, 'prompt_msg': prompt_msg,
-            'login_url': '%s&next=%s' % (
-                self.login_url,
-                reverse('tickets:direct-approve', kwargs={'token': token})
-            ),
+            'content': kwargs['ticket_info'].get('content', []),
+            'prompt_msg': _('Click the button below to approve or reject'),
         })
         return super().get_context_data(**kwargs)
 
     def get(self, request, *args, **kwargs):
-        token = kwargs.get('token')
-        ticket_info = cache.get(token)
+        if not request.user.is_authenticated:
+            direct_url = reverse('tickets:direct-approve', kwargs={'token': kwargs['token']})
+            message_data = {
+                'title': _('Ticket approval'),
+                'message': _('After successful authentication, this ticket can be approved directly'),
+                'redirect_url': f'{self.login_url}&{self.redirect_field_name}={direct_url}',
+                'auto_redirect': True,
+            }
+            redirect_url = FlashMessageUtil.gen_message_url(message_data)
+            return redirect(redirect_url)
+
+        ticket_info = cache.get(kwargs['token'])
         if not ticket_info:
             return self.redirect_message_response(redirect_url=self.login_url)
-        return super().get(request, *args, **kwargs)
+        return super().get(request, ticket_info=ticket_info, *args, **kwargs)
 
     def post(self, request, **kwargs):
         user = request.user

@@ -1,6 +1,7 @@
 import os.path
 import random
 import shutil
+from collections import defaultdict
 
 import yaml
 from django.conf import settings
@@ -26,7 +27,7 @@ class Applet(JMSBaseModel):
         web = 'web', _('Web')
 
     class Edition(models.TextChoices):
-        community = 'community', _('Community')
+        community = 'community', _('Community edition')
         enterprise = 'enterprise', _('Enterprise')
 
     name = models.SlugField(max_length=128, verbose_name=_('Name'), unique=True)
@@ -148,10 +149,21 @@ class Applet(JMSBaseModel):
         shutil.copytree(path, pkg_path)
         return instance, serializer
 
+    host_prefer_key_tpl = 'applet_host_prefer_{}'
+
     @classmethod
     def clear_host_prefer(cls):
-        prefer_key = 'applet_host_prefer_{}'.format("*")
-        cache.delete_pattern(prefer_key)
+        cache.delete_pattern(cls.host_prefer_key_tpl.format('*'))
+
+    def _select_by_load(self, hosts):
+        using_keys = cache.keys(self.host_prefer_key_tpl.format('*'))
+        using_host_ids = cache.get_many(using_keys)
+        counts = defaultdict(int)
+        for host_id in using_host_ids.values():
+            counts[host_id] += 1
+
+        hosts = list(sorted(hosts, key=lambda h: counts[str(h.id)]))
+        return hosts[0] if hosts else None
 
     def select_host(self, user, asset):
         hosts = self.hosts.filter(is_active=True)
@@ -166,14 +178,17 @@ class Applet(JMSBaseModel):
                 return matched[0]
 
         hosts = [h for h in hosts if h.auto_create_accounts]
-        prefer_key = 'applet_host_prefer_{}'.format(user.id)
+        prefer_key = self.host_prefer_key_tpl.format(user.id)
         prefer_host_id = cache.get(prefer_key, None)
         pref_host = [host for host in hosts if host.id == prefer_host_id]
+
         if pref_host:
             host = pref_host[0]
         else:
-            host = random.choice(hosts)
-            cache.set(prefer_key, host.id, timeout=None)
+            host = self._select_by_load(hosts)
+            if host is None:
+                return
+            cache.set(prefer_key, str(host.id), timeout=None)
         return host
 
     def get_related_platform(self):
@@ -208,7 +223,9 @@ class Applet(JMSBaseModel):
         accounts = valid_accounts.exclude(username__in=accounts_username_used)
         public_accounts = accounts.filter(username__startswith='jms_')
         if not public_accounts:
-            public_accounts = accounts.exclude(username__in=['Administrator', 'root'])
+            public_accounts = accounts \
+                .exclude(username__in=['Administrator', 'root']) \
+                .exclude(username__startswith='js_')
         account = self.random_select_prefer_account(user, host, public_accounts)
         return account
 
@@ -243,15 +260,30 @@ class Applet(JMSBaseModel):
                 account = private_account
         return account
 
+    @staticmethod
+    def try_to_use_same_account(user, host):
+        from accounts.models import VirtualAccount
+
+        if not host.using_same_account:
+            return
+        account = VirtualAccount.get_same_account(user, host)
+        if not account.secret:
+            return
+        return account
+
     def select_host_account(self, user, asset):
         # 选择激活的发布机
         host = self.select_host(user, asset)
-        logger.info('Select applet host: {}'.format(host.name))
         if not host:
             return None
+        logger.info('Select applet host: {}'.format(host.name))
 
         valid_accounts = host.accounts.all().filter(is_active=True, privileged=False)
-        account = self.try_to_use_private_account(user, host, valid_accounts)
+        account = self.try_to_use_same_account(user, host)
+        if not account:
+            logger.debug('No same account, try to use private account')
+            account = self.try_to_use_private_account(user, host, valid_accounts)
+
         if not account:
             logger.debug('No private account, try to use public account')
             account = self.select_a_public_account(user, host, valid_accounts)

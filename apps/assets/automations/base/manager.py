@@ -1,8 +1,7 @@
+import hashlib
 import json
 import os
 import shutil
-from collections import defaultdict
-from hashlib import md5
 from socket import gethostname
 
 import yaml
@@ -37,8 +36,6 @@ class BasePlaybookManager:
         }
         # 根据执行方式就行分组, 不同资产的改密、推送等操作可能会使用不同的执行方式
         # 然后根据执行方式分组, 再根据 bulk_size 分组, 生成不同的 playbook
-        # 避免一个 playbook 中包含太多的主机
-        self.method_hosts_mapper = defaultdict(list)
         self.playbooks = []
         self.gateway_servers = dict()
         params = self.execution.snapshot.get('params')
@@ -146,7 +143,7 @@ class BasePlaybookManager:
 
     @staticmethod
     def generate_private_key_path(secret, path_dir):
-        key_name = '.' + md5(secret.encode('utf-8')).hexdigest()
+        key_name = '.' + hashlib.md5(secret.encode('utf-8')).hexdigest()
         key_path = os.path.join(path_dir, key_name)
 
         if not os.path.exists(key_path):
@@ -175,7 +172,7 @@ class BasePlaybookManager:
         method = self.method_id_meta_mapper.get(method_id)
         if not method:
             logger.error("Method not found: {}".format(method_id))
-            return method
+            return
         method_playbook_dir_path = method['dir']
         sub_playbook_path = os.path.join(sub_playbook_dir, 'project', 'main.yml')
         shutil.copytree(method_playbook_dir_path, os.path.dirname(sub_playbook_path))
@@ -196,6 +193,11 @@ class BasePlaybookManager:
             print(msg)
         runners = []
         for platform, assets in assets_group_by_platform.items():
+            if not assets:
+                continue
+            if not platform.automation or not platform.automation.ansible_enabled:
+                print(_("  - Platform {} ansible disabled").format(platform.name))
+                continue
             assets_bulked = [assets[i:i + self.bulk_size] for i in range(0, len(assets), self.bulk_size)]
 
             for i, _assets in enumerate(assets_bulked, start=1):
@@ -204,6 +206,8 @@ class BasePlaybookManager:
                 inventory_path = os.path.join(self.runtime_dir, sub_dir, 'hosts.json')
                 self.generate_inventory(_assets, inventory_path)
                 playbook_path = self.generate_playbook(_assets, platform, playbook_dir)
+                if not playbook_path:
+                    continue
 
                 runer = PlaybookRunner(
                     inventory_path,
@@ -309,6 +313,7 @@ class BasePlaybookManager:
         shutil.rmtree(self.runtime_dir)
 
     def run(self, *args, **kwargs):
+        print(">>> 任务准备阶段\n")
         runners = self.get_runners()
         if len(runners) > 1:
             print("### 分次执行任务, 总共 {}\n".format(len(runners)))

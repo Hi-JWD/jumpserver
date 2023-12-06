@@ -75,6 +75,8 @@ special_pid_mapper = {
     'xpack.strategyrule': 'cloud_import',
     'terminal.applet': 'remote_application',
     'terminal.applethost': 'remote_application',
+    'terminal.appletpublication': 'remote_application',
+    'terminal.applethostdeployment': 'remote_application',
     'accounts.accountbackupautomation': "backup_account_node",
     'accounts.accountbackupexecution': "backup_account_node",
     "accounts.pushaccountautomation": "push_account_node",
@@ -86,7 +88,7 @@ special_pid_mapper = {
     "accounts.add_gatheraccountsexecution": "gather_account_node",
     "accounts.changesecretautomation": "asset_change_plan_node",
     "accounts.view_changesecretexecution": "asset_change_plan_node",
-    "accounts.add_changesecretexection": "asset_change_plan_node",
+    "accounts.add_changesecretexecution": "asset_change_plan_node",
     "accounts.view_changesecretrecord": "asset_change_plan_node",
     'orgs.organization': 'view_setting',
     'settings.setting': 'view_setting',
@@ -112,9 +114,11 @@ special_pid_mapper = {
     "settings.view_setting": "view_setting",
     "rbac.view_console": "view_console",
     "rbac.view_audit": "view_audit",
+    'audits.usersession': 'view_audit',
     "rbac.view_workbench": "view_workbench",
     "rbac.view_webterminal": "view_workbench",
     "rbac.view_filemanager": "view_workbench",
+    "rbac.view_systemtools": "view_workbench",
     'tickets.view_ticket': 'tickets'
 }
 

@@ -55,30 +55,6 @@ class UserUpdatePasswordSerializer(serializers.ModelSerializer):
         return instance
 
 
-class UserUpdateSecretKeySerializer(serializers.ModelSerializer):
-    new_secret_key = EncryptedField(required=True, max_length=128)
-    new_secret_key_again = EncryptedField(required=True, max_length=128)
-    has_secret_key = serializers.BooleanField(read_only=True, source='secret_key')
-
-    class Meta:
-        model = User
-        fields = ['has_secret_key', 'new_secret_key', 'new_secret_key_again']
-
-    def validate(self, values):
-        new_secret_key = values.get('new_secret_key', '')
-        new_secret_key_again = values.get('new_secret_key_again', '')
-        if new_secret_key != new_secret_key_again:
-            msg = _('The newly set password is inconsistent')
-            raise serializers.ValidationError({'new_secret_key_again': msg})
-        return values
-
-    def update(self, instance, validated_data):
-        new_secret_key = self.validated_data.get('new_secret_key')
-        instance.secret_key = new_secret_key
-        instance.save()
-        return instance
-
-
 class UserUpdatePublicKeySerializer(serializers.ModelSerializer):
     public_key_comment = serializers.CharField(
         source='get_public_key_comment', required=False, read_only=True, max_length=128
@@ -137,6 +113,9 @@ class UserProfileSerializer(UserSerializer):
             'console_orgs', 'audit_orgs', 'workbench_orgs',
             'receive_backends', 'perms',
         ]
+        fields_mini = [
+            'id', 'name', 'username', 'email',
+        ]
         fields = UserSerializer.Meta.fields + [
             'public_key_comment', 'public_key_hash_md5', 'guide_url',
         ] + read_only_fields
@@ -165,8 +144,10 @@ class UserProfileSerializer(UserSerializer):
         super().__init__(*args, **kwargs)
         system_roles_field = self.fields.get('system_roles')
         org_roles_field = self.fields.get('org_roles')
-        system_roles_field.read_only = True
-        org_roles_field.read_only = True
+        if system_roles_field:
+            system_roles_field.read_only = True
+        if org_roles_field:
+            org_roles_field.read_only = True
 
     @staticmethod
     def get_guide_url(obj):
