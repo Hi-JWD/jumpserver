@@ -14,7 +14,8 @@ class ExecutionManager:
         AutomationTypes.verify_account: VerifyAccountManager,
         AutomationTypes.gather_accounts: GatherAccountsManager,
         AutomationTypes.verify_gateway_account: VerifyGatewayAccountManager,
-        AutomationTypes.backup_accounts: AccountBackupManager,
+        # TODO 后期迁移到自动化策略中
+        'backup_account': AccountBackupManager,
     }
 
     def __init__(self, execution):
