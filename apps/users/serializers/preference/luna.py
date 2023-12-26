@@ -22,6 +22,9 @@ class BasicSerializer(serializers.Serializer):
     is_async_asset_tree = serializers.BooleanField(
         required=False, default=True, label=_('Async loading of asset tree')
     )
+    fuzzy_search = serializers.BooleanField(
+        required=False, default=True, label=_('Fuzzy search')
+    )
 
 
 class GraphicsSerializer(serializers.Serializer):

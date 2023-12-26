@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from assets.models import Asset
 from assets.api import SerializeToTreeNodeMixin
 from common.utils import get_logger
+from common.utils.http import is_true
 
 from ..assets import UserAllPermedAssetsApi
 from .mixin import RebuildTreeMixin
@@ -24,7 +25,13 @@ class AssetTreeMixin(RebuildTreeMixin, SerializeToTreeNodeMixin):
 
     ordering = ('name',)
     filterset_fields = ('id', 'name', 'address', 'comment')
-    search_fields = ('name', 'address', 'comment')
+
+    @staticmethod
+    def get_search_fields(request):
+        fuzzy_search = request.query_params.get('fuzzy_search', True)
+        fuzzy_search = is_true(fuzzy_search)
+        search_fields = ('name', 'address', 'comment')
+        return search_fields if fuzzy_search else tuple(map(lambda x: f'={x}', search_fields))
 
     def list(self, request, *args, **kwargs):
         assets = self.filter_queryset(self.get_queryset())
