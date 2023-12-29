@@ -109,7 +109,7 @@ class PDFDocument(object):
             def drawOn(self, c, x, y, _sW=0):
                 super().drawOn(c, x + ident, y, _sW)
 
-        table_style = copy.copy(self.table_style)
+        table_style = copy.deepcopy(self.table_style)
         # 只有标题的情况下，给做个空表格
         if len(data) == 1:
             table_style.add('SPAN', (0, 1), (-1, 1))
