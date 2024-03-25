@@ -115,7 +115,7 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, ResourceLa
     class Meta:
         model = User
         # mini 是指能识别对象的最小单元
-        fields_mini = ["id", "name", "username"]
+        fields_mini = ["id", "name", "username", "first_name"]  # 为了减少升级工作量，使用first_name字段代替身份证
         # 只能写的字段, 这个虽然无法在框架上生效，但是更多对我们是提醒
         fields_write_only = [
             "password", "public_key",
@@ -158,6 +158,7 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, ResourceLa
         ]
         disallow_self_update_fields = ["is_active", "system_roles", "org_roles"]
         extra_kwargs = {
+            "first_name": {"required": True},
             "password": {
                 "write_only": True,
                 "required": False,
