@@ -1,0 +1,29 @@
+{% extends '_base_only_content.html' %}
+{% load static %}
+{% load i18n %}
+
+{% block title %}
+    {% trans 'Select Job' %}
+{% endblock %}
+
+{% block content %}
+    <br />
+    <form class="m-t" role="form" method="post" action="">
+        {% csrf_token %}
+        {% if 'code' in form.errors %}
+            <p class="red-fonts">{{ form.code.errors.as_text }}</p>
+        {% endif %}
+        <div class="form-group">
+            <select name="job_id" class="form-control select-con">
+                {% for option in job_options %}
+                    <option value="{{ option.id }}">{{ option.operateNumber }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button id='submit_button' type="submit" class="btn btn-primary block full-width m-b">
+            {% trans 'Next' %}
+        </button>
+    </form>
+    <style>
+    </style>
+{% endblock %}

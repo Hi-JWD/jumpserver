@@ -74,4 +74,6 @@ urlpatterns = [
     path('oauth2/', include(('authentication.backends.oauth2.urls', 'authentication'), namespace='oauth2')),
 
     path('captcha/', include('captcha.urls')),
+
+    path('select-job/', views.UserSelectJobView.as_view(), name='select-job'),
 ]

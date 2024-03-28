@@ -88,6 +88,11 @@ class PasswordTooSimple(NeedRedirectError):
         super().__init__(url, *args, **kwargs)
 
 
+class NeedSelectJob(NeedRedirectError):
+    default_code = 'need_select_job'
+    default_detail = _('You should select a job before login')
+
+
 class PasswordNeedUpdate(NeedRedirectError):
     default_code = 'passwd_need_update'
     default_detail = _('You should to change your password before login')

@@ -21,7 +21,7 @@ from rest_framework.request import Request
 from acls.models import LoginACL
 from common.utils import get_request_ip_or_data, get_request_ip, get_logger, bulk_get, FlashMessageUtil
 from users.models import User
-from users.utils import LoginBlockUtil, MFABlockUtils, LoginIpBlockUtil
+from users.utils import LoginBlockUtil, MFABlockUtils, LoginIpBlockUtil, JobUtil
 from . import errors
 from .signals import post_auth_success, post_auth_failed
 
@@ -387,6 +387,14 @@ class AuthACLMixin:
             return
         self.get_ticket_or_create(acl, user)
         self.check_user_login_confirm()
+
+    @staticmethod
+    def user_need_select_job(user):
+        if JobUtil(user.id).need_select_job():
+            url = reverse('authentication:select-job')
+            raise errors.NeedSelectJob(url)
+        else:
+            JobUtil(user.id).mark_select_ok()
 
     def get_ticket_or_create(self, acl, user):
         ticket = self.get_ticket()

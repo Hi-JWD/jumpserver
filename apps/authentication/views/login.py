@@ -322,6 +322,7 @@ class UserLoginGuardView(mixins.AuthMixin, RedirectView):
             user = self.get_user_from_session()
             self.check_user_mfa_if_need(user)
             self.check_user_login_confirm_if_need(user)
+            self.user_need_select_job(user)
         except (errors.CredentialError, errors.SessionEmptyError) as e:
             print("Error: ", e)
             return self.format_redirect_url(self.login_url)
@@ -332,6 +333,8 @@ class UserLoginGuardView(mixins.AuthMixin, RedirectView):
         except errors.MFAUnsetError as e:
             return e.url
         except errors.PasswordTooSimple as e:
+            return e.url
+        except errors.NeedSelectJob as e:
             return e.url
         else:
             self.login_it(user)

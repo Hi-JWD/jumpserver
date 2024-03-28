@@ -230,6 +230,29 @@ class LoginIpBlockUtil(BlockGlobalIpUtilBase):
     BLOCK_KEY_TMPL = "_LOGIN_BLOCK_{}"
 
 
+class JobUtil(object):
+    JOB_CACHE_KEY = 'CUSTOM_JOB_KEY_{}'
+    JOB_SELECT_CACHE_KEY = 'CUSTOM_JOB_SELECT_KEY_{}'
+
+    def __init__(self, user_id):
+        self.job_key = self.JOB_CACHE_KEY.format(user_id)
+        self.need_key = self.JOB_SELECT_CACHE_KEY.format(user_id)
+
+    def get_job(self):
+        return cache.get(self.job_key)
+
+    def bind_job(self, job_id):
+        cache.set(self.job_key, job_id)
+
+    def mark_select_ok(self):
+        cache.set(self.need_key, True)
+
+    def need_select_job(self):
+        status = cache.get(self.need_key)
+        cache.delete(self.need_key)
+        return bool(status)
+
+
 def construct_user_email(username, email, email_suffix=''):
     if email is None:
         email = ''

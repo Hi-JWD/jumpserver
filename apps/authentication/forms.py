@@ -57,6 +57,10 @@ class UserCheckOtpCodeForm(forms.Form):
     mfa_type = forms.CharField(label=_('MFA type'), max_length=128)
 
 
+class UserSelectJobForm(forms.Form):
+    job_id = forms.CharField(label=_('Job ID'), max_length=128, required=False)
+
+
 class CustomCaptchaTextInput(CaptchaTextInput):
     template_name = 'authentication/_captcha_field.html'
 

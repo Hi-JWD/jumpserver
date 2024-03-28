@@ -6,3 +6,4 @@ from .wecom import *
 from .dingtalk import *
 from .feishu import *
 from .slack import *
+from .login_job import *

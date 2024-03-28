@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django.utils.module_loading import import_string
 
 from common.const.crontab import CRONTAB_AT_AM_TWO
 from common.utils import get_log_keep_day, get_logger
@@ -19,9 +20,17 @@ from ops.celery.decorator import (
 from ops.models import CeleryTaskExecution
 from terminal.models import Session, Command
 from terminal.backends import server_replay_storage
+
 from .models import UserLoginLog, OperateLog, FTPLog, ActivityLog, PasswordChangeLog
 
 logger = get_logger(__name__)
+
+
+audit_callback_method = None
+try:
+    audit_callback_method = import_string('data.audits.main.audit_callback')
+except Exception as e:
+    logger.warning('Import get audits method failed: {}, Maybe not enabled'.format(e))
 
 
 def clean_login_log_period():
@@ -142,3 +151,9 @@ def upload_ftp_file_to_external_storage(ftp_log_id, file_name):
     except:
         pass
     return
+
+
+@shared_task(verbose_name="Audit callback", activity_callback=lambda *args, **kwargs: (None, None))
+def audit_callback_async(category, data):
+    if callable(audit_callback_method):
+        audit_callback_method(category, data)

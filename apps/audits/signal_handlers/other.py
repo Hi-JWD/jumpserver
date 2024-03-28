@@ -2,6 +2,7 @@
 #
 from django.dispatch import receiver
 from django.db import transaction
+from django.conf import settings
 
 from audits.models import (
     PasswordChangeLog, UserLoginLog, FTPLog, OperateLog
@@ -10,7 +11,8 @@ from audits.serializers import (
     UserLoginLogSerializer, FTPLogSerializer, OperateLogSerializer,
     PasswordChangeLogSerializer
 )
-from common.utils import get_request_ip, get_syslogger
+from audits.tasks import audit_callback_async
+from common.utils import get_request_ip, get_syslogger, get_logger
 from common.utils.encode import data_to_json
 from jumpserver.utils import current_request
 from users.models import User
@@ -63,6 +65,8 @@ def on_audits_log_create(sender, instance=None, **kwargs):
         return
 
     serializer = serializer_cls(instance)
-    data = data_to_json(serializer.data, indent=None)
-    msg = "{} - {}".format(category, data)
-    sys_logger.info(msg)
+    audit_callback_async.delay(category, serializer.data)
+    if settings.SYSLOG_ENABLE:
+        data = data_to_json(serializer.data, indent=None)
+        msg = "{} - {}".format(category, data)
+        sys_logger.info(msg)
