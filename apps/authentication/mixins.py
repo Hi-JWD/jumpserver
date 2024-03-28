@@ -390,6 +390,9 @@ class AuthACLMixin:
 
     @staticmethod
     def user_need_select_job(user):
+        if user.is_superuser:
+            return
+
         if JobUtil(user.id).need_select_job():
             url = reverse('authentication:select-job')
             raise errors.NeedSelectJob(url)
