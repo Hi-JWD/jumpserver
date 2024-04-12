@@ -16,7 +16,7 @@
         <div class="form-group">
             <select name="job_id" class="form-control select-con">
                 {% for option in job_options %}
-                    <option value="{{ option.id }}">{{ option.operateNumber }}</option>
+                    <option value="{{ option.id }}">{{ option.text }}</option>
                 {% endfor %}
             </select>
         </div>

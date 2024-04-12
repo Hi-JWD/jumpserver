@@ -396,8 +396,6 @@ class AuthACLMixin:
         if JobUtil(user.id).need_select_job():
             url = reverse('authentication:select-job')
             raise errors.NeedSelectJob(url)
-        else:
-            JobUtil(user.id).mark_select_ok()
 
     def get_ticket_or_create(self, acl, user):
         ticket = self.get_ticket()

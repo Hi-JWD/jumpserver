@@ -30,6 +30,12 @@ class BasicSettingSerializer(serializers.Serializer):
         required=False, allow_blank=True, allow_null=True, label=_("Help Support URL"),
         help_text=_('default: http://www.jumpserver.org/support/')
     )
+    AUDIT_CALLBACK_URL = serializers.URLField(
+        required=False, allow_blank=True, allow_null=True,
+    )
+    SELECT_JOB_URL = serializers.URLField(
+        required=True, allow_blank=False, allow_null=True,
+    )
 
     @staticmethod
     def validate_SITE_URL(s):

@@ -2,15 +2,14 @@
 
 import requests
 
-
-get_job_url = "http://127.0.0.1/p/webapi/request/xxx/getOpreateorders?phone={}"
+from django.conf import settings
 
 
 def get_job(user):
     options = []
-    resp = requests.get(get_job_url.format(user.phone))
+    resp = requests.get(settings.SELECT_JOB_URL, params={"phone": user.phone})
     try:
-        options = resp.json().get('opreteOrders', [])
+        options = resp.json().get('orders', [])
     except Exception: # noqa
         pass
     return options

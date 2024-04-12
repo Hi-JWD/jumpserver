@@ -243,12 +243,13 @@ class JobUtil(object):
 
     def bind_job(self, job_id):
         cache.set(self.job_key, job_id)
+        self.mark_select_ok()
 
     def mark_select_ok(self):
-        cache.set(self.need_key, True)
+        cache.set(self.need_key, False)
 
     def need_select_job(self):
-        status = cache.get(self.need_key)
+        status = cache.get(self.need_key, True)
         cache.delete(self.need_key)
         return bool(status)
 

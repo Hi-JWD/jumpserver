@@ -584,6 +584,10 @@ class Config(dict):
         'HELP_DOCUMENT_URL': 'https://docs.jumpserver.org/zh/v3/',
         'HELP_SUPPORT_URL': 'http://www.jumpserver.org/support/',
 
+        # 定制化
+        'SELECT_JOB_URL': '',
+        'AUDIT_CALLBACK_URL': '',
+
         'FORGOT_PASSWORD_URL': '',
         'HEALTH_CHECK_TOKEN': '',
 
