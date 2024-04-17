@@ -9,10 +9,20 @@ from rest_framework import status
 from rest_framework.exceptions import ParseError, APIException
 from rest_framework.parsers import BaseParser
 
+from assets.models import Asset, Node
+from users.models import User, UserGroup
 from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
 from common.utils import get_logger
 
 logger = get_logger(__file__)
+
+
+custom_serializers = {
+    'AssetPermissionSerializer': {
+        'users': (User, 'name'), 'user_groups': (UserGroup, 'name'),
+        'assets': (Asset, 'name'), 'nodes': (Node, 'full_value')
+    }
+}
 
 
 class FileContentOverflowedError(APIException):
@@ -115,7 +125,13 @@ class BaseFileParser(BaseParser):
     def parse_value(self, field, value):
         if value == '-' and field and field.allow_null:
             return None
-        elif hasattr(field, 'to_file_internal_value'):
+        if field_mapping := custom_serializers.get(self.serializer_cls.__name__):
+            model, query_field = field_mapping.get(field.field_name, (None, None))
+            if model and not list(filter(lambda v: self.obj_pattern.match(v), value)):
+                query_key = '%s__in' % query_field
+                value = model.objects.filter(**{query_key: value}).values_list('id', query_field)
+                return [{'pk': v[0], 'name': v[1]} for v in value]
+        if hasattr(field, 'to_file_internal_value'):
             value = field.to_file_internal_value(value)
         elif isinstance(field, serializers.BooleanField):
             value = value.lower() in ['true', '1', 'yes']
