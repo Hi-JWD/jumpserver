@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import uuid
@@ -5,13 +6,31 @@ import uuid
 import ansible_runner
 from django.conf import settings
 from django.utils._os import safe_join
+from django.utils.functional import LazyObject
 
 from .callback import DefaultCallback
+from .receptor import receptor_runner
 from ..utils import get_ansible_log_verbosity
+
+logger = logging.getLogger(__file__)
 
 
 class CommandInBlackListException(Exception):
     pass
+
+
+class AnsibleWrappedRunner(LazyObject):
+    def _setup(self):
+        self._wrapped = self.get_runner()
+
+    @staticmethod
+    def get_runner():
+        if settings.ANSIBLE_RECEPTOR_ENABLE and settings.ANSIBLE_RECEPTOR_SOCK_PATH:
+            return receptor_runner
+        return ansible_runner
+
+
+runner = AnsibleWrappedRunner()
 
 
 class AdHocRunner:
@@ -30,6 +49,8 @@ class AdHocRunner:
         self.extra_vars = extra_vars
         self.dry_run = dry_run
         self.timeout = timeout
+        # enable local connection
+        self.extra_vars.update({"LOCAL_CONNECTION_ENABLED": "1"})
 
     def check_module(self):
         if self.module not in self.cmd_modules_choices:
@@ -48,7 +69,7 @@ class AdHocRunner:
         if os.path.exists(private_env):
             shutil.rmtree(private_env)
 
-        ansible_runner.run(
+        runner.run(
             timeout=self.timeout if self.timeout > 0 else None,
             extravars=self.extra_vars,
             host_pattern=self.pattern,
@@ -66,6 +87,7 @@ class AdHocRunner:
 
 class PlaybookRunner:
     def __init__(self, inventory, playbook, project_dir='/tmp/', callback=None):
+
         self.id = uuid.uuid4()
         self.inventory = inventory
         self.playbook = playbook
@@ -75,13 +97,22 @@ class PlaybookRunner:
         self.cb = callback
         self.envs = {}
 
+    def copy_playbook(self):
+        entry = os.path.basename(self.playbook)
+        playbook_dir = os.path.dirname(self.playbook)
+        project_playbook_dir = os.path.join(self.project_dir, "project")
+        shutil.copytree(playbook_dir, project_playbook_dir, dirs_exist_ok=True)
+        self.playbook = entry
+
     def run(self, verbosity=0, **kwargs):
+        self.copy_playbook()
+
         verbosity = get_ansible_log_verbosity(verbosity)
         private_env = safe_join(self.project_dir, 'env')
         if os.path.exists(private_env):
             shutil.rmtree(private_env)
 
-        ansible_runner.run(
+        runner.run(
             private_data_dir=self.project_dir,
             inventory=self.inventory,
             playbook=self.playbook,
@@ -102,17 +133,19 @@ class SuperPlaybookRunner(PlaybookRunner):
 
 
 class UploadFileRunner:
-    def __init__(self, inventory, job_id, dest_path, callback=None):
+    def __init__(self, inventory, project_dir, job_id, dest_path, callback=None):
         self.id = uuid.uuid4()
         self.inventory = inventory
+        self.project_dir = project_dir
         self.cb = DefaultCallback()
-        upload_file_dir = safe_join(settings.DATA_DIR, 'job_upload_file')
+        upload_file_dir = safe_join(settings.SHARE_DIR, 'job_upload_file')
         self.src_paths = safe_join(upload_file_dir, str(job_id))
         self.dest_path = safe_join("/tmp", dest_path)
 
     def run(self, verbosity=0, **kwargs):
         verbosity = get_ansible_log_verbosity(verbosity)
-        ansible_runner.run(
+        runner.run(
+            private_data_dir=self.project_dir,
             host_pattern="*",
             inventory=self.inventory,
             module='copy',
