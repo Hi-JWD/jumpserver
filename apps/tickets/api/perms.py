@@ -28,6 +28,10 @@ class ApplyAssetsViewSet(OrgReadonlyModelViewSet, SuggestionMixin):
             queryset = self.get_assets()
         else:
             queryset = super().get_queryset()
+
+        exclude = self.request.query_params.get("exclude", '')
+        if exclude:
+            queryset = queryset.exclude(id__in=exclude.split(','))
         return queryset
 
     def get_assets(self, with_expired=False):

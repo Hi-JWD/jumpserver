@@ -8,6 +8,7 @@ from accounts import serializers
 from accounts.filters import AccountFilterSet
 from accounts.mixins import AccountRecordViewLogMixin
 from accounts.models import Account
+from accounts.const import AliasAccount
 from assets.models import Asset, Node
 from authentication.permissions import UserConfirmation, ConfirmType
 from common.api.mixin import ExtraFilterFieldsMixin
@@ -52,6 +53,25 @@ class AccountViewSet(OrgBulkModelViewSet):
         accounts = self.filter_queryset(accounts)
         serializer = serializers.AccountSerializer(accounts, many=True)
         return Response(data=serializer.data)
+
+    @action(
+        methods=['get'], detail=False, url_path='username-suggestions',
+        permission_classes=[IsValidUser]
+    )
+    def get_username_suggestions(self, request, *args, **kwargs):
+        asset_ids = request.query_params.get('assets', '')
+        username = request.query_params.get('username', '')
+
+        accounts = Account.objects.all()
+        if asset_ids:
+            accounts = accounts.filter(asset_id__in=list(set(asset_ids.split(','))))
+
+        if username:
+            accounts = accounts.filter(username__icontains=username)
+        usernames = list(accounts.values_list('username', flat=True).distinct()[:10])
+        data = [{'id': u, 'name': u} for u in usernames]
+        data += [{'id': AliasAccount.INPUT.value, 'name': AliasAccount.INPUT.label}]
+        return Response(data=data)
 
     @action(
         methods=['post'], detail=False, url_path='username-suggestions',

@@ -8,6 +8,7 @@ from tickets.utils import (
     send_ticket_processed_mail_to_applicant,
     send_ticket_applied_mail_to_assignees
 )
+from .service import ServiceClient
 
 logger = get_logger(__name__)
 
@@ -16,6 +17,7 @@ class BaseHandler:
 
     def __init__(self, ticket):
         self.ticket = ticket
+        self.client = ServiceClient(ticket)
 
     def on_change_state(self, state):
         self._create_state_change_comment(state)
@@ -23,6 +25,7 @@ class BaseHandler:
         return handler()
 
     def _on_pending(self):
+        self.client.request_ticket()
         self._send_applied_mail_to_assignees()
 
     def on_step_state_change(self, step, state):
