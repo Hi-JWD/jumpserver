@@ -55,32 +55,19 @@ class AccountViewSet(OrgBulkModelViewSet):
         return Response(data=serializer.data)
 
     @action(
-        methods=['get'], detail=False, url_path='username-suggestions',
-        permission_classes=[IsValidUser]
-    )
-    def get_username_suggestions(self, request, *args, **kwargs):
-        asset_ids = request.query_params.get('assets', '')
-        username = request.query_params.get('username', '')
-
-        accounts = Account.objects.all()
-        if asset_ids:
-            accounts = accounts.filter(asset_id__in=list(set(asset_ids.split(','))))
-
-        if username:
-            accounts = accounts.filter(username__icontains=username)
-        usernames = list(accounts.values_list('username', flat=True).distinct()[:10])
-        data = [{'id': u, 'name': u} for u in usernames]
-        data += [{'id': AliasAccount.INPUT.value, 'name': AliasAccount.INPUT.label}]
-        return Response(data=data)
-
-    @action(
-        methods=['post'], detail=False, url_path='username-suggestions',
+        methods=['get', 'post'], detail=False, url_path='username-suggestions',
         permission_classes=[IsValidUser]
     )
     def username_suggestions(self, request, *args, **kwargs):
         asset_ids = request.data.get('assets', [])
         node_ids = request.data.get('nodes', [])
         username = request.data.get('username', '')
+
+        asset_ids_g = request.query_params.get('assets', '')
+        username_g = request.query_params.get('username', '')
+        username = username or username_g
+        if asset_ids_g:
+            asset_ids = asset_ids_g.split(',')
 
         accounts = Account.objects.all()
         if node_ids:
@@ -94,10 +81,9 @@ class AccountViewSet(OrgBulkModelViewSet):
         if username:
             accounts = accounts.filter(username__icontains=username)
         usernames = list(accounts.values_list('username', flat=True).distinct()[:10])
-        usernames.sort()
-        common = [i for i in usernames if i in usernames if i.lower() in ['root', 'admin', 'administrator']]
-        others = [i for i in usernames if i not in common]
-        usernames = common + others
+        if asset_ids_g:
+            usernames = [{'id': u, 'name': u} for u in usernames]
+            usernames += [{'id': AliasAccount.INPUT.value, 'name': AliasAccount.INPUT.label}]
         return Response(data=usernames)
 
     @action(methods=['patch'], detail=False, url_path='clear-secret')
