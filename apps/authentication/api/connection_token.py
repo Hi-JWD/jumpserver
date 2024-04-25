@@ -26,6 +26,7 @@ from orgs.utils import tmp_to_org
 from perms.models import ActionChoices
 from terminal.connect_methods import NativeClient, ConnectMethodUtil
 from terminal.models import EndpointRule, Endpoint
+from tickets.handlers.service import ServiceAclClient
 from users.const import FileNameConflictResolution
 from users.const import RDPSmartSize, RDPColorQuality
 from users.models import Preference
@@ -355,8 +356,9 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         asset = data.get('asset')
         account_name = data.get('account')
         protocol = data.get('protocol')
+        valid_period = data.pop('valid_period')
         self.input_username = self.get_input_username(data)
-        _data = self._validate(user, asset, account_name, protocol)
+        _data = self._validate(user, asset, account_name, protocol, valid_period)
         data.update(_data)
         return serializer
 
@@ -369,7 +371,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
             setattr(token, k, v)
         return token
 
-    def _validate(self, user, asset, account_name, protocol):
+    def _validate(self, user, asset, account_name, protocol, valid_period=None):
         data = dict()
         data['org_id'] = asset.org_id
         data['user'] = user
@@ -385,7 +387,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
         if account.username != AliasAccount.INPUT:
             data['input_username'] = ''
 
-        ticket = self._validate_acl(user, asset, account)
+        ticket = self._validate_acl(user, asset, account, valid_period)
         if ticket:
             data['from_ticket'] = ticket
             data['is_active'] = False
@@ -417,7 +419,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
                 after=after, object_name=object_name
             )
 
-    def _validate_acl(self, user, asset, account):
+    def _validate_acl(self, user, asset, account, valid_period):
         from acls.models import LoginAssetACL
         kwargs = {'user': user, 'asset': asset, 'account': account}
         if account.username == AliasAccount.INPUT:
@@ -435,13 +437,18 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
             msg = _('ACL action is reject: {}({})'.format(acl.name, acl.id))
             raise JMSException(code='acl_reject', detail=msg)
         if acl.is_action(acl.ActionChoices.review):
+            name = self.input_username or account.username
+            if ServiceAclClient(acl.id, user.username, asset.id, name).check_release():
+                return
+
             if not self.request.query_params.get('create_ticket'):
                 msg = _('ACL action is review')
                 raise JMSException(code='acl_review', detail=msg)
             self._record_operate_log(acl, asset)
             ticket = LoginAssetACL.create_login_asset_review_ticket(
                 user=user, asset=asset, account_username=self.input_username,
-                assignees=acl.reviewers.all(), org_id=asset.org_id
+                assignees=acl.reviewers.all(), org_id=asset.org_id,
+                valid_period=valid_period, acl_id=acl.id
             )
             return ticket
         if acl.is_action(acl.ActionChoices.notice):

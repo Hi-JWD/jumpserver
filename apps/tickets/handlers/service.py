@@ -1,3 +1,5 @@
+from django.core.cache import cache
+
 from tickets.const import TicketType
 
 
@@ -39,6 +41,7 @@ class ServiceClient(object):
             })
         elif ticket.type == TicketType.login_asset_confirm:
             info.update({
+                'valid_period': ticket.meta.get('valid_period'),
                 'apply_login_asset': ticket.apply_login_asset,
                 'apply_login_user': ticket.apply_login_user,
             })
@@ -46,3 +49,18 @@ class ServiceClient(object):
 
     def request_ticket(self):
         print(self.ticket_info)
+
+
+class ServiceAclClient(object):
+    def __init__(self, acl_id, username, asset, account):
+        self.cache_key = f'ACL_{acl_id}_{username}_{asset}_{account}'
+
+    def decided_to_release(self, valid_period):
+        try:
+            timeout = int(valid_period) * 60
+            cache.set(self.cache_key, True, timeout)
+        except Exception: # noqa
+            pass
+
+    def check_release(self):
+        return cache.get(self.cache_key, False)

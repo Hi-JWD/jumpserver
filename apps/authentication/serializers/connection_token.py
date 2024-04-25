@@ -19,6 +19,7 @@ class ConnectionTokenSerializer(CommonModelSerializer):
     )
     from_ticket_info = serializers.SerializerMethodField(label=_("Ticket info"))
     actions = ActionChoicesField(read_only=True, label=_("Actions"))
+    valid_period = serializers.IntegerField(write_only=True, default=30, label=_("Time"))
 
     class Meta:
         model = ConnectionToken
@@ -28,7 +29,7 @@ class ConnectionTokenSerializer(CommonModelSerializer):
             'connect_method', 'connect_options', 'protocol', 'actions',
             'is_active', 'is_reusable', 'from_ticket', 'from_ticket_info',
             'date_expired', 'date_created', 'date_updated', 'created_by',
-            'updated_by', 'org_id', 'org_name',
+            'updated_by', 'org_id', 'org_name', 'valid_period',
         ]
         read_only_fields = [
             # 普通 Token 不支持指定 user
