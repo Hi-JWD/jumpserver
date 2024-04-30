@@ -80,7 +80,8 @@ class HostTypes(BaseType):
                 {
                     'name': GATEWAY_NAME,
                     'domain_enabled': True,
-                }
+                },
+                {'name': 'Worker'},
             ],
             cls.UNIX: [
                 {'name': 'Unix'},
