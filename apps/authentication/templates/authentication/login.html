@@ -433,6 +433,10 @@
         var password = $('#password').val(); //明文密码
         var passwordEncrypted = encryptPassword(password)
         $('#password-hidden').val(passwordEncrypted); //返回给密码输入input
+        if(app.isSupportFaceLogin){
+            app.beforeLogin();
+            return;
+        }
         $('#login-form').submit(); //post提交
     }
     function checkHealth() {
