@@ -54,7 +54,7 @@ class UserCheckOtpCodeForm(forms.Form):
 
 
 class UserSelectJobForm(forms.Form):
-    job_id = forms.CharField(label=_('Job ID'), max_length=128, required=False)
+    job_id = forms.CharField(label=_('Job ID'), max_length=128)
 
 
 class CustomCaptchaTextInput(CaptchaTextInput):

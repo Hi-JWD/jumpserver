@@ -4,6 +4,7 @@
 from __future__ import unicode_literals
 from django.views.generic.edit import FormView
 from django.utils.module_loading import import_string
+from django.utils.translation import gettext_lazy as _
 
 from users.utils import JobUtil
 from common.utils import get_logger
@@ -34,19 +35,25 @@ class UserSelectJobView(mixins.CommonMixin, FormView):
             return redirect_to_guard_view('session_empty')
 
     def form_valid(self, form):
-        job_id = form.cleaned_data.get('job_id')
+        job_id = form.cleaned_data['job_id']
         try:
             user = self.get_user_from_session()
-            JobUtil(user.id).bind_job(job_id)
+            job_options = self.request.session.get('job_options', [])
+            if list(filter(lambda j: j['id'] == job_id, job_options)):
+                JobUtil(user.id).bind_job(job_id)
+            else:
+                form.add_error('job_id', _('Invalid choice: {}').format(job_id))
+                return super().form_invalid(form)
         except errors.SessionEmptyError:
             return redirect_to_guard_view('session_empty')
         return redirect_to_guard_view('select_job_ok')
 
     def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
         options = []
         user = self.get_user_from_session()
         if callable(get_job_method):
             options = get_job_method(user)
-        kwargs.update({'job_options': options})
-        return kwargs
-
+        context.update({'job_options': options})
+        self.request.session['job_options'] = options
+        return context

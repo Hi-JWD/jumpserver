@@ -10,8 +10,8 @@
     <br />
     <form class="m-t" role="form" method="post" action="">
         {% csrf_token %}
-        {% if 'code' in form.errors %}
-            <p class="red-fonts">{{ form.code.errors.as_text }}</p>
+        {% if 'job_id' in form.errors %}
+            <p class="red-fonts">{{ form.job_id.errors.as_text }}</p>
         {% endif %}
         <div class="form-group">
             <select name="job_id" class="form-control select-con">
@@ -26,4 +26,23 @@
     </form>
     <style>
     </style>
+        <script>
+        $(document).ready(function() {
+            var jobSelect = $('select[name="job_id"]');
+            var submitButton = $('#submit_button');
+            if (jobSelect.val()) {
+                submitButton.prop('disabled', false);
+            } else {
+                submitButton.prop('disabled', true);
+            }
+
+            jobSelect.on('change', function() {
+                if ($(this).val()) {
+                    submitButton.prop('disabled', false);
+                } else {
+                    submitButton.prop('disabled', true);
+                }
+            });
+        });
+    </script>
 {% endblock %}
