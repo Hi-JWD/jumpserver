@@ -40,6 +40,7 @@ APPS_DIR = os.path.join(PROJECT_DIR, 'apps')
 DATA_DIR = os.path.join(PROJECT_DIR, 'data')
 SHARE_DIR = os.path.join(DATA_DIR, 'share')
 ANSIBLE_DIR = os.path.join(SHARE_DIR, 'ansible')
+COMMAND_DIR = os.path.join(SHARE_DIR, 'command')
 CERTS_DIR = os.path.join(DATA_DIR, 'certs')
 
 # Quick-start development settings - unsuitable for production
@@ -130,6 +131,7 @@ INSTALLED_APPS = [
     'settings.apps.SettingsConfig',
     'terminal.apps.TerminalConfig',
     'audits.apps.AuditsConfig',
+    'behemoth.apps.BehemothConfig',
     'authentication.apps.AuthenticationConfig',  # authentication
     'applications.apps.ApplicationsConfig',
     'tickets.apps.TicketsConfig',
