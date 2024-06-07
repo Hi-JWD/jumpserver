@@ -376,12 +376,9 @@ class Ticket(StatusMixin, JMSBaseModel):
 
         ticket = Ticket.objects.all().select_for_update().filter(
             serial_num__startswith=date_prefix
-        ).order_by('-date_created').first()
+        ).order_by('-serial_num').first()
 
-        last_num = 0
-        if ticket:
-            last_num = ticket.serial_num[8:]
-            last_num = int(last_num)
+        last_num = int(ticket.serial_num[8:]) if ticket else 0
         num = '%04d' % (last_num + 1)
         return '{}{}'.format(date_prefix, num)
 

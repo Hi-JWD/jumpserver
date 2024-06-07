@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 import inspect
+import os
 import time
 from functools import partial
 from typing import Callable
@@ -22,6 +23,7 @@ from acls.models import LoginACL
 from common.utils import get_request_ip_or_data, get_request_ip, get_logger, bulk_get, FlashMessageUtil
 from users.models import User
 from users.utils import LoginBlockUtil, MFABlockUtils, LoginIpBlockUtil, JobUtil
+from rbac.models import RoleBinding
 from . import errors
 from .signals import post_auth_success, post_auth_failed
 
@@ -389,7 +391,8 @@ class AuthACLMixin:
 
     @staticmethod
     def user_need_select_job(user):
-        if user.is_superuser:
+        job_role = os.environ.get('NEED_SELECT_JOB_NAME', 'JOB_ROLE')
+        if not RoleBinding.objects.filter(user=user, role__name__in=[job_role]).exists():
             return
 
         if JobUtil(user.id).need_select_job():
