@@ -17,6 +17,7 @@ from common.exceptions import JMSException
 from jumpserver.settings import get_file_md5
 from orgs.mixins.models import JMSOrgBaseModel
 from orgs.mixins.models import OrgManager
+from users.models import User
 from .const import TaskStatus, CommandStatus, PlanStrategy, PlanCategory
 from .utils import encrypt_json_file
 
@@ -53,7 +54,7 @@ class Worker(Host):
         self._local_script_file: str = os.path.join(
             settings.APPS_DIR, 'libs', 'exec_scripts', 'worker'
         )
-        self._remote_script_file: str = '/tmp/behemoth/script/worker'
+        self._remote_script_path = ''
 
     def save(self, *args, **kwargs):
         self.platform = self.default_platform()
@@ -104,9 +105,14 @@ class Worker(Host):
             logger.error(f'Task worker test ssh connect failed: {error}')
         return connectivity
 
-    def _scp(self, local_path: str, remote_path: str) -> None:
+    def _scp(self, local_path: str, remote_path: str, mode=0o644) -> None:
         sftp = self._ssh_client.open_sftp()
+        try:
+            sftp.remove(remote_path)
+        except IOError:
+            pass
         sftp.put(local_path, remote_path)
+        sftp.chmod(remote_path, mode)
         sftp.close()
 
     def __check(self):
@@ -114,25 +120,40 @@ class Worker(Host):
             raise JMSException(_('The worker[%s] ssh is not connected') % self)
 
     def __ensure_script_exist(self) -> None:
-        remote_path = os.path.join('/tmp', 'behemoth', 'behemoth_cli')
+        platform_named = {
+            'mac': ('jms_cli_mac', '/tmp/behemoth'),
+            'linux': ('jms_cli_linux', '/tmp/behemoth'),
+            'windows': ('jms_cli_windows.exe', r'C:\Windows\Temp'),
+        }
+        filename, remote_dir = platform_named.get(self.type, ('', ''))
+        if not filename:
+            raise JMSException(_('The worker[%s](%s) type error') % (self, self.type))
+
+        remote_path = os.path.join(remote_dir, filename)
         local_path = os.path.join(
-            settings.APP_DIR, 'behemoth', 'libs', 'go_script', 'behemoth_cli'
+            settings.APPS_DIR, 'behemoth', 'libs', 'go_script', filename
         )
         command = f'md5sum {remote_path}'
         __, stdout, __ = self._ssh_client.exec_command(command)
-        if get_file_md5(local_path) == stdout.read().decode().split()[0].strip():
+        stdout = stdout.read().decode().split()
+        local_exist = os.path.exists(local_path)
+
+        if local_exist and len(stdout) > 0 and get_file_md5(local_path) == stdout[0].strip():
             return
 
+        self._remote_script_path = remote_path
         self._ssh_client.exec_command(f'mkdir -p {os.path.dirname(remote_path)}')
-        self._scp(local_path, remote_path)
+        self._scp(local_path, self._remote_script_path)
 
     def __process_commands_file(
             self, remote_commands_file: str, local_commands_file: str, token: str, **kwargs: dict
     ) -> None:
-        encrypt_commands_file = encrypt_json_file(local_commands_file, token[:-32])
+        encrypted_data = kwargs.get('encrypted_data', False)
+        if encrypted_data:
+            local_commands_file = encrypt_json_file(local_commands_file, token[:32])
 
         self._ssh_client.exec_command(f'mkdir -p {os.path.dirname(remote_commands_file)}')
-        self._scp(encrypt_commands_file, remote_commands_file)
+        self._scp(local_commands_file, remote_commands_file, mode=0o400)
 
     def __process_file(self, **kwargs: dict) -> None:
         self.__ensure_script_exist()
@@ -142,21 +163,18 @@ class Worker(Host):
         # 清理远端文件
         command = f'rm -f {remote_commands_file}'
         __, stdout, __ = self._ssh_client.exec_command(command)
-        if stdout.channel.recv_exit_status() == 0:
+        if stdout.channel.recv_exit_status() == 0: # TODO 这里要改一下，状态码判断有问题
             logger.warning(f'Remote file({remote_commands_file}) deletion failed')
         # 清理本地文件
         os.remove(local_commands_file)
 
     def __execute_cmd(self, **kwargs: dict) -> None:
-        data = {
-            'host': kwargs['host'], 'token': kwargs['token'],
-            'cmd_filepath': kwargs['remote_commands_file'],
-            'cmd_type': kwargs['cmd_type'], 'command': kwargs['command'],
-            'command_args': kwargs['command_args']
-        }
-        encoded_data = base64.b64encode(json.dumps(data).encode()).decode()
+        revert_key = {'remote_commands_file': 'cmd_filepath'}
+        params = {revert_key.get(k, k): v for k, v in kwargs.items()}
+        encoded_data = base64.b64encode(json.dumps(params).encode()).decode()
+        print(self._remote_script_path, '--command', encoded_data, sep=' ')
         self._ssh_client.exec_command(
-            f'{self._remote_script_file} --command {encoded_data}'
+            f'{self._remote_script_path} --command {encoded_data}'
         )
 
     def __execute(self, **kwargs: dict) -> None:
@@ -166,7 +184,7 @@ class Worker(Host):
     def run(self, run_params: dict) -> None:
         self.__check()
         self.__execute(**run_params)
-        self.__clear(**run_params)
+        # self.__clear(**run_params) # TODO 后续放开
 
 
 class Command(JMSOrgBaseModel):
@@ -249,6 +267,17 @@ class Execution(JMSOrgBaseModel):
     class Meta:
         verbose_name = _('Task')
         ordering = ['-date_created']
+
+    @property
+    def user(self):
+        err = _('User not found')
+        if not self.user_id:
+            raise JMSException(err)
+
+        u = User.objects.filter(id=self.user_id).first()
+        if not u:
+            raise JMSException(err)
+        return u
 
     def get_commands(self):
         return Command.objects.filter(execution_id=self.id)

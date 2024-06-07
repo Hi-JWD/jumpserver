@@ -192,7 +192,7 @@ type Cmd struct {
 
 type Auth struct {
 	Address  string `json:"address"`
-	Port     string `json:"port"`
+	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	DBName   string `json:"db_name"`
@@ -204,12 +204,14 @@ type CmdOptions struct {
 	TaskID      string   `json:"task_id"`
 	Host        string   `json:"host"`
 	Token       string   `json:"token"`
+	OrgId       string   `json:"org_id"`
 	Script      string   `json:"script"`
 	ScriptArgs  []string `json:"script_args"`
 	Auth        Auth     `json:"auth"`
 	CmdType     string   `json:"cmd_type"`
 	CmdFilepath string   `json:"cmd_filepath"`
 	CmdSet      []Cmd    `json:"command_set"`
+	Encrypted   bool     `json:"encrypted_data"`
 }
 
 func (co *CmdOptions) ValidCmdType() bool {
@@ -222,19 +224,10 @@ func (co *CmdOptions) ValidCmdType() bool {
 	return false
 }
 
-func (co *CmdOptions) aesCBCDecrypt() ([]byte, error) {
-	block, err := aes.NewCipher([]byte(co.Token[len(co.Token)-32:]))
+func (co *CmdOptions) aesCBCDecrypt(ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher([]byte(co.Token[:32]))
 	if err != nil {
 		return nil, err
-	}
-
-	if _, err = os.Stat(co.CmdFilepath); err != nil {
-		return nil, fmt.Errorf("命令文件不存在: %s", err)
-	}
-
-	ciphertext, err := os.ReadFile(co.CmdFilepath)
-	if err != nil {
-		return nil, fmt.Errorf("读取命令文件内容失败: %s", err)
 	}
 
 	padding := len(ciphertext) % aes.BlockSize
@@ -249,11 +242,20 @@ func (co *CmdOptions) aesCBCDecrypt() ([]byte, error) {
 }
 
 func (co *CmdOptions) ParseCmdFile() error {
-	plaintext, err := co.aesCBCDecrypt()
-	if err != nil {
-		return err
+	if _, err := os.Stat(co.CmdFilepath); err != nil {
+		return fmt.Errorf("命令文件不存在: %s", err)
 	}
-	err = json.Unmarshal(plaintext, &co)
+
+	text, err := os.ReadFile(co.CmdFilepath)
+	if err != nil {
+		return fmt.Errorf("读取命令文件内容失败: %s", err)
+	}
+	if co.Encrypted {
+		if text, err = co.aesCBCDecrypt(text); err != nil {
+			return err
+		}
+	}
+	err = json.Unmarshal(text, &co)
 	if err != nil {
 		return err
 	}
@@ -283,13 +285,15 @@ func (co *CmdOptions) Valid() error {
 type BehemothClient struct {
 	host  string
 	token string
+	orgId string
 
 	client *http.Client
 }
 
-func NewBehemothClient(host, token string) *BehemothClient {
+func NewBehemothClient(host, token, orgId string) *BehemothClient {
 	return &BehemothClient{
-		host: host, token: token, client: &http.Client{},
+		host: host, token: token, orgId: orgId,
+		client: &http.Client{},
 	}
 }
 
@@ -319,7 +323,8 @@ func (b *BehemothClient) Post(url string, data map[string]interface{}) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Add("Authorization", b.token)
+	request.Header.Add("Authorization", "Bearer "+b.token)
+	request.Header.Add("X-JMS-ORG", b.orgId)
 	resp, err := b.client.Do(request)
 	if err != nil {
 		return nil, err
@@ -341,17 +346,13 @@ func (b *BehemothClient) HealthFeedback(taskID string) {
 	data := make(map[string]interface{})
 	data["action"] = "health"
 
-	url := fmt.Sprintf("/api/plans/tasks/%s/", taskID)
+	url := fmt.Sprintf("/api/plans/executions/%s/", taskID)
 	for i := 0; i < RetryTime; i++ {
 		_, err = b.Post(url, data)
 		if err == nil {
 			break
 		}
 		time.Sleep(10 * time.Second)
-	}
-	if err != nil {
-		logger := GetLogger()
-		logger.Fatalf("Health feedback failed: %s", err)
 	}
 }
 
@@ -403,17 +404,14 @@ func (b *BehemothClient) CommandCallback(
 	return &response, nil
 }
 
-func GetLogger() *log.Logger {
+func GetLogger(taskId string) *log.Logger {
 	_, filename, _, _ := runtime.Caller(0)
 	scriptDir := filepath.Dir(filename)
-	logFile := filepath.Join(scriptDir, "bs.log")
+	logFile := filepath.Join(scriptDir, fmt.Sprintf("%v-bs.log", taskId))
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Printf("error opening file: %v", err)
 	}
-	defer func(f *os.File) {
-		_ = f.Close()
-	}(f)
 	return log.New(f, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
@@ -424,10 +422,11 @@ func main() {
 	flag.Parse()
 	if err := opts.Valid(); err != nil {
 		fmt.Printf("参数校验错误: %v\n", err)
+		return
 	}
 
-	logger := GetLogger()
-	bClient := NewBehemothClient(opts.Host, opts.Token)
+	logger := GetLogger(opts.TaskID)
+	bClient := NewBehemothClient(opts.Host, opts.Token, opts.OrgId)
 
 	if err := bClient.OperateTask(opts.TaskID, "start"); err != nil {
 		logger.Fatalf("Task launch failed: %v\n", err)

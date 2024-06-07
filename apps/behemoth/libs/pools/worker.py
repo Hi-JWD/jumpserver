@@ -109,13 +109,10 @@ class WorkerPool(object):
         return filepath
 
     def __build_params(self, execution: Execution) -> dict:
-        payload: dict = {
-            'type': 'task', 'id': str(execution.id), 'sub': execution.user_id
-        }
         command_filepath: str = f'{execution.id}.bs'
         local_cmds_file = self.__generate_command_file(execution)
         remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
-        jwt_token = jwt.encode(payload, settings.SECRET_KEY, 'HS256')
+        token, __ = execution.user.create_bearer_token()
         if execution.asset.type == DatabaseTypes.MYSQL:
             cmd_type = script = 'mysql'
             auth = {
@@ -130,8 +127,9 @@ class WorkerPool(object):
             auth = {}
         params: dict = {
             'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
-            'auth': auth, 'token': jwt_token, 'task_id': execution.id,
-            'remote_commands_file': remote_cmds_file, 'local_commands_file': local_cmds_file,
+            'auth': auth, 'token': str(token), 'task_id': str(execution.id),
+            'encrypted_data': False, 'remote_commands_file': remote_cmds_file,
+            'local_commands_file': local_cmds_file, 'org_id': str(execution.org_id)
         }
         return params
 
