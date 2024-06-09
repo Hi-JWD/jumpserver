@@ -42,12 +42,20 @@ class CommandStore(ES):
 
     @staticmethod
     def handler_time_field(data):
-        timestamp__gte = data.get('timestamp__gte')
-        timestamp__lte = data.get('timestamp__lte')
-        timestamp_range = {}
+        without_timestamp = data.pop('without_timestamp', False)
+        timestamp_range = {'gte': 0, 'lte': 0}
+        if not without_timestamp:
+            timestamp__gte = data.get('timestamp__gte')
+            timestamp__lte = data.get('timestamp__lte')
 
-        if timestamp__gte:
-            timestamp_range['gte'] = timestamp__gte
-        if timestamp__lte:
-            timestamp_range['lte'] = timestamp__lte
+            if timestamp__gte:
+                timestamp_range['gte'] = timestamp__gte
+            if timestamp__lte:
+                timestamp_range['lte'] = timestamp__lte
+
         return 'timestamp', timestamp_range
+
+    def filter(self, query: dict, from_=None, size=None, sort=None):
+        data = super().filter(query, from_, size, sort)
+        # TODO 这里构造成可以接着first的对象
+        return data

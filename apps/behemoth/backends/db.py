@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.db.models import Manager
 
 from common.utils.common import pretty_string, get_logger
-from ..models import Command, Instruction
+from behemoth.models import Command, Instruction
 
 
 logger = get_logger(__name__)
@@ -25,18 +25,20 @@ class BaseStore(object):
     @staticmethod
     def make_filter_kwargs(date_from=None, date_to=None, **query):
         filter_kwargs = {}
-        date_from_default = timezone.now() - datetime.timedelta(days=7)
-        date_to_default = timezone.now()
+        without_timestamp = query.pop('without_timestamp', False)
+        if not without_timestamp:
+            date_from_default = timezone.now() - datetime.timedelta(days=7)
+            date_to_default = timezone.now()
 
-        date_from = date_from or date_from_default
-        date_to = date_to or date_to_default
-        if isinstance(date_from, datetime.datetime):
-            date_from = date_from.timestamp()
-        filter_kwargs['timestamp__gte'] = int(date_from)
+            date_from = date_from or date_from_default
+            date_to = date_to or date_to_default
+            if isinstance(date_from, datetime.datetime):
+                date_from = date_from.timestamp()
+            filter_kwargs['timestamp__gte'] = int(date_from)
 
-        if isinstance(date_to, datetime.datetime):
-            date_to = date_to.timestamp()
-        filter_kwargs['timestamp__lte'] = int(date_to)
+            if isinstance(date_to, datetime.datetime):
+                date_to = date_to.timestamp()
+            filter_kwargs['timestamp__lte'] = int(date_to)
 
         key_reverse = {'input': 'input_icontains', 'output': 'output_icontains'}
         for key, value in query.items():

@@ -14,7 +14,7 @@ router.register(r'plans', api.PlanViewSet, 'plan')
 router.register(r'iterations', api.IterationViewSet, 'iteration')
 
 urlpatterns = [
-    path('executions/<uuid:execution_id>/', api.ExecutionAPIView.as_view(), name='execution'),
+    path('executions/<uuid:pk>/', api.ExecutionAPIView.as_view(), name='execution'),
 ]
 
 urlpatterns += router.urls

@@ -7,14 +7,14 @@ class TaskStatus(models.TextChoices):
     executing = 'executing'
     pause = 'pause'
     success = 'success'
-    failure = 'failure'
+    failed = 'failed'
 
 
 class CommandStatus(models.TextChoices):
     waiting = 'waiting'
     executing = 'executing'
     success = 'success'
-    failure = 'failure'
+    failed = 'failed'
 
 
 class PlanStrategy(models.TextChoices):

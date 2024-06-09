@@ -27,6 +27,9 @@ import (
 const (
 	MySQLPrefix = "mysql> "
 	RetryTime   = 3
+	TaskStart   = "executing"
+	TaskFailed  = "failed"
+	TaskSuccess = "success"
 )
 
 type LocalCommand struct {
@@ -282,28 +285,29 @@ func (co *CmdOptions) Valid() error {
 	return nil
 }
 
-type BehemothClient struct {
+type JumpServerClient struct {
 	host  string
 	token string
 	orgId string
 
 	client *http.Client
+	logger *log.Logger
 }
 
-func NewBehemothClient(host, token, orgId string) *BehemothClient {
-	return &BehemothClient{
+func NewJMSClient(host, token, orgId string, logger *log.Logger) *JumpServerClient {
+	return &JumpServerClient{
 		host: host, token: token, orgId: orgId,
-		client: &http.Client{},
+		logger: logger, client: &http.Client{},
 	}
 }
 
-func (b *BehemothClient) Get(url string) ([]byte, error) {
-	request, err := http.NewRequest("GET", b.host+url, nil)
+func (c *JumpServerClient) Get(url string) ([]byte, error) {
+	request, err := http.NewRequest("GET", c.host+url, nil)
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Add("Authorization", b.token)
-	resp, err := b.client.Do(request)
+	request.Header.Add("Authorization", c.token)
+	resp, err := c.client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -315,68 +319,69 @@ func (b *BehemothClient) Get(url string) ([]byte, error) {
 	return body, nil
 }
 
-func (b *BehemothClient) Post(url string, data map[string]interface{}) ([]byte, error) {
+func (c *JumpServerClient) Post(url string, data map[string]interface{}) (*http.Response, error) {
 	byteData, _ := json.Marshal(data)
 	request, err := http.NewRequest(
-		"POST", b.host+url, bytes.NewReader(byteData),
+		"POST", c.host+url, bytes.NewBuffer(byteData),
 	)
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Add("Authorization", "Bearer "+b.token)
-	request.Header.Add("X-JMS-ORG", b.orgId)
-	resp, err := b.client.Do(request)
+	request.Header.Add("Authorization", "Bearer "+c.token)
+	request.Header.Add("X-JMS-ORG", c.orgId)
+	request.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(request)
 	if err != nil {
 		return nil, err
 	}
-	defer func(body io.ReadCloser) {
-		_ = body.Close()
-	}(resp.Body)
-
-	body, _ := io.ReadAll(resp.Body)
-	return body, nil
+	return resp, nil
 }
 
 type TaskResponse struct {
-	Status bool `json:"status"`
+	Status bool   `json:"status"`
+	Detail string `json:"detail`
 }
 
-func (b *BehemothClient) HealthFeedback(taskID string) {
+func (c *JumpServerClient) HealthFeedback(taskID string) {
 	var err error
 	data := make(map[string]interface{})
 	data["action"] = "health"
 
-	url := fmt.Sprintf("/api/plans/executions/%s/", taskID)
+	url := fmt.Sprintf("/api/plans/executions/%s/?type=health", taskID)
 	for i := 0; i < RetryTime; i++ {
-		_, err = b.Post(url, data)
+		_, err = c.Post(url, data)
 		if err == nil {
 			break
 		}
+		c.logger.Printf("Task[%s] running health.", taskID)
 		time.Sleep(10 * time.Second)
 	}
 }
 
-func (b *BehemothClient) OperateTask(taskID, action string) error {
+func (c *JumpServerClient) OperateTask(taskID, status string) error {
 	data := make(map[string]interface{})
-	data["action"] = action
+	data["status"] = status
 
-	bodyBytes, err := b.Post(fmt.Sprintf("/api/plans/tasks/%s/", taskID), data)
+	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=status", taskID)
+	resp, err := c.Post(url, data)
 	if err != nil {
 		return err
 	}
 
-	var response TaskResponse
-	err = json.Unmarshal(bodyBytes, &response)
-	if err != nil {
-		return err
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		defer func(body io.ReadCloser) {
+			_ = body.Close()
+		}(resp.Body)
+		return fmt.Errorf(string(body))
 	}
-	if action == "start" {
-		go b.HealthFeedback(taskID)
+	if status == TaskStart {
+		go c.HealthFeedback(taskID)
 	}
 	return nil
 }
 
-func (b *BehemothClient) CommandCallback(
+func (c *JumpServerClient) CommandCB(
 	taskID string, command *Cmd, result string, err error,
 ) (*TaskResponse, error) {
 
@@ -390,16 +395,21 @@ func (b *BehemothClient) CommandCallback(
 		data["result"] = result
 	}
 
-	url := fmt.Sprintf("/api/plans/tasks/%s/", taskID)
-	bodyBytes, err := b.Post(url, data)
+	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=command", taskID)
+	resp, err := c.Post(url, data)
 	if err != nil {
 		return nil, err
 	}
 
+	body, _ := io.ReadAll(resp.Body)
+	defer func(body io.ReadCloser) {
+		_ = body.Close()
+	}(resp.Body)
+
 	var response TaskResponse
-	err = json.Unmarshal(bodyBytes, &response)
+	err = json.Unmarshal(body, &response)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(string(body))
 	}
 	return &response, nil
 }
@@ -426,28 +436,29 @@ func main() {
 	}
 
 	logger := GetLogger(opts.TaskID)
-	bClient := NewBehemothClient(opts.Host, opts.Token, opts.OrgId)
+	jmsClient := NewJMSClient(opts.Host, opts.Token, opts.OrgId, logger)
 
-	if err := bClient.OperateTask(opts.TaskID, "start"); err != nil {
+	if err := jmsClient.OperateTask(opts.TaskID, TaskStart); err != nil {
 		logger.Fatalf("Task launch failed: %v\n", err)
 	}
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
-		_ = bClient.OperateTask(opts.TaskID, "stop")
+		_ = jmsClient.OperateTask(opts.TaskID, TaskFailed)
 		logger.Fatalf("Task connect failed: %v\n", err)
 	}
 
 	for _, command := range opts.CmdSet {
 		result, err := handler.DoCommand(command.Value)
-		resp, err := bClient.CommandCallback(opts.TaskID, &command, result, err)
+		resp, err := jmsClient.CommandCB(opts.TaskID, &command, result, err)
 		if err != nil {
 			logger.Fatalf("Command callback failed: %v\n", err)
 		}
 		if !resp.Status {
-			_ = bClient.OperateTask(opts.TaskID, "stop")
+			_ = jmsClient.OperateTask(opts.TaskID, "stop")
 			logger.Fatalf(
-				"Not allow to continue executing commands[Status: %v, error: %v]", resp.Status, err,
+				"Not allow to continue executing commands[Status: %v, error: %v]", resp.Status, resp.Detail,
 			)
 		}
 	}
+	_ = jmsClient.OperateTask(opts.TaskID, TaskSuccess)
 }
