@@ -4,8 +4,9 @@ import pytz
 
 from datetime import datetime
 
+from behemoth.models import Command
 from common.utils import get_logger
-from common.plugins.es import ES
+from common.plugins.es import ES, QuerySet
 
 
 logger = get_logger(__file__)
@@ -59,3 +60,8 @@ class CommandStore(ES):
         data = super().filter(query, from_, size, sort)
         # TODO 这里构造成可以接着first的对象
         return data
+
+    def get_queryset(self):
+        qs = QuerySet(self)
+        qs.model = Command
+        return qs

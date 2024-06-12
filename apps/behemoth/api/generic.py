@@ -7,7 +7,7 @@ from django.utils.translation import gettext as _
 
 from behemoth.backends import cmd_storage
 from behemoth import serializers
-from behemoth.const import TaskStatus
+from behemoth.const import CommandStatus, TaskStatus
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import Environment, Playback, Plan, Iteration, Execution
 from common.api import JMSBulkModelViewSet
@@ -83,22 +83,22 @@ class ExecutionAPIView(GenericAPIView):
 
     @staticmethod
     def _type_for_command(execution, data, *args, **kwargs):
-        cmd = cmd_storage.filter(
+        cmd = cmd_storage.get_queryset().filter(
             id=data['command_id'], execution_id=str(execution.id),
             org_id=str(get_current_org_id()), without_timestamp=True
         ).first()
         if not cmd:
             raise JMSException(_('%s object does not exist.') % data['command_id'])
-        cmd.status = data['status']
-        cmd.output = data['result']
-        cmd.timestamp = data['timestamp']
-        cmd.save(update_fields=['status', 'output', 'timestamp'])
+        fields = ['status', 'result', 'timestamp']
+        for field in fields:
+            setattr(cmd, field, data[field])
+        cmd.save(update_fields=fields)
         callback = worker_pool.get_running_cb(execution)
         serializer = serializers.CommandSerializer(instance=cmd)
         callback(serializer.data, msg_type='callback')
 
         can_continue = True
-        if data['status'] == TaskStatus.failed:
+        if execution.status == TaskStatus.pause or data['status'] == CommandStatus.failed:
             can_continue = False
         # TODO 这里应该有个策略，如失败继续、失败停止，通过控制status
         # data['status'] == TaskStatus.failed and

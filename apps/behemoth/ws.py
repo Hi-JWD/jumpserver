@@ -49,11 +49,17 @@ class ExecutionWebsocket(JsonWebsocketConsumer):
                 commands = execution.get_commands()
                 serializer = CommandSerializer(commands, many=True)
                 self.send_json({'type': type_, 'data': serializer.data})
-            elif type_ == 'run_execution':
+            elif type_ == 'run':
                 execution = self.get_execution(execution_id)
-                if execution.status == TaskStatus.not_started:
+                if execution.status != TaskStatus.success:
+                    # TODO 这里优化下，执行成功的命令不在执行
                     worker_pool.work(execution, callback=self.send_tip)
                     self.send_json({'type': type_, 'data': 'ok'})
+            elif type_ == 'pause':
+                execution = self.get_execution(execution_id)
+                execution.status = TaskStatus.pause
+                execution.save(update_fields=['status'])
+                self.send_json({'type': type_, 'data': 'ok'})
         except Exception as e:
             self.send_json({'type': 'error', 'data': str(e)})
             self.close()

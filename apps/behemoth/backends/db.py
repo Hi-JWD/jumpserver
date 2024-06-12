@@ -76,6 +76,9 @@ class BaseStore(object):
             return False
         return True
 
+    def get_queryset(self):
+        return self.model.objects.all()
+
 
 class CommandStore(BaseStore):
     model = Command

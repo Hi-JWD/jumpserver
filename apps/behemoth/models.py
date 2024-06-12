@@ -15,14 +15,15 @@ from paramiko.ssh_exception import SSHException
 from accounts.models import Account
 from assets.models import Host, Protocol, Asset, Platform
 from assets.const import Protocol as const_p, WORKER_NAME
+from behemoth.backends import cmd_storage
+from behemoth.const import TaskStatus, CommandStatus, PlanStrategy, PlanCategory
+from behemoth.utils import encrypt_json_file
 from common.utils import get_logger
 from common.exceptions import JMSException
 from jumpserver.settings import get_file_md5
 from orgs.mixins.models import JMSOrgBaseModel
 from orgs.mixins.models import OrgManager
 from users.models import User
-from .const import TaskStatus, CommandStatus, PlanStrategy, PlanCategory
-from .utils import encrypt_json_file
 
 
 logger = get_logger(__name__)
@@ -282,9 +283,11 @@ class Execution(JMSOrgBaseModel):
             raise JMSException(err)
         return u
 
-    def get_commands(self):
-        # TODO 这里后边要搞成ES的
-        return Command.objects.filter(execution_id=self.id)
+    def get_commands(self, get_all=True):
+        queryset = cmd_storage.get_queryset().filter(execution_id=self.id)
+        if not get_all:
+            queryset = queryset.exclude(status=CommandStatus.success)
+        return queryset
 
 
 class Instruction(JMSOrgBaseModel):

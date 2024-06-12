@@ -11,6 +11,7 @@ from rest_framework.utils.encoders import JSONEncoder
 
 from assets.models import Asset
 from assets.const.database import DatabaseTypes
+from behemoth import const
 from behemoth.models import Worker, Execution
 from behemoth.serializers import SimpleCommandSerializer
 from common.utils import get_logger
@@ -102,7 +103,7 @@ class WorkerPool(object):
 
     @staticmethod
     def __generate_command_file(execution: Execution) -> str:
-        commands = execution.get_commands()
+        commands = execution.get_commands(excludes=[const.CommandStatus.success])
         data = {
             'command_set': SimpleCommandSerializer(commands, many=True).data,
         }
