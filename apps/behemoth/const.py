@@ -12,7 +12,6 @@ class TaskStatus(models.TextChoices):
 
 class CommandStatus(models.TextChoices):
     waiting = 'waiting'
-    executing = 'executing'
     success = 'success'
     failed = 'failed'
 

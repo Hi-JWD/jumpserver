@@ -1,14 +1,13 @@
 from rest_framework import serializers
 from django.utils.translation import gettext as _
 
-from accounts.models import Account
 from common.serializers.fields import ObjectRelatedField
-from ..models import Playback
+from ..models import Playback, Environment
 
 
 class PlaybackSerializer(serializers.ModelSerializer):
     environment = ObjectRelatedField(
-        required=False, queryset=Account.objects, allow_null=True,
+        required=False, queryset=Environment.objects, allow_null=True,
         allow_empty=True, label=_('Environment')
     )
 

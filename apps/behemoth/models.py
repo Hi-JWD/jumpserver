@@ -4,10 +4,13 @@ import json
 
 import paramiko
 
+from typing import Callable
+
 from django.utils.translation import gettext as _
 from django.conf import settings
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.db import models
+from paramiko.ssh_exception import SSHException
 
 from accounts.models import Account
 from assets.models import Host, Protocol, Asset, Platform
@@ -55,6 +58,7 @@ class Worker(Host):
             settings.APPS_DIR, 'libs', 'exec_scripts', 'worker'
         )
         self._remote_script_path = ''
+        self._callback: Callable | None = None
 
     def save(self, *args, **kwargs):
         self.platform = self.default_platform()
@@ -105,7 +109,7 @@ class Worker(Host):
             logger.error(f'Task worker test ssh connect failed: {error}')
         return connectivity
 
-    def _scp(self, local_path: str, remote_path: str, mode=0o644) -> None:
+    def _scp(self, local_path: str, remote_path: str, mode=0o544) -> None:
         sftp = self._ssh_client.open_sftp()
         try:
             sftp.remove(remote_path)
@@ -115,11 +119,8 @@ class Worker(Host):
         sftp.chmod(remote_path, mode)
         sftp.close()
 
-    def __check(self):
-        if self._ssh_client is None:
-            raise JMSException(_('The worker[%s] ssh is not connected') % self)
-
     def __ensure_script_exist(self) -> None:
+        self._callback('正在处理脚本文件')
         platform_named = {
             'mac': ('jms_cli_mac', '/tmp/behemoth'),
             'linux': ('jms_cli_linux', '/tmp/behemoth'),
@@ -148,6 +149,7 @@ class Worker(Host):
     def __process_commands_file(
             self, remote_commands_file: str, local_commands_file: str, token: str, **kwargs: dict
     ) -> None:
+        self._callback('正在生成命令文件')
         encrypted_data = kwargs.get('encrypted_data', False)
         if encrypted_data:
             local_commands_file = encrypt_json_file(local_commands_file, token[:32])
@@ -169,20 +171,24 @@ class Worker(Host):
         os.remove(local_commands_file)
 
     def __execute_cmd(self, **kwargs: dict) -> None:
+        self._callback('正在下发命令')
         revert_key = {'remote_commands_file': 'cmd_filepath'}
         params = {revert_key.get(k, k): v for k, v in kwargs.items()}
         encoded_data = base64.b64encode(json.dumps(params).encode()).decode()
-        print(self._remote_script_path, '--command', encoded_data, sep=' ')
-        self._ssh_client.exec_command(
-            f'{self._remote_script_path} --command {encoded_data}'
-        )
+        try:
+            __, stdout, __ = self._ssh_client.exec_command(
+                f'{self._remote_script_path} --command {encoded_data} --backend'
+            )
+            self._callback('任务已下发: %s' % (stdout.read().decode() or _('Success')))
+        except SSHException as e:
+            raise JMSException(str(e))
 
     def __execute(self, **kwargs: dict) -> None:
         self.__process_file(**kwargs)
         self.__execute_cmd(**kwargs)
 
-    def run(self, run_params: dict) -> None:
-        self.__check()
+    def run(self, run_params: dict, callback: Callable) -> None:
+        self._callback = callback
         self.__execute(**run_params)
         # self.__clear(**run_params) # TODO 后续放开
 
@@ -191,7 +197,6 @@ class Command(JMSOrgBaseModel):
     input = models.CharField(max_length=1024, blank=True, verbose_name=_('Input'))
     output = models.CharField(max_length=1024, blank=True, verbose_name=_('Output'))
     index = models.IntegerField(db_index=True, verbose_name=_('Index'))
-    reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=CommandStatus.waiting, verbose_name=_('Status'))
     execution_id = models.CharField(max_length=36, verbose_name=_('Execution'))
     timestamp = models.IntegerField(default=0, db_index=True)
@@ -235,20 +240,17 @@ class Plan(JMSOrgBaseModel):
         verbose_name = _('Plan')
 
     def create_execution(self, user):
+        plan_meta ={
+            'strategy': self.strategy
+        }
         return Execution.objects.create(
-            plan_id=self.id, asset=self.asset,
-            user_id=user.id, account=self.account,
+            plan_id=self.id, asset=self.asset, user_id=user.id,
+            account=self.account, plan_meta=plan_meta
         )
 
     @property
     def execution(self):
         return Execution.objects.filter(plan_id=self.id).first()
-
-    def get_commands(self):
-        commands = []
-        if self.execution:
-            commands = self.execution.get_commands()
-        return commands
 
 
 class Execution(JMSOrgBaseModel):
@@ -260,6 +262,7 @@ class Execution(JMSOrgBaseModel):
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, verbose_name=_('Account'))
     plan_id = models.CharField(max_length=36, verbose_name=_('Plan'))
+    plan_meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_started, verbose_name=_('Status'))
@@ -280,6 +283,7 @@ class Execution(JMSOrgBaseModel):
         return u
 
     def get_commands(self):
+        # TODO 这里后边要搞成ES的
         return Command.objects.filter(execution_id=self.id)
 
 

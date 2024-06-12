@@ -1,9 +1,8 @@
 import os
 
-import jwt
 import json
 
-from typing import Dict, AnyStr
+from typing import Dict, AnyStr, Callable
 
 from django.utils.translation import gettext as _
 from django.conf import settings
@@ -12,10 +11,11 @@ from rest_framework.utils.encoders import JSONEncoder
 
 from assets.models import Asset
 from assets.const.database import DatabaseTypes
-from common.utils import get_logger
-from common.exceptions import JMSException
 from behemoth.models import Worker, Execution
 from behemoth.serializers import SimpleCommandSerializer
+from common.utils import get_logger
+from common.exceptions import JMSException
+from orgs.models import Organization
 
 
 logger = get_logger(__name__)
@@ -23,11 +23,12 @@ logger = get_logger(__name__)
 
 class WorkerPool(object):
     def __init__(self) -> None:
-        self._org_id = None
+        self._org_id = Organization.DEFAULT_ID
         self._workers: Dict[AnyStr, Dict[AnyStr, Dict[AnyStr, Worker]]] = {}
         self._default_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
         self._running_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
         self._useless_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
+        self._running_cbs: Dict[AnyStr, Callable] = {}
 
     def select_org(self, org_id=None):
         if org_id is not None:
@@ -71,12 +72,12 @@ class WorkerPool(object):
                 __, worker = workers.popitem()
 
             default_workers = self._default_workers[self._org_id]
-            if worker is None and not default_workers:
+            if worker is None and default_workers:
                 __, worker = default_workers.popitem()
 
         return worker
 
-    def __get_valid_worker(self, execution: Execution) -> Worker:
+    def __get_valid_worker(self, execution: Execution, callback: Callable) -> Worker:
         while True:
             # 根据资产属性选择一个工作机
             worker: Worker | None = self.__select_worker(execution.asset)
@@ -85,15 +86,18 @@ class WorkerPool(object):
             # 检查工作机是否可连接
             connectivity: bool = worker.test_connectivity(False)
             if not connectivity:
+                callback('工作机不可连接，请重试')
                 self._useless_workers[self._org_id][str(worker.id)] = worker
             else:
+                self.add_worker(worker)
                 self._running_workers[self._org_id][str(execution.id)] = worker
                 break
         return worker
 
-    def __pre_run(self, execution: Execution) -> None:
+    def __pre_run(self, execution: Execution, callback: Callable) -> None:
+        callback('正在获取一个有效的工作机')
         self.select_org(execution.org_id)
-        execution.worker = self.__get_valid_worker(execution)
+        execution.worker = self.__get_valid_worker(execution, callback=callback)
         execution.save(update_fields=['worker'])
 
     @staticmethod
@@ -108,7 +112,8 @@ class WorkerPool(object):
             f.write(json.dumps(data, cls=JSONEncoder))
         return filepath
 
-    def __build_params(self, execution: Execution) -> dict:
+    def __build_params(self, execution: Execution, callback: Callable) -> dict:
+        callback('正在构建命令执行需要的参数信息')
         command_filepath: str = f'{execution.id}.bs'
         local_cmds_file = self.__generate_command_file(execution)
         remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
@@ -117,7 +122,7 @@ class WorkerPool(object):
             cmd_type = script = 'mysql'
             auth = {
                 'address': execution.asset.address,
-                'port': execution.asset.get_target_ssh_port(),
+                'port': execution.asset.get_protocol_port('mysql'),
                 'username': execution.account.username,
                 'password': execution.account.password,
                 'db_name': execution.asset.database.db_name
@@ -133,19 +138,24 @@ class WorkerPool(object):
         }
         return params
 
-    def __run(self, execution: Execution) -> None:
-        run_params: dict = self.__build_params(execution)
-        execution.worker.run(run_params)
+    def __run(self, execution: Execution, callback: Callable) -> None:
+        run_params: dict = self.__build_params(execution, callback)
+        execution.worker.run(run_params, callback=callback)
 
-    def __post_run(self, task_id: str) -> None:
-        worker: Worker = self._running_workers[self._org_id].pop(str(task_id))
-        self.add_worker(worker)
+    def __post_run(self, execution: Execution, callback: Callable) -> None:
+        self.set_running_cb(execution, callback)
 
-    def work(self, execution: Execution) -> None:
+    def set_running_cb(self, execution: Execution, cb: Callable) -> None:
+        self._running_cbs[str(execution.id)] = cb
+
+    def get_running_cb(self, execution: Execution) -> Callable:
+        return self._running_cbs.get(str(execution.id), lambda *args, **kwargs: None)
+
+    def work(self, execution: Execution, callback=print) -> None:
         try:
-            self.__pre_run(execution)
-            self.__run(execution)
-            self.__post_run(execution.id)
+            self.__pre_run(execution, callback=callback)
+            self.__run(execution, callback=callback)
+            self.__post_run(execution, callback=callback)
         except Exception as err:
             logger.error(f'{execution.asset} work failed: {err}')
             raise err

@@ -7,6 +7,7 @@ from django.utils.translation import gettext as _
 
 from behemoth.backends import cmd_storage
 from behemoth import serializers
+from behemoth.const import TaskStatus
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import Environment, Playback, Plan, Iteration, Execution
 from common.api import JMSBulkModelViewSet
@@ -39,13 +40,20 @@ class PlaybackViewSet(JMSBulkModelViewSet):
 
 class ExecutionAPIView(GenericAPIView):
     queryset = Execution.objects.all()
-    rbac_perms = {
-        'POST': 'behemoth.change_execution'
-    }
     serializer_classes = {
         'status': serializers.ExecutionStatusSerializer,
         'command': serializers.ExecutionCommandSerializer,
     }
+
+    def get_rbac_perms(self):
+        default_perms = {
+            'POST': 'behemoth.change_execution'
+        }
+        command_perms = {
+            'POST': 'behemoth.change_command'
+        }
+        type_ = self.request.query_params.get('type')
+        return command_perms if type_ == 'command' else default_perms
 
     def get_serializer_class(self):
         type_ = self.request.query_params.get('type')
@@ -61,17 +69,17 @@ class ExecutionAPIView(GenericAPIView):
             error = _('Task {} args or kwargs error').format(type_)
             raise JMSException(error)
         else:
-            handler(data=serializer.validated_data, execution=self.get_object())
-            return Response(status=http_status.HTTP_200_OK)
-
-    @staticmethod
-    def _type_for_play(execution, *args, **kwargs):
-        worker_pool.work(execution)
+            default_resp = Response(status=http_status.HTTP_200_OK)
+            resp = handler(data=serializer.validated_data, execution=self.get_object())
+            return resp or default_resp
 
     @staticmethod
     def _type_for_status(execution, data, *args, **kwargs):
         execution.status = data['status']
-        execution.save(update_fields=['status'])
+        execution.reason = data['reason']
+        execution.save(update_fields=['status', 'reason'])
+        callback = worker_pool.get_running_cb(execution)
+        callback('任务执行结束')
 
     @staticmethod
     def _type_for_command(execution, data, *args, **kwargs):
@@ -83,7 +91,19 @@ class ExecutionAPIView(GenericAPIView):
             raise JMSException(_('%s object does not exist.') % data['command_id'])
         cmd.status = data['status']
         cmd.output = data['result']
-        cmd.save(update_fields=['status', 'output'])
+        cmd.timestamp = data['timestamp']
+        cmd.save(update_fields=['status', 'output', 'timestamp'])
+        callback = worker_pool.get_running_cb(execution)
+        serializer = serializers.CommandSerializer(instance=cmd)
+        callback(serializer.data, msg_type='callback')
+
+        can_continue = True
+        if data['status'] == TaskStatus.failed:
+            can_continue = False
+        # TODO 这里应该有个策略，如失败继续、失败停止，通过控制status
+        # data['status'] == TaskStatus.failed and
+        # execution.plan_meta.get('strategy') != PlanStrategy.failed_continue
+        return Response(status=http_status.HTTP_200_OK, data={'status': can_continue})
 
     @staticmethod
     def _type_for_health(execution, *args, **kwargs):
@@ -96,17 +116,6 @@ class PlanViewSet(JMSBulkModelViewSet):
     search_fields = ['name']
     filterset_fields = ['name', 'category']
     serializer_class = serializers.PlanSerializer
-    rbac_perms = {
-        'get_commands': ['behemoth.view_plan', 'behemoth.view_instruction']
-    }
-
-    @action(['GET'], detail=True, url_path='commands')
-    def get_commands(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = serializers.CommandSerializer(
-            instance.get_commands(), many=True
-        )
-        return Response(data=serializer.data)
 
 
 class IterationViewSet(JMSBulkModelViewSet):

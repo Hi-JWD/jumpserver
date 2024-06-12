@@ -18,12 +18,13 @@ class SimpleCommandSerializer(serializers.ModelSerializer):
 class CommandSerializer(serializers.ModelSerializer):
     class Meta(SimpleCommandSerializer.Meta):
         fields = SimpleCommandSerializer.Meta.fields + [
-            'output', 'reason', 'status', 'timestamp'
+            'output', 'status', 'timestamp'
         ]
+
 
 class PlanSerializer(serializers.ModelSerializer):
     commands = serializers.CharField(required=False, label=_('Commands'))
-    execution = ObjectRelatedField(read_only=True, label=_('Execution'))
+    execution = ObjectRelatedField(read_only=True, attrs=('id', 'status'), label=_('Execution'))
     asset = ObjectRelatedField(queryset=Asset.objects, label=_('Asset'))
     account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))

@@ -29,7 +29,7 @@ api_v1 = [
     path('notifications/', include('notifications.urls.api_urls', namespace='api-notifications')),
     path('rbac/', include('rbac.urls.api_urls', namespace='api-rbac')),
     path('labels/', include('labels.urls', namespace='api-label')),
-    path('behemoth/', include('behemoth.urls', namespace='api-behemoth')),
+    path('behemoth/', include('behemoth.urls.api_urls', namespace='api-behemoth')),
     path('prometheus/metrics/', api.PrometheusMetricsApi.as_view()),
 ]
 

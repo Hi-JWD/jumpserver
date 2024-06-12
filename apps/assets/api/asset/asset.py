@@ -34,7 +34,7 @@ class AssetFilterSet(BaseFilterSet):
     platform = django_filters.CharFilter(method='filter_platform')
     exclude_platform = django_filters.CharFilter(field_name="platform__name", lookup_expr='exact', exclude=True)
     domain = django_filters.CharFilter(method='filter_domain')
-    type = django_filters.CharFilter(field_name="platform__type", lookup_expr="exact")
+    type = django_filters.CharFilter(method='filter_type')
     category = django_filters.CharFilter(field_name="platform__category", lookup_expr="exact")
     protocols = django_filters.CharFilter(method='filter_protocols')
     domain_enabled = django_filters.BooleanFilter(
@@ -79,6 +79,10 @@ class AssetFilterSet(BaseFilterSet):
             return queryset.filter(domain_id=value)
         else:
             return queryset.filter(domain__name__contains=value)
+
+    @staticmethod
+    def filter_type(queryset, name, value):
+        return queryset.filter(platform__type__in=value.split(','))
 
     @staticmethod
     def filter_protocols(queryset, name, value):

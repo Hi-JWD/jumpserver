@@ -154,11 +154,14 @@ type MySQLHandler struct {
 
 func (s *MySQLHandler) Connect() error {
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s", s.opts.Auth.Username, s.opts.Auth.Password,
+		"%s:%s@tcp(%s:%v)/%s", s.opts.Auth.Username, s.opts.Auth.Password,
 		s.opts.Auth.Address, s.opts.Auth.Port, s.opts.Auth.DBName,
 	)
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
+		return err
+	}
+	if err = db.Ping(); err != nil {
 		return err
 	}
 	s.db = db
@@ -203,6 +206,7 @@ type Auth struct {
 
 type CmdOptions struct {
 	CommandBase64 string `json:"-"`
+	Backend       bool   `json:"-"`
 
 	TaskID      string   `json:"task_id"`
 	Host        string   `json:"host"`
@@ -347,24 +351,30 @@ func (c *JumpServerClient) HealthFeedback(taskID string) {
 	data := make(map[string]interface{})
 	data["action"] = "health"
 
-	url := fmt.Sprintf("/api/plans/executions/%s/?type=health", taskID)
+	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=health", taskID)
 	for i := 0; i < RetryTime; i++ {
 		_, err = c.Post(url, data)
 		if err == nil {
 			break
 		}
-		c.logger.Printf("Task[%s] running health.", taskID)
+		c.logger.Printf("%s, Task[%s] running health.", time.Now(), taskID)
 		time.Sleep(10 * time.Second)
 	}
 }
 
-func (c *JumpServerClient) OperateTask(taskID, status string) error {
+func (c *JumpServerClient) OperateTask(taskID, status string, err error) error {
 	data := make(map[string]interface{})
 	data["status"] = status
+	if err != nil {
+		data["reason"] = err.Error()
+	} else {
+		data["reason"] = "-"
+	}
 
 	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=status", taskID)
 	resp, err := c.Post(url, data)
 	if err != nil {
+		c.logger.Printf("Task[%s] running operation failed, %s", taskID, err)
 		return err
 	}
 
@@ -387,14 +397,14 @@ func (c *JumpServerClient) CommandCB(
 
 	data := make(map[string]interface{})
 	data["command_id"] = command.ID
-	if err != nil {
-		data["status"] = false
-		data["result"] = err.Error()
-	} else {
-		data["status"] = true
+	data["timestamp"] = time.Now().Unix()
+	if err == nil {
+		data["status"] = "success"
 		data["result"] = result
+	} else {
+		data["status"] = "failed"
+		data["result"] = err.Error()
 	}
-
 	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=command", taskID)
 	resp, err := c.Post(url, data)
 	if err != nil {
@@ -420,16 +430,25 @@ func GetLogger(taskId string) *log.Logger {
 	logFile := filepath.Join(scriptDir, fmt.Sprintf("%v-bs.log", taskId))
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		fmt.Printf("error opening file: %v", err)
+		fmt.Printf("Error opening file: %v", err)
 	}
-	return log.New(f, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile)
+	return log.New(f, "", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
 func main() {
 	opts := CmdOptions{}
 	flag.StringVar(&opts.CommandBase64, "command", opts.CommandBase64, "命令")
+	flag.BoolVar(&opts.Backend, "backend", false, "后台")
+	time.Sleep(10 * time.Second)
 	// 解析命令行标志
 	flag.Parse()
+
+	if opts.Backend {
+		cmd := exec.Command(os.Args[0], "--command", opts.CommandBase64)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		_ = cmd.Start()
+		os.Exit(0)
+	}
 	if err := opts.Valid(); err != nil {
 		fmt.Printf("参数校验错误: %v\n", err)
 		return
@@ -438,27 +457,30 @@ func main() {
 	logger := GetLogger(opts.TaskID)
 	jmsClient := NewJMSClient(opts.Host, opts.Token, opts.OrgId, logger)
 
-	if err := jmsClient.OperateTask(opts.TaskID, TaskStart); err != nil {
+	logger.Printf("Start executing the task")
+	if err := jmsClient.OperateTask(opts.TaskID, TaskStart, nil); err != nil {
 		logger.Fatalf("Task launch failed: %v\n", err)
 	}
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
-		_ = jmsClient.OperateTask(opts.TaskID, TaskFailed)
+		_ = jmsClient.OperateTask(opts.TaskID, TaskFailed, err)
 		logger.Fatalf("Task connect failed: %v\n", err)
 	}
 
 	for _, command := range opts.CmdSet {
 		result, err := handler.DoCommand(command.Value)
+		time.Sleep(2 * time.Second)
 		resp, err := jmsClient.CommandCB(opts.TaskID, &command, result, err)
 		if err != nil {
 			logger.Fatalf("Command callback failed: %v\n", err)
 		}
 		if !resp.Status {
-			_ = jmsClient.OperateTask(opts.TaskID, "stop")
+			_ = jmsClient.OperateTask(opts.TaskID, "stop", nil)
 			logger.Fatalf(
 				"Not allow to continue executing commands[Status: %v, error: %v]", resp.Status, resp.Detail,
 			)
 		}
 	}
-	_ = jmsClient.OperateTask(opts.TaskID, TaskSuccess)
+	_ = jmsClient.OperateTask(opts.TaskID, TaskSuccess, nil)
+	logger.Printf("Task finished successfully")
 }
