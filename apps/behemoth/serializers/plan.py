@@ -40,6 +40,42 @@ class PlanSerializer(serializers.ModelSerializer):
         fields = fields_small + ['execution', 'commands', 'comment']
 
     @staticmethod
+    def count_quote_num(commands, single, double):
+        for c in commands:
+            if c == '"':
+                double += 1
+            elif c == "'":
+                single += 1
+        return single, double
+
+    def convert_mysql(self, raw_commands):
+        anno_symbol = '--'
+        real_commands, temp_command, anno = [], [], ''
+        single, double = 0, 0
+        commands = map(lambda c: c.strip(), raw_commands.split('\n'))
+        for command in commands:
+            if command.startswith(anno_symbol):
+                anno = command
+                continue
+            elif not command.strip():
+                continue
+
+            temp_command.append(command)
+            semicolon_i = command.rfind(';')
+            compute_command = command if semicolon_i == -1 else command[:semicolon_i + 1]
+            single, double = self.count_quote_num(compute_command, single, double)
+            retry_compute = True
+            if semicolon_i != -1:
+                if double % 2 == 0 and single % 2 == 0:
+                    real_commands.append((' '.join(temp_command).strip(), anno))
+                    temp_command.clear()
+                    single, double = 0, 0
+                    retry_compute = False
+            if retry_compute:
+                single, double = self.count_quote_num(command[len(compute_command):], single, double)
+        return real_commands
+
+    @staticmethod
     def __convert_mysql(raw_commands):
         anno_symbol = '--'
         real_commands, temp_command, anno = [], [], ''
