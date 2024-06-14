@@ -16,7 +16,10 @@ from accounts.models import Account
 from assets.models import Host, Protocol, Asset, Platform
 from assets.const import Protocol as const_p, WORKER_NAME
 from behemoth.backends import cmd_storage
-from behemoth.const import TaskStatus, CommandStatus, PlanStrategy, PlanCategory
+from behemoth.const import (
+    TaskStatus, CommandStatus, PlanStrategy, PlanCategory,
+    CommandCategory,
+)
 from behemoth.utils import encrypt_json_file
 from common.utils import get_logger
 from common.exceptions import JMSException
@@ -201,6 +204,8 @@ class Command(JMSOrgBaseModel):
     status = models.CharField(max_length=32, default=CommandStatus.waiting, verbose_name=_('Status'))
     execution_id = models.CharField(max_length=36, verbose_name=_('Execution'))
     timestamp = models.IntegerField(default=0, db_index=True)
+    category = models.CharField(max_length=16, default=CommandCategory.command, verbose_name=_('Category'))
+    pause = models.BooleanField(default=False, verbose_name=_('Pause'))
 
     class Meta:
         verbose_name = _('Command')
