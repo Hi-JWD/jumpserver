@@ -15,6 +15,8 @@ router.register(r'iterations', api.IterationViewSet, 'iteration')
 
 urlpatterns = [
     path('executions/<uuid:pk>/', api.ExecutionAPIView.as_view(), name='execution'),
+    path('commands/', api.CommandAPIView.as_view(), name='command'),
+    path('commands/upload/', api.CommandUploadAPIView.as_view(), name='upload-command-file'),
 ]
 
 urlpatterns += router.urls

@@ -6,6 +6,8 @@ from django.utils.translation import gettext as _
 
 PAUSE_RE_PATTERN = r'FORMAT PAUSE | NAME:(\w+) \| DESCRIBE:(\w+) \| PAUSE:(\w+);'
 PAUSE_RE = re.compile(PAUSE_RE_PATTERN)
+FORMAT_COMMAND_CACHE_KEY = 'format-command-cache-{}'
+FILE_COMMAND_CACHE_KEY = 'command:pause:{}'
 
 
 class TaskStatus(models.TextChoices):
@@ -30,6 +32,7 @@ class PlanStrategy(models.TextChoices):
 class CommandCategory(models.TextChoices):
     command = 'command', _('Command')
     pause = 'pause', _('Pause')
+    file = 'file', _('File')
 
 
 class PlanCategory(models.TextChoices):
