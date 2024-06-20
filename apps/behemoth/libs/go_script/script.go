@@ -30,6 +30,7 @@ const (
 	TaskStart   = "executing"
 	TaskFailed  = "failed"
 	TaskSuccess = "success"
+	Pause       = "pause"
 )
 
 type LocalCommand struct {
@@ -192,8 +193,10 @@ func getHandler(opts CmdOptions) BaseHandler {
 }
 
 type Cmd struct {
-	ID    string `json:"id"`
-	Value string `json:"input"`
+	ID       string `json:"id"`
+	Value    string `json:"input"`
+	Index    int    `json:"index"`
+	Category string `json:"category"`
 }
 
 type Auth struct {
@@ -343,7 +346,7 @@ func (c *JumpServerClient) Post(url string, data map[string]interface{}) (*http.
 
 type TaskResponse struct {
 	Status bool   `json:"status"`
-	Detail string `json:"detail`
+	Detail string `json:"detail"`
 }
 
 func (c *JumpServerClient) HealthFeedback(taskID string) {
@@ -386,7 +389,7 @@ func (c *JumpServerClient) OperateTask(taskID, status string, err error) error {
 		return fmt.Errorf(string(body))
 	}
 	if status == TaskStart {
-		go c.HealthFeedback(taskID)
+		//go c.HealthFeedback(taskID)
 	}
 	return nil
 }
@@ -400,10 +403,10 @@ func (c *JumpServerClient) CommandCB(
 	data["timestamp"] = time.Now().Unix()
 	if err == nil {
 		data["status"] = "success"
-		data["result"] = result
+		data["output"] = result
 	} else {
 		data["status"] = "failed"
-		data["result"] = err.Error()
+		data["output"] = err.Error()
 	}
 	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=command", taskID)
 	resp, err := c.Post(url, data)
@@ -415,6 +418,10 @@ func (c *JumpServerClient) CommandCB(
 	defer func(body io.ReadCloser) {
 		_ = body.Close()
 	}(resp.Body)
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf(string(body))
+	}
 
 	var response TaskResponse
 	err = json.Unmarshal(body, &response)
@@ -439,7 +446,6 @@ func main() {
 	opts := CmdOptions{}
 	flag.StringVar(&opts.CommandBase64, "command", opts.CommandBase64, "命令")
 	flag.BoolVar(&opts.Backend, "backend", false, "后台")
-	time.Sleep(10 * time.Second)
 	// 解析命令行标志
 	flag.Parse()
 
@@ -467,18 +473,25 @@ func main() {
 		logger.Fatalf("Task connect failed: %v\n", err)
 	}
 
+	var result string
+	var err error
 	for _, command := range opts.CmdSet {
-		result, err := handler.DoCommand(command.Value)
+		if command.Category == Pause {
+			result, err = "", nil
+		} else {
+			result, err = handler.DoCommand(command.Value)
+		}
 		time.Sleep(2 * time.Second)
 		resp, err := jmsClient.CommandCB(opts.TaskID, &command, result, err)
 		if err != nil {
 			logger.Fatalf("Command callback failed: %v\n", err)
 		}
 		if !resp.Status {
-			_ = jmsClient.OperateTask(opts.TaskID, "stop", nil)
-			logger.Fatalf(
-				"Not allow to continue executing commands[Status: %v, error: %v]", resp.Status, resp.Detail,
+			logger.Printf(
+				"Not allow to continue executing commands[Input: %v, error: %v]", command.Value, resp.Detail,
 			)
+			logger.Printf("Task finished.")
+			return
 		}
 	}
 	_ = jmsClient.OperateTask(opts.TaskID, TaskSuccess, nil)

@@ -1,5 +1,5 @@
 from django.dispatch import receiver
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, post_save
 
 from common.signals import django_ready
 from .libs.pools.worker import worker_pool
@@ -18,3 +18,13 @@ def on_plan_delete(sender, instance, **kwargs):
     if execution:
         execution.delete()
         Command.objects.filter(execution_id=execution.id).delete()
+
+
+@receiver(post_delete, sender=Worker)
+def on_worker_add(sender, instance, **kwargs):
+    worker_pool.delete_worker(instance)
+
+
+@receiver(post_save, sender=Worker)
+def on_worker_delete(sender, instance, **kwargs):
+    worker_pool.add_worker(instance)

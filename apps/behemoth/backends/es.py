@@ -43,16 +43,13 @@ class CommandStore(ES):
 
     @staticmethod
     def handler_time_field(data):
-        without_timestamp = data.pop('without_timestamp', False)
         timestamp_range = {'gte': 0, 'lte': 0}
-        if not without_timestamp:
-            timestamp__gte = data.get('timestamp__gte')
-            timestamp__lte = data.get('timestamp__lte')
-
-            if timestamp__gte:
-                timestamp_range['gte'] = timestamp__gte
-            if timestamp__lte:
-                timestamp_range['lte'] = timestamp__lte
+        timestamp__gte = data.get('timestamp__gte')
+        timestamp__lte = data.get('timestamp__lte')
+        if timestamp__gte:
+            timestamp_range['gte'] = timestamp__gte
+        if timestamp__lte:
+            timestamp_range['lte'] = timestamp__lte
 
         return 'timestamp', timestamp_range
 

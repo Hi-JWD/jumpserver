@@ -23,8 +23,8 @@ class ExecutionStatusSerializer(serializers.Serializer):
 class ExecutionCommandSerializer(serializers.Serializer):
     command_id = serializers.UUIDField(required=True)
     status = serializers.ChoiceField(choices=const.CommandStatus)
-    result = serializers.CharField(default='')
+    output = serializers.CharField(default='', allow_blank=True)
     timestamp = serializers.IntegerField(default=0)
 
     class Meta:
-        fields = ['command_id', 'status', 'result', 'timestamp']
+        fields = ['command_id', 'status', 'output', 'timestamp']

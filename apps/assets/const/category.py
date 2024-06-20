@@ -12,6 +12,7 @@ class Category(ChoicesMixin, models.TextChoices):
     DATABASE = 'database', _("Database")
     CLOUD = 'cloud', _("Cloud service")
     WEB = 'web', _("Web")
+    WORKER = 'worker', _("Worker")
     GPT = 'gpt', "GPT"
     CUSTOM = 'custom', _("Custom type")
 

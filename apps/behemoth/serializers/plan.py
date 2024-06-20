@@ -23,7 +23,7 @@ from ..const import (
 class SimpleCommandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Command
-        fields = ['id', 'input', 'index']
+        fields = ['id', 'input', 'index', 'category']
 
 
 class CommandSerializer(serializers.ModelSerializer):
@@ -46,7 +46,7 @@ class CommandSerializer(serializers.ModelSerializer):
 class PlanSerializer(serializers.ModelSerializer):
     bind_fields = tuple()
 
-    execution = ObjectRelatedField(read_only=True, attrs=('id', 'status'), label=_('Execution'))
+    execution = ObjectRelatedField(read_only=True, attrs=('id', 'status', 'reason'), label=_('Execution'))
     asset = ObjectRelatedField(queryset=Asset.objects, label=_('Asset'))
     account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
@@ -84,19 +84,26 @@ class PlanSerializer(serializers.ModelSerializer):
         }
         return command
 
-    def create_commands(self, instance, validated_data):
+    def get_commands(self):
         token = self.context['request'].query_params.get('token')
-        commands = cache.get(FORMAT_COMMAND_CACHE_KEY.format(token), [])
+        return cache.get(FORMAT_COMMAND_CACHE_KEY.format(token), [])
+
+    def create_commands(self, instance, validated_data):
+        commands = self.get_commands()
         with transaction.atomic():
             user = self.context['request'].user
             e = instance.create_execution(user)
-            command_objs = []
+            command_objs, delay_commands = [], []
             for i, c in enumerate(commands):
                 command = Command(
                     execution_id=e.id, index=i, created_by=user,
                     updated_by=user, **self._format(c)
                 )
-                command_objs.append(command)
+                if command.category == CommandCategory.pause and not command.pause:
+                    delay_commands.append(i)
+                else:
+                    command_objs.append(command)
+            command_objs.extend(delay_commands)
             commands = Command.objects.bulk_create(command_objs)
         return commands
 
@@ -136,17 +143,5 @@ class FilePlanSerializer(PlanSerializer):
             'category': c['category'], 'pause': pause
         }
 
-    def create_commands(self, instance, validated_data):
-        commands = cache.get(FILE_COMMAND_CACHE_KEY.format(self.mark_id), [])
-        with transaction.atomic():
-            user = self.context['request'].user
-            e = instance.create_execution(user)
-            command_objs = []
-            for c in commands:
-                command = Command(
-                    execution_id=e.id, index=c['index'], created_by=user,
-                    updated_by=user, **self._format(c)
-                )
-                command_objs.append(command)
-            commands = Command.objects.bulk_create(command_objs)
-        return commands
+    def get_commands(self):
+        return cache.get(FILE_COMMAND_CACHE_KEY.format(self.mark_id), [])

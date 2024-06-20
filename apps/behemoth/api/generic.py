@@ -150,41 +150,52 @@ class ExecutionAPIView(GenericAPIView):
             error = _('Task {} args or kwargs error').format(type_)
             raise JMSException(error)
         else:
-            default_resp = Response(status=http_status.HTTP_200_OK)
             resp = handler(data=serializer.validated_data, execution=self.get_object())
-            return resp or default_resp
+            return resp or Response(status=http_status.HTTP_200_OK)
 
     @staticmethod
     def _type_for_status(execution, data, *args, **kwargs):
         execution.status = data['status']
         execution.reason = data['reason']
         execution.save(update_fields=['status', 'reason'])
-        callback = worker_pool.get_running_cb(execution)
-        callback('任务执行结束')
 
     @staticmethod
-    def _type_for_command(execution, data, *args, **kwargs):
+    def _get_cmd(data, execution):
+        # TODO 【命令缓存】在线执行的任务从缓存获取命令集合
         cmd = cmd_storage.get_queryset().filter(
             id=data['command_id'], execution_id=str(execution.id),
-            org_id=str(get_current_org_id()), without_timestamp=True
+            org_id=str(get_current_org_id())
         ).first()
+        return cmd
+
+    def _type_for_command(self, execution, data, *args, **kwargs):
+        cmd = self._get_cmd(data, execution)
         if not cmd:
             raise JMSException(_('%s object does not exist.') % data['command_id'])
-        fields = ['status', 'result', 'timestamp']
+        fields = ['status', 'timestamp']
+        if cmd.category != CommandCategory.pause:
+            fields.append('output')
         for field in fields:
             setattr(cmd, field, data[field])
         cmd.save(update_fields=fields)
-        callback = worker_pool.get_running_cb(execution)
         serializer = serializers.CommandSerializer(instance=cmd)
-        callback(serializer.data, msg_type='callback')
+        worker_pool.refresh_task_info(execution, 'command_cb', serializer.data)
 
-        can_continue = True
-        if execution.status == TaskStatus.pause or data['status'] == CommandStatus.failed:
+        can_continue, detail = True, ''
+        # 任务被手动暂停或者命令类型为“暂停”并开启暂停才不能继续执行
+        if execution.status == TaskStatus.pause or cmd.pause:
             can_continue = False
-        # TODO 这里应该有个策略，如失败继续、失败停止，通过控制status
-        # data['status'] == TaskStatus.failed and
-        # execution.plan_meta.get('strategy') != PlanStrategy.failed_continue
-        return Response(status=http_status.HTTP_200_OK, data={'status': can_continue})
+            detail = _('Paused')
+        elif data['status'] == CommandStatus.failed:
+            can_continue = False
+            detail = _('Failed')
+
+        if not can_continue:
+            execution.status = TaskStatus.pause
+            execution.reason = data['output']
+            execution.save(update_fields=['status', 'reason'])
+            worker_pool.refresh_task_info(execution, 'pause', cmd.output)
+        return Response(status=http_status.HTTP_200_OK, data={'status': can_continue, 'detail': detail})
 
     @staticmethod
     def _type_for_health(execution, *args, **kwargs):

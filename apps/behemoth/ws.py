@@ -9,7 +9,7 @@ from rest_framework.utils.encoders import JSONEncoder
 from behemoth.const import TaskStatus
 from behemoth.models import Execution
 from behemoth.serializers import CommandSerializer
-from behemoth.libs.pools.worker import worker_pool
+from behemoth.libs.pools.worker import worker_pool, run_task_sync
 from common.db.utils import close_old_connections
 from common.utils import get_logger
 
@@ -37,9 +37,6 @@ class ExecutionWebsocket(JsonWebsocketConsumer):
             self.close()
         return self._execution
 
-    def send_tip(self, content, msg_type='show_tip'):
-        self.send_json({'type': msg_type, 'data': content})
-
     def receive_json(self, content=None, **kwargs):
         type_ = content.get('type')
         execution_id = content.get('execution_id')
@@ -51,23 +48,32 @@ class ExecutionWebsocket(JsonWebsocketConsumer):
                 self.send_json({'type': type_, 'data': serializer.data})
             elif type_ == 'run':
                 execution = self.get_execution(execution_id)
-                if execution.status != TaskStatus.success:
-                    # TODO 这里优化下，执行成功的命令不在执行
-                    worker_pool.work(execution, callback=self.send_tip)
-                    self.send_json({'type': type_, 'data': 'ok'})
+                if execution.status not in (TaskStatus.success, TaskStatus.executing):
+                    worker_pool.refresh_task_info(execution, 'show_tip', '', ttl=1)
+                    execution.status = TaskStatus.executing
+                    execution.save(update_fields=['status'])
+                    task_id = run_task_sync.delay(execution)
+                    # TODO 返回task_id用来查询任务是否存活
+                    self.send_json({'type': 'show_tip', 'data': '开始执行'})
+                else:
+                    self.send_json({'type': 'error', 'data': _('Task status: %s') % execution.status})
             elif type_ == 'pause':
                 execution = self.get_execution(execution_id)
                 execution.status = TaskStatus.pause
                 execution.save(update_fields=['status'])
-                self.send_json({'type': type_, 'data': 'ok'})
+                self.send_json({'type': type_, 'data': ''})
+            elif type_ == 'info':
+                execution = self.get_execution(execution_id)
+                self.send_json(worker_pool.get_task_info(execution))
         except Exception as e:
+            logger.error('Behemoth ws error: %s' % e)
             self.send_json({'type': 'error', 'data': str(e)})
-            self.close()
+            self.disconnect()
 
     @classmethod
     def encode_json(cls, content):
         return json.dumps(content, cls=JSONEncoder)
 
-    def disconnect(self, code):
+    def disconnect(self, code=None):
         self.close()
         close_old_connections()

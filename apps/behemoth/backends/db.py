@@ -25,19 +25,12 @@ class BaseStore(object):
     @staticmethod
     def make_filter_kwargs(date_from=None, date_to=None, **query):
         filter_kwargs = {}
-        without_timestamp = query.pop('without_timestamp', False)
-        if not without_timestamp:
-            date_from_default = timezone.now() - datetime.timedelta(days=7)
-            date_to_default = timezone.now()
-
-            date_from = date_from or date_from_default
-            date_to = date_to or date_to_default
-            if isinstance(date_from, datetime.datetime):
-                date_from = date_from.timestamp()
+        if isinstance(date_from, datetime.datetime):
+            date_from = date_from.timestamp()
             filter_kwargs['timestamp__gte'] = int(date_from)
 
-            if isinstance(date_to, datetime.datetime):
-                date_to = date_to.timestamp()
+        if isinstance(date_to, datetime.datetime):
+            date_to = date_to.timestamp()
             filter_kwargs['timestamp__lte'] = int(date_to)
 
         key_reverse = {'input': 'input_icontains', 'output': 'output_icontains'}
@@ -77,7 +70,7 @@ class BaseStore(object):
         return True
 
     def get_queryset(self):
-        return self.model.objects.all()
+        return self
 
 
 class CommandStore(BaseStore):

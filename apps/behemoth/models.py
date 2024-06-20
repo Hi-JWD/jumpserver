@@ -13,14 +13,15 @@ from django.db import models
 from paramiko.ssh_exception import SSHException
 
 from accounts.models import Account
-from assets.models import Host, Protocol, Asset, Platform
+from assets.models import Protocol, Asset, Platform
 from assets.const import Protocol as const_p, WORKER_NAME
 from behemoth.backends import cmd_storage
 from behemoth.const import (
     TaskStatus, CommandStatus, PlanStrategy, PlanCategory,
-    CommandCategory,
+    CommandCategory, WorkerPlatform
 )
 from behemoth.utils import encrypt_json_file
+from common.db.encoder import ModelJSONFieldEncoder
 from common.utils import get_logger
 from common.exceptions import JMSException
 from jumpserver.settings import get_file_md5
@@ -43,13 +44,17 @@ class WorkerQuerySet(OrgManager):
         return super().bulk_create(objs, batch_size, ignore_conflicts)
 
 
-class Worker(Host):
+class Worker(Asset):
     accounts: models.QuerySet
     protocols: models.QuerySet
+
+    base = models.CharField(
+        max_length=16, choices=WorkerPlatform.choices, default=WorkerPlatform.linux, verbose_name=_('Platform')
+    )
+    meta = models.JSONField(encoder=ModelJSONFieldEncoder, default=dict, verbose_name=_('Meta'))
     objects = WorkerQuerySet()
 
     class Meta:
-        proxy = True
         verbose_name = _('Worker')
 
     def __str__(self):
@@ -62,7 +67,7 @@ class Worker(Host):
             settings.APPS_DIR, 'libs', 'exec_scripts', 'worker'
         )
         self._remote_script_path = ''
-        self._callback: Callable | None = None
+        self._callback: Callable = lambda *a, **b: None
 
     def save(self, *args, **kwargs):
         self.platform = self.default_platform()
@@ -102,7 +107,7 @@ class Worker(Host):
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             client.connect(
                 hostname=self.address, port=self.get_target_ssh_port(),
-                username=account.username, password=account.password
+                username=account.username, password=account.password, timeout=15
             )
             connectivity = True
             if not immediate_disconnect:
@@ -124,13 +129,13 @@ class Worker(Host):
         sftp.close()
 
     def __ensure_script_exist(self) -> None:
-        self._callback('正在处理脚本文件')
+        self._callback(type_='show_tip', value='正在处理脚本文件')
         platform_named = {
             'mac': ('jms_cli_mac', '/tmp/behemoth'),
             'linux': ('jms_cli_linux', '/tmp/behemoth'),
             'windows': ('jms_cli_windows.exe', r'C:\Windows\Temp'),
         }
-        filename, remote_dir = platform_named.get(self.type, ('', ''))
+        filename, remote_dir = platform_named.get(str(self.base), ('', ''))
         if not filename:
             raise JMSException(_('The worker[%s](%s) type error') % (self, self.type))
 
@@ -142,6 +147,8 @@ class Worker(Host):
         __, stdout, __ = self._ssh_client.exec_command(command)
         stdout = stdout.read().decode().split()
         local_exist = os.path.exists(local_path)
+        if not local_exist:
+            raise JMSException(_('Worker script(%s) does not exist') % filename)
 
         if local_exist and len(stdout) > 0 and get_file_md5(local_path) == stdout[0].strip():
             return
@@ -153,7 +160,7 @@ class Worker(Host):
     def __process_commands_file(
             self, remote_commands_file: str, local_commands_file: str, token: str, **kwargs: dict
     ) -> None:
-        self._callback('正在生成命令文件')
+        self._callback(type_='show_tip', value='正在生成命令文件')
         encrypted_data = kwargs.get('encrypted_data', False)
         if encrypted_data:
             local_commands_file = encrypt_json_file(local_commands_file, token[:32])
@@ -175,15 +182,17 @@ class Worker(Host):
         os.remove(local_commands_file)
 
     def __execute_cmd(self, **kwargs: dict) -> None:
-        self._callback('正在下发命令')
+        self._callback(type_='show_tip', value='正在下发命令')
         revert_key = {'remote_commands_file': 'cmd_filepath'}
         params = {revert_key.get(k, k): v for k, v in kwargs.items()}
         encoded_data = base64.b64encode(json.dumps(params).encode()).decode()
         try:
+            logger.debug(f'{self._remote_script_path} --command {encoded_data} --backend')
             __, stdout, __ = self._ssh_client.exec_command(
                 f'{self._remote_script_path} --command {encoded_data} --backend'
             )
-            self._callback('任务已下发: %s' % (stdout.read().decode() or _('Success')))
+            result = (stdout.read().decode() or _('Success'))
+            self._callback(type_='show_tip', value=_('Task distribution: %s') % result)
         except SSHException as e:
             raise JMSException(str(e))
 
@@ -210,6 +219,9 @@ class Command(JMSOrgBaseModel):
     class Meta:
         verbose_name = _('Command')
         ordering = ('index', )
+
+    def __str__(self):
+        return '%s(%s)' % (self.category, self.input[:10])
 
 
 class Environment(JMSOrgBaseModel):
@@ -271,7 +283,7 @@ class Execution(JMSOrgBaseModel):
     plan_meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
-    status = models.CharField(max_length=32, default=TaskStatus.not_started, verbose_name=_('Status'))
+    status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
 
     class Meta:
         verbose_name = _('Task')

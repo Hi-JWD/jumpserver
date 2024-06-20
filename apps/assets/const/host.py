@@ -3,7 +3,6 @@ from django.utils.translation import gettext_lazy as _
 from .base import BaseType
 
 GATEWAY_NAME = 'Gateway'
-WORKER_NAME = 'Worker'
 
 
 class HostTypes(BaseType):
@@ -81,8 +80,7 @@ class HostTypes(BaseType):
                 {
                     'name': GATEWAY_NAME,
                     'domain_enabled': True,
-                },
-                {'name': 'Worker'},
+                }
             ],
             cls.UNIX: [
                 {'name': 'Unix'},

@@ -15,6 +15,7 @@ from .device import DeviceTypes
 from .gpt import GPTTypes
 from .host import HostTypes
 from .web import WebTypes
+from .worker import WorkerTypes
 
 
 class AllTypes(ChoicesMixin):
@@ -172,6 +173,7 @@ class AllTypes(ChoicesMixin):
             (Category.DATABASE, DatabaseTypes),
             (Category.CLOUD, CloudTypes),
             (Category.WEB, WebTypes),
+            (Category.WORKER, WorkerTypes),
             (Category.GPT, GPTTypes),
             (Category.CUSTOM, CustomTypes),
         )
