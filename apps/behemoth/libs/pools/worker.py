@@ -81,6 +81,10 @@ class WorkerPool(object):
             self._default_workers[worker.org_id].pop(worker.name, None)
         logger.debug(f'Delete worker：{worker}({", ".join(labels) or _("No label")})')
 
+    def refresh_worker(self, worker: Worker) -> None:
+        self.delete_worker(worker)
+        self.add_worker(worker)
+
     def __select_worker(self, asset: Asset) -> Worker | None:
         worker: Worker | None = None
         if not (labels := asset.get_labels()):

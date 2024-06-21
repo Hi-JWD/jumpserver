@@ -21,10 +21,13 @@ def on_plan_delete(sender, instance, **kwargs):
 
 
 @receiver(post_delete, sender=Worker)
-def on_worker_add(sender, instance, **kwargs):
+def on_worker_delete(sender, instance, **kwargs):
     worker_pool.delete_worker(instance)
 
 
 @receiver(post_save, sender=Worker)
-def on_worker_delete(sender, instance, **kwargs):
-    worker_pool.add_worker(instance)
+def on_worker_add(sender, instance, created, **kwargs):
+    if not created:
+        worker_pool.refresh_worker(instance)
+    else:
+        worker_pool.add_worker(instance)
