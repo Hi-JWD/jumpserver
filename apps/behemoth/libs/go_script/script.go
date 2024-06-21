@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -431,10 +430,18 @@ func (c *JumpServerClient) CommandCB(
 	return &response, nil
 }
 
+func ensureDirExists(path string) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		// 如果路径不存在，则创建
+		_ = os.MkdirAll(path, os.ModePerm)
+	}
+}
+
 func GetLogger(taskId string) *log.Logger {
-	_, filename, _, _ := runtime.Caller(0)
-	scriptDir := filepath.Dir(filename)
-	logFile := filepath.Join(scriptDir, fmt.Sprintf("%v-bs.log", taskId))
+	logDir := "/tmp/behemoth/logs"
+	ensureDirExists(logDir)
+	logFile := filepath.Join(logDir, fmt.Sprintf("%v-bs.log", taskId))
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Printf("Error opening file: %v", err)
