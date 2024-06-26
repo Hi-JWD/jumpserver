@@ -11,7 +11,7 @@ from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
 from common.utils import lazyproperty
 from assets.models import Asset
 from accounts.models import Account
-from behemoth.models import Plan, Playback, Environment, Command, Execution
+from behemoth.models import Plan, Playback, Environment, Command, Execution, SubPlan
 from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, CommandCategory,
     FILE_COMMAND_CACHE_KEY, PlaybackStrategy
@@ -62,6 +62,7 @@ class PlanSerializer(serializers.ModelSerializer):
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
     playback_strategy = LabeledChoiceField(choices=PlaybackStrategy.choices, label=_('Playback strategy'))
     status = serializers.SerializerMethodField(label=_('Status'))
+    sub_plan_name = serializers.CharField(allow_blank=True, max_length=128, label=_('Sub plan name'))
 
     class Meta:
         model = Plan
@@ -98,10 +99,12 @@ class PlanSerializer(serializers.ModelSerializer):
         return cache.get(FORMAT_COMMAND_CACHE_KEY.format(token), [])
 
     def create_commands(self, instance, validated_data):
+        plan_name = validated_data['sub_plan_name']
         commands = self.get_commands()
         with transaction.atomic():
             user = self.context['request'].user
-            e = instance.create_execution(user)
+            sub_plan = SubPlan.objects.create(name=plan_name, plan=instance)
+            e = sub_plan.create_execution(user)
             command_objs = []
             for i, c in enumerate(commands):
                 command = Command(

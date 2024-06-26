@@ -23,6 +23,7 @@ from behemoth.const import (
 from behemoth.utils import encrypt_json_file
 from common.db.encoder import ModelJSONFieldEncoder
 from common.utils import get_logger, lazyproperty
+from common.utils.timezone import local_now_date_display
 from common.exceptions import JMSException
 from jumpserver.settings import get_file_md5
 from orgs.mixins.models import JMSOrgBaseModel
@@ -266,19 +267,40 @@ class Plan(JMSOrgBaseModel):
         verbose_name = _('Plan')
         ordering = ('-date_created',)
 
-    def create_execution(self, user):
-        plan_meta = {
-            'name': self.name, 'category': self.category, 'plan_strategy': self.plan_strategy,
-            'playback_strategy': self.playback_strategy, 'playback_id': str(self.playback.id)
-        }
-        return Execution.objects.create(
-            plan_id=self.id, asset=self.asset, user_id=user.id,
-            account=self.account, plan_meta=plan_meta
-        )
-
     @lazyproperty
     def execution(self):
-        return Execution.objects.filter(plan_id=self.id).first()
+        plan = self.subs.exclude(status=TaskStatus.success).order_by('index').first() # noqa
+        if plan is None:
+            return None
+        return Execution.objects.filter(plan_id=plan.id).first()
+
+
+class SubPlan(JMSOrgBaseModel):
+    name = models.CharField(max_length=128, verbose_name=_('Name'))
+    plan = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name='subs', verbose_name=_('Plan'))
+    index = models.IntegerField(db_index=True, auto_created=True, verbose_name=_('Index'))
+    status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
+
+    class Meta:
+        verbose_name = _('Sub plan')
+
+    def create_execution(self, user):
+        plan_meta = {
+            'name': self.plan.name, 'category': self.plan.category, 'plan_strategy': self.plan.plan_strategy, # noqa
+            'playback_strategy': self.plan.playback_strategy, 'playback_id': str(self.plan.playback.id) # noqa
+        }
+        return Execution.objects.create(
+            plan_id=self.id, asset=self.plan.asset, user_id=user.id, # noqa
+            account=self.plan.account, plan_meta=plan_meta # noqa
+        )
+
+    def generate_name(self):
+        return f'{self.plan.name}-{local_now_date_display}'[:128]
+
+    def save(self, *args, **kwargs):
+        if not self.name:
+            self.name = self.generate_name()
+        return super().save(*args, **kwargs)
 
 
 class Execution(JMSOrgBaseModel):
@@ -289,6 +311,7 @@ class Execution(JMSOrgBaseModel):
         Asset, on_delete=models.CASCADE, null=True, related_name='e2s', verbose_name=_('Asset')
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, verbose_name=_('Account'))
+    # 这里是SubPlan的id
     plan_id = models.CharField(max_length=36, verbose_name=_('Plan'))
     plan_meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
