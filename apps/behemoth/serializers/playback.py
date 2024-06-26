@@ -16,3 +16,7 @@ class PlaybackSerializer(serializers.ModelSerializer):
         fields_mini = ['id', 'name']
         fields_small = fields_mini + ['environment']
         fields = fields_small
+
+
+class PlaybackTaskSerializer(serializers.Serializer):
+    pass

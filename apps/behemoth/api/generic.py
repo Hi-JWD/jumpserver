@@ -11,26 +11,26 @@ from django.conf import settings
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.generics import GenericAPIView
-from rest_framework.views import APIView
 from rest_framework import status as http_status
-from rest_framework import serializers as drf_serializers
 
 from behemoth.backends import cmd_storage
 from behemoth import serializers
 from behemoth.const import (
     CommandStatus, TaskStatus, FORMAT_COMMAND_CACHE_KEY, FILE_COMMAND_CACHE_KEY,
-    CommandCategory,
+    CommandCategory, PlanCategory, PlaybackStrategy
 )
 from behemoth.libs.pools.worker import worker_pool
-from behemoth.models import Environment, Playback, Plan, Iteration, Execution
-from common.api import JMSBulkModelViewSet
+from behemoth.models import (
+    Environment, Playback, Plan, Iteration, Execution, Command
+)
+from orgs.mixins.api import OrgBulkModelViewSet
 from common.exceptions import JMSException
 from common.utils import random_string
 from orgs.utils import get_current_org_id
 
 
-class EnvironmentViewSet(JMSBulkModelViewSet):
-    queryset = Environment.objects.all()
+class EnvironmentViewSet(OrgBulkModelViewSet):
+    model = Environment
     search_fields = ['name']
     serializer_class = serializers.EnvironmentSerializer
     rbac_perms = {
@@ -46,19 +46,37 @@ class EnvironmentViewSet(JMSBulkModelViewSet):
         return Response(data=serializer.data)
 
 
-class PlaybackViewSet(JMSBulkModelViewSet):
-    queryset = Playback.objects.all()
+class PlaybackViewSet(OrgBulkModelViewSet):
+    model = Playback
     search_fields = ['name']
-    serializer_class = serializers.PlaybackSerializer
-
-
-class CommandUploadAPIView(APIView):
+    serializer_classes = {
+        'default': serializers.PlaybackSerializer,
+        'get_tasks': serializers.ExecutionSerializer
+    }
     rbac_perms = {
-        'POST': ['behemoth.change_command'],
+        'get_tasks': 'behemoth.view_execution',
+    }
+
+    @action(methods=['GET'], detail=True, url_path='deploy_tasks')
+    def get_tasks(self, *args, **kwargs):
+        instance = self.get_object()
+        qs = Execution.objects.filter(playback_id=instance.id)
+        return self.get_paginated_response_from_queryset(qs)
+
+
+class CommandViewSet(OrgBulkModelViewSet):
+    model = Command
+    serializer_classes = (
+        ('default', serializers.CommandSerializer),
+        ('upload_commands', serializers.UploadCommandSerializer),
+    )
+    rbac_perms = {
+        'format_commands': 'behemoth.view_command',
+        'upload_commands': 'behemoth.add_command',
     }
 
     @staticmethod
-    def cache_pause(mark_id, item):
+    def cache_command(mark_id, item):
         if not item:
             return
 
@@ -67,12 +85,30 @@ class CommandUploadAPIView(APIView):
         items.append(item)
         cache.set(cache_key, items, 3600)
 
-    def post(self, request, *args, **kwargs):
-        mark_id = request.data.get('mark_id', '')
-        type_ = request.data.get('type')
-        if type_ == 'pause':
+    @staticmethod
+    def convert_commands(commands: AnyStr):
+        statements = sqlparse.split(commands)
+        format_query = {
+            'keyword_case': 'upper', 'strip_comments': True,
+            'use_space_around_operators': True, 'strip_whitespace': True
+        }
+        return [sqlparse.format(s, **format_query) for s in statements]
+
+    @action(['POST'], detail=False, url_path='format')
+    def format_commands(self, request, *args, **kwargs):
+        token = random_string(16)
+        commands = self.convert_commands(request.data['commands'])
+        cache.set(FORMAT_COMMAND_CACHE_KEY.format(token), commands, 3600)
+        return Response(data={'token': token, 'commands': commands})
+
+    @action(['POST'], detail=False, url_path='upload')
+    def upload_commands(self, request, *args, **kwargs):
+        serializer = self.get_serializer_class()(data=request.data)
+        mark_id = serializer.data['mark_id']
+        action_ = serializer.data['action']
+        if action_ == 'cache_pause':
             pause = request.data.get('pause', {})
-            self.cache_pause(mark_id, {'category': CommandCategory.pause, **pause})
+            self.cache_command(mark_id, {'category': CommandCategory.pause, **pause})
         else:
             files = request.FILES.getlist('files')
             if len(files) < 1:
@@ -85,90 +121,37 @@ class CommandUploadAPIView(APIView):
             with open(saved_path, 'wb+') as destination:
                 for chunk in file.chunks():
                     destination.write(chunk)
-            index = request.data.get('index')
-            self.cache_pause(mark_id, {'filepath': saved_path, 'index': index, 'category': CommandCategory.file})
+            item = {
+                'index': serializer.data['index'],
+                'filepath': saved_path, 'category': CommandCategory.file
+            }
+            self.cache_command(mark_id, item)
         return Response(status=http_status.HTTP_200_OK)
 
 
-class CommandAPIView(APIView):
-    rbac_perms = {
-        'POST': ['behemoth.change_command'],
-    }
-
-    @staticmethod
-    def convert_commands(commands: AnyStr):
-        statements = sqlparse.split(commands)
-        format_query = {
-            'keyword_case': 'upper', 'strip_comments': True,
-            'use_space_around_operators': True, 'strip_whitespace': True
-        }
-        return [sqlparse.format(s, **format_query) for s in statements]
-
-    def post(self, request, *args, **kwargs):
-        action_params = ('format',)
-        action_ = request.query_params.get('action')
-        if not action_:
-            err_info = _("The parameter 'action' must be [{}]".format(','.join(action_params)))
-            return Response(status=http_status.HTTP_400_BAD_REQUEST, data={'error', err_info})
-
-        if action_ == 'format':
-            token = random_string(16)
-            commands = self.convert_commands(request.data['commands'])
-            cache.set(FORMAT_COMMAND_CACHE_KEY.format(token), commands, 3600)
-            return Response(data={'token': token, 'commands': commands})
-        return Response(status=http_status.HTTP_400_BAD_REQUEST)
-
-
-class ExecutionAPIView(GenericAPIView):
-    queryset = Execution.objects.all()
+class ExecutionViewSet(OrgBulkModelViewSet):
+    model = Execution
     serializer_classes = {
-        'status': serializers.ExecutionStatusSerializer,
-        'command': serializers.ExecutionCommandSerializer,
+        'default': serializers.ExecutionSerializer,
+        'update_command': serializers.ExecutionCommandSerializer,
+        'get_commands': serializers.CommandSerializer
+    }
+    rbac_perms = {
+        'update_command': 'behemoth.change_command',
+        'get_commands': 'behemoth.view_command',
     }
 
-    def get_rbac_perms(self):
-        default_perms = {
-            'POST': 'behemoth.change_execution'
-        }
-        command_perms = {
-            'POST': 'behemoth.change_command'
-        }
-        type_ = self.request.query_params.get('type')
-        return command_perms if type_ == 'command' else default_perms
-
-    def get_serializer_class(self):
-        type_ = self.request.query_params.get('type')
-        default = drf_serializers.Serializer
-        return self.serializer_classes.get(type_, default)
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+    @action(methods=['PATCH'], detail=True, url_path='command')
+    def update_command(self, request, *args, **kwargs):
+        serializer = self.get_serializer_class()(data=request.data)
         serializer.is_valid(raise_exception=True)
-        type_ = self.request.query_params.get('type')
-        handler = getattr(self, f'_type_for_{type_}', None)
-        if not handler:
-            error = _('Task {} args or kwargs error').format(type_)
-            raise JMSException(error)
-        else:
-            resp = handler(data=serializer.validated_data, execution=self.get_object())
-            return resp or Response(status=http_status.HTTP_200_OK)
-
-    @staticmethod
-    def _type_for_status(execution, data, *args, **kwargs):
-        execution.status = data['status']
-        execution.reason = data['reason']
-        execution.save(update_fields=['status', 'reason'])
-
-    @staticmethod
-    def _get_cmd(data, execution):
-        # TODO 【命令缓存】在线执行的任务从缓存获取命令集合
-        cmd = cmd_storage.get_queryset().filter(
-            id=data['command_id'], execution_id=str(execution.id),
-            org_id=str(get_current_org_id())
-        ).first()
-        return cmd
-
-    def _type_for_command(self, execution, data, *args, **kwargs):
+        data = serializer.data
+        execution = self.get_object()
+        if execution.status != TaskStatus.executing:
+            message = _('The task is not running!')
+            return Response(
+                status=http_status.HTTP_200_OK, data={'status': False, 'detail': message}
+            )
         cmd = self._get_cmd(data, execution)
         if not cmd:
             raise JMSException(_('%s object does not exist.') % data['command_id'])
@@ -182,10 +165,14 @@ class ExecutionAPIView(GenericAPIView):
         worker_pool.refresh_task_info(execution, 'command_cb', serializer.data)
 
         can_continue, detail = True, ''
-        # 任务被手动暂停或者命令类型为“暂停”并开启暂停才不能继续执行
-        if execution.status == TaskStatus.pause or cmd.pause:
+        # 任务被手动暂停或者命令类型为“暂停”并开启暂停才不能继续执行[任务为同步类型]
+        plan_category = execution.plan_meta.get('category')
+        if execution.status == TaskStatus.pause:
             can_continue = False
-            detail = _('Paused')
+            detail = _('Manual paused')
+        elif plan_category == PlanCategory.sync and cmd.pause:
+            can_continue = False
+            detail = _('Command paused')
         elif data['status'] == CommandStatus.failed:
             can_continue = False
             detail = _('Failed')
@@ -197,17 +184,30 @@ class ExecutionAPIView(GenericAPIView):
             worker_pool.refresh_task_info(execution, 'pause', cmd.output)
         return Response(status=http_status.HTTP_200_OK, data={'status': can_continue, 'detail': detail})
 
+    @action(methods=['GET'], detail=True, url_path='commands')
+    def get_commands(self, request, *args, **kwargs):
+        commands = self.get_object().get_commands()
+        serializer = self.get_serializer_class()(commands, many=True)
+        return Response(status=http_status.HTTP_200_OK, data=serializer.data)
+
+    @staticmethod
+    def _get_cmd(data, execution):
+        # TODO 【命令缓存】在线执行的任务从缓存获取命令集合
+        return cmd_storage.get_queryset().filter(
+            id=data['command_id'], execution_id=str(execution.id),
+            org_id=str(get_current_org_id())
+        ).first()
+
     @staticmethod
     def _type_for_health(execution, *args, **kwargs):
         # TODO 想办法证明这个任务正在执行，这个接口10秒1次
         pass
 
 
-class PlanViewSet(JMSBulkModelViewSet):
-    queryset = Plan.objects.all()
+class PlanViewSet(OrgBulkModelViewSet):
+    model = Plan
     search_fields = ['name']
     filterset_fields = ['name', 'category']
-    serializer_class = serializers.PlanSerializer
 
     def get_serializer_class(self):
         task_type = self.request.query_params.get('task_type')
@@ -216,8 +216,11 @@ class PlanViewSet(JMSBulkModelViewSet):
             serializer_class = serializers.FilePlanSerializer
         return serializer_class
 
+    def get_queryset(self):
+        return super().get_queryset().order_by('-date_created')
 
-class IterationViewSet(JMSBulkModelViewSet):
-    queryset = Iteration.objects.all()
+
+class IterationViewSet(OrgBulkModelViewSet):
+    model = Iteration
     search_fields = ['name']
     serializer_class = serializers.IterationSerializer

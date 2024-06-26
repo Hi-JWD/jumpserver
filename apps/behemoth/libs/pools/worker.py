@@ -6,7 +6,6 @@ import redis
 from functools import partial
 from typing import Dict, AnyStr, Any, List
 
-from celery import shared_task
 from django.utils.translation import gettext as _
 from django.conf import settings
 from django.core.cache import cache
@@ -25,11 +24,6 @@ from orgs.models import Organization
 
 
 logger = get_logger(__name__)
-
-
-@shared_task(verbose_name=_('Worker run task'))
-def run_task_sync(execution):
-    worker_pool.work(execution)
 
 
 class WorkerPool(object):
@@ -80,10 +74,6 @@ class WorkerPool(object):
         else:
             self._default_workers[worker.org_id].pop(worker.name, None)
         logger.debug(f'Delete worker：{worker}({", ".join(labels) or _("No label")})')
-
-    def refresh_worker(self, worker: Worker) -> None:
-        self.delete_worker(worker)
-        self.add_worker(worker)
 
     def __select_worker(self, asset: Asset) -> Worker | None:
         worker: Worker | None = None

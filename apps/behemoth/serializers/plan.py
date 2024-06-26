@@ -1,6 +1,4 @@
-import sqlparse
-
-from typing import AnyStr, SupportsInt, Dict
+from typing import AnyStr, Dict
 
 from rest_framework import serializers
 from django.utils.translation import gettext as _
@@ -13,10 +11,10 @@ from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
 from common.utils import lazyproperty
 from assets.models import Asset
 from accounts.models import Account
-from ..models import Plan, Playback, Environment, Command, Execution
-from ..const import (
+from behemoth.models import Plan, Playback, Environment, Command, Execution
+from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, CommandCategory,
-    FILE_COMMAND_CACHE_KEY
+    FILE_COMMAND_CACHE_KEY, PlaybackStrategy
 )
 
 
@@ -26,10 +24,20 @@ class SimpleCommandSerializer(serializers.ModelSerializer):
         fields = ['id', 'input', 'index', 'category']
 
 
+class UploadCommandSerializer(serializers.Serializer):
+    ACTION_CHOICES = [
+        ('cache_pause', 'cache_pause'),
+        ('cache_file', 'cache_file')
+    ]
+    mark_id = serializers.CharField(required=True, max_length=32, label=_('Mark ID'))
+    action = serializers.ChoiceField(choices=ACTION_CHOICES, label=_('Type'))
+    index = serializers.CharField(required=False, max_length=32, label=_('Index'))
+
+
 class CommandSerializer(serializers.ModelSerializer):
     class Meta(SimpleCommandSerializer.Meta):
         fields = SimpleCommandSerializer.Meta.fields + [
-            'output', 'status', 'timestamp'
+            'output', 'status', 'timestamp', 'pause'
         ]
 
     @lazyproperty
@@ -51,20 +59,21 @@ class PlanSerializer(serializers.ModelSerializer):
     account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
-    strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Strategy'))
+    plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
+    playback_strategy = LabeledChoiceField(choices=PlaybackStrategy.choices, label=_('Playback strategy'))
     status = serializers.SerializerMethodField(label=_('Status'))
 
     class Meta:
         model = Plan
         fields_mini = ['id', 'name', 'category']
         fields_small = fields_mini + [
-            'environment', 'asset', 'account', 'playback', 'strategy'
+            'environment', 'asset', 'account', 'playback', 'plan_strategy', 'playback_strategy'
         ]
-        fields = fields_small + ['execution', 'status', 'comment']
+        fields = fields_small + ['created_by', 'execution', 'status', 'comment', 'date_created']
 
     @staticmethod
     def get_status(obj):
-        return Execution.objects.filter(plan_id=obj.id).values_list('status', flat=True)[0]
+        return obj.execution.status
 
     @staticmethod
     def _format(c: AnyStr) -> Dict:
@@ -93,17 +102,13 @@ class PlanSerializer(serializers.ModelSerializer):
         with transaction.atomic():
             user = self.context['request'].user
             e = instance.create_execution(user)
-            command_objs, delay_commands = [], []
+            command_objs = []
             for i, c in enumerate(commands):
                 command = Command(
                     execution_id=e.id, index=i, created_by=user,
                     updated_by=user, **self._format(c)
                 )
-                if command.category == CommandCategory.pause and not command.pause:
-                    delay_commands.append(i)
-                else:
-                    command_objs.append(command)
-            command_objs.extend(delay_commands)
+                command_objs.append(command)
             commands = Command.objects.bulk_create(command_objs)
         return commands
 

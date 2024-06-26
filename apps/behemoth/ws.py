@@ -5,13 +5,16 @@ import json
 from channels.generic.websocket import JsonWebsocketConsumer
 from django.utils.translation import gettext as _
 from rest_framework.utils.encoders import JSONEncoder
+from celery.result import AsyncResult, states
 
 from behemoth.const import TaskStatus
 from behemoth.models import Execution
 from behemoth.serializers import CommandSerializer
-from behemoth.libs.pools.worker import worker_pool, run_task_sync
+from behemoth.libs.pools.worker import worker_pool
+from behemoth.tasks import run_task_sync
 from common.db.utils import close_old_connections
 from common.utils import get_logger
+from ops.celery import app
 
 
 logger = get_logger(__name__)
@@ -53,8 +56,7 @@ class ExecutionWebsocket(JsonWebsocketConsumer):
                     execution.status = TaskStatus.executing
                     execution.save(update_fields=['status'])
                     task_id = run_task_sync.delay(execution)
-                    # TODO 返回task_id用来查询任务是否存活
-                    self.send_json({'type': 'show_tip', 'data': '开始执行'})
+                    self.send_json({'type': 'show_tip', 'data': {'task_id': task_id.id}})
                 else:
                     self.send_json({'type': 'error', 'data': _('Task status: %s') % execution.status})
             elif type_ == 'pause':
@@ -65,6 +67,13 @@ class ExecutionWebsocket(JsonWebsocketConsumer):
             elif type_ == 'info':
                 execution = self.get_execution(execution_id)
                 self.send_json(worker_pool.get_task_info(execution))
+            elif type_ == 'task_status':
+                task_id = content.get('task_id')
+                if not task_id:
+                    return
+
+                result = AsyncResult(task_id, app=app)
+                self.send_json({'type': type_, 'data': {'status': result.status}})
         except Exception as e:
             logger.error('Behemoth ws error: %s' % e)
             self.send_json({'type': 'error', 'data': str(e)})

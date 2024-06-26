@@ -12,11 +12,10 @@ router.register(r'environments', api.EnvironmentViewSet, 'environment')
 router.register(r'playbacks', api.PlaybackViewSet, 'playback')
 router.register(r'plans', api.PlanViewSet, 'plan')
 router.register(r'iterations', api.IterationViewSet, 'iteration')
+router.register(r'commands', api.CommandViewSet, 'command')
+router.register(r'executions', api.ExecutionViewSet, 'executions')
 
 urlpatterns = [
-    path('executions/<uuid:pk>/', api.ExecutionAPIView.as_view(), name='execution'),
-    path('commands/', api.CommandAPIView.as_view(), name='command'),
-    path('commands/upload/', api.CommandUploadAPIView.as_view(), name='upload-command-file'),
 ]
 
 urlpatterns += router.urls

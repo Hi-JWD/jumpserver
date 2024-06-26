@@ -307,12 +307,22 @@ func NewJMSClient(host, token, orgId string, logger *log.Logger) *JumpServerClie
 	}
 }
 
-func (c *JumpServerClient) Get(url string) ([]byte, error) {
-	request, err := http.NewRequest("GET", c.host+url, nil)
+func (c *JumpServerClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
+	request, err := http.NewRequest(method, c.host+url, body)
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Add("Authorization", c.token)
+	request.Header.Add("Authorization", "Bearer "+c.token)
+	request.Header.Add("X-JMS-ORG", c.orgId)
+	request.Header.Set("Content-Type", "application/json")
+	return request, nil
+}
+
+func (c *JumpServerClient) Get(url string) ([]byte, error) {
+	request, err := c.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.client.Do(request)
 	if err != nil {
 		return nil, err
@@ -327,15 +337,23 @@ func (c *JumpServerClient) Get(url string) ([]byte, error) {
 
 func (c *JumpServerClient) Post(url string, data map[string]interface{}) (*http.Response, error) {
 	byteData, _ := json.Marshal(data)
-	request, err := http.NewRequest(
-		"POST", c.host+url, bytes.NewBuffer(byteData),
-	)
+	request, err := c.NewRequest("GET", url, bytes.NewBuffer(byteData))
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Add("Authorization", "Bearer "+c.token)
-	request.Header.Add("X-JMS-ORG", c.orgId)
-	request.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *JumpServerClient) Patch(url string, data map[string]interface{}) (*http.Response, error) {
+	byteData, _ := json.Marshal(data)
+	request, err := c.NewRequest("PATCH", url, bytes.NewBuffer(byteData))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.client.Do(request)
 	if err != nil {
 		return nil, err
@@ -373,8 +391,8 @@ func (c *JumpServerClient) OperateTask(taskID, status string, err error) error {
 		data["reason"] = "-"
 	}
 
-	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=status", taskID)
-	resp, err := c.Post(url, data)
+	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/", taskID)
+	resp, err := c.Patch(url, data)
 	if err != nil {
 		c.logger.Printf("Task[%s] running operation failed, %s", taskID, err)
 		return err
@@ -407,8 +425,8 @@ func (c *JumpServerClient) CommandCB(
 		data["status"] = "failed"
 		data["output"] = err.Error()
 	}
-	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/?type=command", taskID)
-	resp, err := c.Post(url, data)
+	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/command/", taskID)
+	resp, err := c.Patch(url, data)
 	if err != nil {
 		return nil, err
 	}

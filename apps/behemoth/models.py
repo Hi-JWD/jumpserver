@@ -18,11 +18,11 @@ from assets.const import Protocol as const_p, WORKER_NAME
 from behemoth.backends import cmd_storage
 from behemoth.const import (
     TaskStatus, CommandStatus, PlanStrategy, PlanCategory,
-    CommandCategory, WorkerPlatform
+    CommandCategory, WorkerPlatform, PlaybackStrategy
 )
 from behemoth.utils import encrypt_json_file
 from common.db.encoder import ModelJSONFieldEncoder
-from common.utils import get_logger
+from common.utils import get_logger, lazyproperty
 from common.exceptions import JMSException
 from jumpserver.settings import get_file_md5
 from orgs.mixins.models import JMSOrgBaseModel
@@ -131,11 +131,11 @@ class Worker(Asset):
     def __ensure_script_exist(self) -> None:
         self._callback(type_='show_tip', value='正在处理脚本文件')
         platform_named = {
-            'mac': ('jms_cli_mac', '/tmp/behemoth'),
-            'linux': ('jms_cli_linux', '/tmp/behemoth'),
-            'windows': ('jms_cli_windows.exe', r'C:\Windows\Temp'),
+            'mac': ('jms_cli_mac', '/tmp/behemoth', 'md5'),
+            'linux': ('jms_cli_linux', '/tmp/behemoth', 'md5sum'),
+            'windows': ('jms_cli_windows.exe', r'C:\Windows\Temp', ''),
         }
-        filename, remote_dir = platform_named.get(str(self.base), ('', ''))
+        filename, remote_dir, md5_cmd = platform_named.get(str(self.base), ('', '', ''))
         if not filename:
             raise JMSException(_('The worker[%s](%s) type error') % (self, self.type))
 
@@ -143,7 +143,7 @@ class Worker(Asset):
         local_path = os.path.join(
             settings.APPS_DIR, 'behemoth', 'libs', 'go_script', filename
         )
-        command = f'md5sum {remote_path}'
+        command = f'{md5_cmd} {remote_path}'
         __, stdout, __ = self._ssh_client.exec_command(command)
         stdout = stdout.read().decode().split()
         local_exist = os.path.exists(local_path)
@@ -207,6 +207,10 @@ class Worker(Asset):
 
 
 class Command(JMSOrgBaseModel):
+    """
+    任务类型为“同步”，后续考虑保存并创建execution会多复制一份冗余的command对象集，用来保存对应的命令执行结果
+    怎么根据“部署”去分类这些命令需要考虑一下
+    """
     input = models.CharField(max_length=1024, blank=True, verbose_name=_('Input'))
     output = models.CharField(max_length=1024, blank=True, verbose_name=_('Output'))
     index = models.IntegerField(db_index=True, verbose_name=_('Index'))
@@ -239,9 +243,13 @@ class Playback(JMSOrgBaseModel):
 
 class Plan(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
-    strategy = models.CharField(
+    plan_strategy = models.CharField(
         max_length=32, default=PlanStrategy.failed_stop,
-        choices=PlanStrategy.choices, verbose_name=_('Strategy')
+        choices=PlanStrategy.choices, verbose_name=_('Plan strategy')
+    )
+    playback_strategy = models.CharField(
+        max_length=32, default=PlaybackStrategy.auto,
+        choices=PlaybackStrategy.choices, verbose_name=_('Playback strategy')
     )
     category = models.CharField(
         max_length=32, default=PlanCategory.deploy,
@@ -256,17 +264,19 @@ class Plan(JMSOrgBaseModel):
 
     class Meta:
         verbose_name = _('Plan')
+        ordering = ('-date_created',)
 
     def create_execution(self, user):
-        plan_meta ={
-            'strategy': self.strategy
+        plan_meta = {
+            'name': self.name, 'category': self.category, 'plan_strategy': self.plan_strategy,
+            'playback_strategy': self.playback_strategy, 'playback_id': str(self.playback.id)
         }
         return Execution.objects.create(
             plan_id=self.id, asset=self.asset, user_id=user.id,
             account=self.account, plan_meta=plan_meta
         )
 
-    @property
+    @lazyproperty
     def execution(self):
         return Execution.objects.filter(plan_id=self.id).first()
 
@@ -284,6 +294,7 @@ class Execution(JMSOrgBaseModel):
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
+    playback_id = models.CharField(default='', max_length=36, verbose_name=_('Playback'))
 
     class Meta:
         verbose_name = _('Task')

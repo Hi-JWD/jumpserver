@@ -31,6 +31,12 @@ class PlanStrategy(models.TextChoices):
     failed_stop = 'failed_stop', _('Failed stop')
 
 
+class PlaybackStrategy(models.TextChoices):
+    auto = 'auto', _('Auto add')
+    manual = 'manual', _('Manual add')
+    never = 'never', _('Never add')
+
+
 class CommandCategory(models.TextChoices):
     command = 'command', _('Command')
     pause = 'pause', _('Pause')

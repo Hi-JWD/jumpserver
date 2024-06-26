@@ -11,5 +11,7 @@ class BehemothConfig(AppConfig):
 
     def ready(self):
         from . import signal_handlers  # noqa
+        from . import tasks  # noqa
+
         os.makedirs(settings.COMMAND_DIR, exist_ok=True)
         super().ready()
