@@ -250,7 +250,7 @@ class JobUtil(object):
         return cache.get(self.job_key)
 
     def bind_job(self, job_id):
-        cache.set(self.job_key, job_id)
+        cache.set(self.job_key, job_id, timeout=settings.SESSION_COOKIE_AGE)
         self.mark_select_ok()
 
     def mark_select_ok(self):
