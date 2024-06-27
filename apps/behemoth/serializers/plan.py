@@ -34,6 +34,12 @@ class UploadCommandSerializer(serializers.Serializer):
     index = serializers.CharField(required=False, max_length=32, label=_('Index'))
 
 
+class SubPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubPlan
+        fields_mini = ['id', 'name', 'serial']
+        fields = fields_mini + ['date_created', 'created_by', 'status']
+
 class CommandSerializer(serializers.ModelSerializer):
     class Meta(SimpleCommandSerializer.Meta):
         fields = SimpleCommandSerializer.Meta.fields + [
@@ -54,7 +60,6 @@ class CommandSerializer(serializers.ModelSerializer):
 class PlanSerializer(serializers.ModelSerializer):
     bind_fields = tuple()
 
-    execution = ObjectRelatedField(read_only=True, attrs=('id', 'status', 'reason'), label=_('Execution'))
     asset = ObjectRelatedField(queryset=Asset.objects, label=_('Asset'))
     account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
@@ -62,7 +67,6 @@ class PlanSerializer(serializers.ModelSerializer):
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
     playback_strategy = LabeledChoiceField(choices=PlaybackStrategy.choices, label=_('Playback strategy'))
     status = serializers.SerializerMethodField(label=_('Status'))
-    sub_plan_name = serializers.CharField(allow_blank=True, max_length=128, label=_('Sub plan name'))
 
     class Meta:
         model = Plan
@@ -70,11 +74,13 @@ class PlanSerializer(serializers.ModelSerializer):
         fields_small = fields_mini + [
             'environment', 'asset', 'account', 'playback', 'plan_strategy', 'playback_strategy'
         ]
-        fields = fields_small + ['created_by', 'execution', 'status', 'comment', 'date_created']
+        fields = fields_small + [
+            'created_by', 'status', 'comment', 'date_created'
+        ]
 
     @staticmethod
     def get_status(obj):
-        return obj.execution.status
+        return obj.execution.status if obj.execution else '-'
 
     @staticmethod
     def _format(c: AnyStr) -> Dict:
@@ -99,11 +105,10 @@ class PlanSerializer(serializers.ModelSerializer):
         return cache.get(FORMAT_COMMAND_CACHE_KEY.format(token), [])
 
     def create_commands(self, instance, validated_data):
-        plan_name = validated_data['sub_plan_name']
         commands = self.get_commands()
         with transaction.atomic():
             user = self.context['request'].user
-            sub_plan = SubPlan.objects.create(name=plan_name, plan=instance)
+            sub_plan = SubPlan.objects.create(name=self.filename, plan=instance)
             e = sub_plan.create_execution(user)
             command_objs = []
             for i, c in enumerate(commands):
@@ -123,12 +128,12 @@ class PlanSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         self.bind_attr(validated_data)
         instance = super().create(validated_data)
-        self.create_commands(instance, validated_data)
+        # self.create_commands(instance, validated_data)
         return instance
 
     def update(self, instance, validated_data):
         self.bind_attr(validated_data)
-        self.create_commands(instance, validated_data)
+        # self.create_commands(instance, validated_data)
         return super().update(instance, validated_data)
 
 

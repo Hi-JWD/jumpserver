@@ -10,14 +10,13 @@ from django.utils._os import safe_join
 from django.conf import settings
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.generics import GenericAPIView
 from rest_framework import status as http_status
 
 from behemoth.backends import cmd_storage
 from behemoth import serializers
 from behemoth.const import (
     CommandStatus, TaskStatus, FORMAT_COMMAND_CACHE_KEY, FILE_COMMAND_CACHE_KEY,
-    CommandCategory, PlanCategory, PlaybackStrategy
+    CommandCategory, PlanCategory
 )
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
@@ -208,6 +207,12 @@ class PlanViewSet(OrgBulkModelViewSet):
     model = Plan
     search_fields = ['name']
     filterset_fields = ['name', 'category']
+    serializer_classes = {
+        'default': serializers.PlanSerializer,
+    }
+    rbac_perms = {
+        'get_sub_plans': 'behemoth.view_subplan',
+    }
 
     def get_serializer_class(self):
         task_type = self.request.query_params.get('task_type')
@@ -218,6 +223,16 @@ class PlanViewSet(OrgBulkModelViewSet):
 
     def get_queryset(self):
         return super().get_queryset().order_by('-date_created')
+
+    @action(methods=['GET'], detail=True, url_path='sub-plans')
+    def get_sub_plans(self, request, *args, **kwargs):
+        obj = self.get_object()
+        serializer = serializers.SubPlanSerializer(obj.subs, many=True)
+        return Response({'results': serializer.data})
+
+    @action(methods=['POST'], detail=True, url_path='deploy_command')
+    def append_cmd_deploy(self, request, *args, **kwargs):
+        pass
 
 
 class IterationViewSet(OrgBulkModelViewSet):

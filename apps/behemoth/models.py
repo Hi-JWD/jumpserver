@@ -7,6 +7,7 @@ import paramiko
 from typing import Callable
 
 from django.utils.translation import gettext as _
+from django.db.models import Max
 from django.conf import settings
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.db import models
@@ -269,7 +270,7 @@ class Plan(JMSOrgBaseModel):
 
     @lazyproperty
     def execution(self):
-        plan = self.subs.exclude(status=TaskStatus.success).order_by('index').first() # noqa
+        plan = self.subs.exclude(status=TaskStatus.success).order_by('serial').first() # noqa
         if plan is None:
             return None
         return Execution.objects.filter(plan_id=plan.id).first()
@@ -278,7 +279,7 @@ class Plan(JMSOrgBaseModel):
 class SubPlan(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
     plan = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name='subs', verbose_name=_('Plan'))
-    index = models.IntegerField(db_index=True, auto_created=True, verbose_name=_('Index'))
+    serial = models.IntegerField(default=0, db_index=True, verbose_name=_('Serial'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
 
     class Meta:
@@ -298,6 +299,8 @@ class SubPlan(JMSOrgBaseModel):
         return f'{self.plan.name}-{local_now_date_display}'[:128]
 
     def save(self, *args, **kwargs):
+        max_serial = SubPlan.objects.aggregate(Max('serial'))['serial__max'] or 0
+        self.serial_number = max_serial + 1
         if not self.name:
             self.name = self.generate_name()
         return super().save(*args, **kwargs)
