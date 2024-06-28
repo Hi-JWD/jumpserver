@@ -35,10 +35,28 @@ class UploadCommandSerializer(serializers.Serializer):
 
 
 class SubPlanSerializer(serializers.ModelSerializer):
+    execution = ObjectRelatedField(
+        queryset=Execution.objects, attrs=('id', 'status'), label=_('Execution')
+    )
+    status = serializers.SerializerMethodField(label=_('Status'))
+    task_id = serializers.SerializerMethodField(label=_('Task ID'))
+
     class Meta:
         model = SubPlan
         fields_mini = ['id', 'name', 'serial']
-        fields = fields_mini + ['date_created', 'created_by', 'status']
+        fields = fields_mini + [
+            'date_created', 'created_by', 'execution',
+            'status', 'task_id'
+        ]
+
+    @staticmethod
+    def get_status(obj):
+        return obj.execution.status
+
+    @staticmethod
+    def get_task_id(obj):
+        return obj.execution.task_id
+
 
 class CommandSerializer(serializers.ModelSerializer):
     class Meta(SimpleCommandSerializer.Meta):
@@ -66,7 +84,6 @@ class PlanSerializer(serializers.ModelSerializer):
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
     playback_strategy = LabeledChoiceField(choices=PlaybackStrategy.choices, label=_('Playback strategy'))
-    status = serializers.SerializerMethodField(label=_('Status'))
 
     class Meta:
         model = Plan
@@ -78,9 +95,22 @@ class PlanSerializer(serializers.ModelSerializer):
             'created_by', 'status', 'comment', 'date_created'
         ]
 
-    @staticmethod
-    def get_status(obj):
-        return obj.execution.status if obj.execution else '-'
+
+class BaseSubPlanSerializer(serializers.ModelSerializer):
+    bind_fields = ['token']
+
+    name = serializers.CharField(required=False, label=_('Name'))
+    token = serializers.CharField(write_only=True, max_length=16, label=_('Token'))
+
+    class Meta:
+        model = SubPlan
+        fields_mini = ['id', 'name']
+        fields = fields_mini + ['serial', 'created_by', 'date_created'] + ['token', 'plan']
+
+    def bind_attr(self, validated_data):
+        for field in self.bind_fields:
+            if value := validated_data.pop(field, None):
+                setattr(self, field, value)
 
     @staticmethod
     def _format(c: AnyStr) -> Dict:
@@ -101,49 +131,46 @@ class PlanSerializer(serializers.ModelSerializer):
         return command
 
     def get_commands(self):
-        token = self.context['request'].query_params.get('token')
-        return cache.get(FORMAT_COMMAND_CACHE_KEY.format(token), [])
+        return cache.get(FORMAT_COMMAND_CACHE_KEY.format(self.token), [])
 
-    def create_commands(self, instance, validated_data):
+    def create_commands(self, instance):
         commands = self.get_commands()
         with transaction.atomic():
-            user = self.context['request'].user
-            sub_plan = SubPlan.objects.create(name=self.filename, plan=instance)
-            e = sub_plan.create_execution(user)
             command_objs = []
             for i, c in enumerate(commands):
                 command = Command(
-                    execution_id=e.id, index=i, created_by=user,
-                    updated_by=user, **self._format(c)
+                    execution_id=instance.execution.id, index=i, **self._format(c)
                 )
                 command_objs.append(command)
             commands = Command.objects.bulk_create(command_objs)
         return commands
 
-    def bind_attr(self, validated_data):
-        for field in self.bind_fields:
-            if value := validated_data.pop(field, None):
-                setattr(self, field, value)
-
     def create(self, validated_data):
         self.bind_attr(validated_data)
         instance = super().create(validated_data)
-        # self.create_commands(instance, validated_data)
+        self.create_commands(instance)
         return instance
 
     def update(self, instance, validated_data):
         self.bind_attr(validated_data)
-        # self.create_commands(instance, validated_data)
+        self.create_commands(instance)
         return super().update(instance, validated_data)
 
 
-class FilePlanSerializer(PlanSerializer):
-    bind_fields = ('mark_id',)
+class SubPlanCommandSerializer(BaseSubPlanSerializer):
+    class Meta(BaseSubPlanSerializer.Meta):
+        fields = BaseSubPlanSerializer.Meta.fields
+
+
+class SubPlanFileSerializer(BaseSubPlanSerializer):
+    bind_fields = BaseSubPlanSerializer.bind_fields + ['mark_id']
 
     mark_id = serializers.CharField(write_only=True, required=True, max_length=32, label=_('Mark ID'))
 
-    class Meta(PlanSerializer.Meta):
-        fields = PlanSerializer.Meta.fields + ['mark_id']
+    class Meta(BaseSubPlanSerializer.Meta):
+        fields = BaseSubPlanSerializer.Meta.fields + [
+            'mark_id'
+        ]
 
     @staticmethod
     def _format(c: Dict) -> Dict:
@@ -158,3 +185,7 @@ class FilePlanSerializer(PlanSerializer):
 
     def get_commands(self):
         return cache.get(FILE_COMMAND_CACHE_KEY.format(self.mark_id), [])
+
+
+class SyncPlanSerializer(serializers.Serializer):
+    pass

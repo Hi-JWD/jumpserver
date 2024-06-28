@@ -40,7 +40,7 @@ APPS_DIR = os.path.join(PROJECT_DIR, 'apps')
 DATA_DIR = os.path.join(PROJECT_DIR, 'data')
 SHARE_DIR = os.path.join(DATA_DIR, 'share')
 ANSIBLE_DIR = os.path.join(SHARE_DIR, 'ansible')
-COMMAND_DIR = os.path.join(SHARE_DIR, 'command')
+BEHEMOTH_DIR = os.path.join(SHARE_DIR, 'behemoth')
 CERTS_DIR = os.path.join(DATA_DIR, 'certs')
 
 # Quick-start development settings - unsuitable for production

@@ -9,7 +9,7 @@ platform_data = {
     "su_enabled": False,
     "name": "Worker",
     "automation": {
-        "ansible_enabled": False,
+        "ansible_enabled": True,
         "ansible_config": {
             "ansible_connection": "smart"
         },

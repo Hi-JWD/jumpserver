@@ -24,12 +24,15 @@ class ExecutionSerializer(serializers.ModelSerializer):
         return obj.plan_meta.get('name', '')
 
     def validate(self, attrs):
+        attrs = super().validate(attrs)
         from behemoth.libs.pools.worker import worker_pool
 
         if (attrs['status'] == const.TaskStatus.success and
                 self.instance.plan_meta['playback_strategy'] == const.PlaybackStrategy.auto):
-            self.instance.playback_id = self.instance.plan_meta['playback_id']
-            worker_pool.refresh_task_info(self.instance, 'success', '任务执行成功')
+            attrs['playback_id'] = self.instance.plan_meta['playback_id']
+            worker_pool.record(self.instance, '任务执行成功', 'green')
+        elif attrs['status'] == const.TaskStatus.failed:
+            worker_pool.record(self.instance, '任务执行失败', 'red')
         return attrs
 
 

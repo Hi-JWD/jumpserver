@@ -32,8 +32,11 @@ def on_worker_delete(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=Worker)
 def on_worker_add_pre(sender, instance, **kwargs):
-    if worker := Worker.objects.get(pk=instance.pk):
-        worker_pool.delete_worker(worker)
+    try:
+        if worker := Worker.objects.get(pk=instance.pk):
+            worker_pool.delete_worker(worker)
+    except instance.DoesNotExist:
+        pass
 
 
 @receiver(post_save, sender=Worker)

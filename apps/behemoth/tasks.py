@@ -9,4 +9,4 @@ def run_task_sync(execution):
     try:
         worker_pool.work(execution)
     except Exception as e:
-        worker_pool.refresh_task_info(execution, 'error', str(e))
+        worker_pool.record(execution, str(e))

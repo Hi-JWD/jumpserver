@@ -1,9 +1,12 @@
 import json
 
-from typing import Callable, Any
+from typing import Any
 
 from Crypto.Cipher import AES  # noqa
 from Crypto.Util.Padding import pad, unpad # noqa
+from termcolor import COLORS
+
+from common.utils.timezone import local_now_display
 
 
 # 加密函数
@@ -38,3 +41,39 @@ def decrypt_json_file(file_path: str, secret: str) -> None:
     decrypted_data = decrypt(encrypted_data, secret)
     data = json.loads(decrypted_data)
     return data
+
+
+class ColoredPrinter(object):
+    _red = 'light_red'
+    _green = 'light_green'
+    _yellow = 'light_yellow'
+    _grey = 'light_grey'
+    _white = 'white'
+
+    @staticmethod
+    def polish(text, color, has_time=True):
+        fmt = u"\033[%sm%s\033[0m"
+        color_code = u'0;%s' % COLORS[color]
+        content = u"\n".join([fmt % (color_code, t) for t in text.split(u'\n')])
+        if has_time:
+            content = f'{local_now_display()}: {content}'
+        return f'{content}\n'
+
+    def red(self, text):
+        return self.polish(text=text, color=self._red)
+
+    def green(self, text):
+        return self.polish(text=text, color=self._green)
+
+    def yellow(self, text):
+        return self.polish(text=text, color=self._yellow)
+
+    def info(self, text):
+        return self.polish(text=text, color=self._grey)
+
+    def line(self, output='=', length=60):
+        text = '{}{}'.format('\n', output * length)
+        return self.polish(text=text, color=self._white, has_time=False)
+
+
+colored_printer = ColoredPrinter()

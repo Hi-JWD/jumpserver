@@ -19,14 +19,15 @@ from assets.const import Protocol as const_p, WORKER_NAME
 from behemoth.backends import cmd_storage
 from behemoth.const import (
     TaskStatus, CommandStatus, PlanStrategy, PlanCategory,
-    CommandCategory, WorkerPlatform, PlaybackStrategy
+    CommandCategory, WorkerPlatform, PlaybackStrategy, SubPlanCategory
 )
-from behemoth.utils import encrypt_json_file
+from behemoth.utils import encrypt_json_file, colored_printer as p
 from common.db.encoder import ModelJSONFieldEncoder
-from common.utils import get_logger, lazyproperty
+from common.utils import get_logger
 from common.utils.timezone import local_now_date_display
 from common.exceptions import JMSException
 from jumpserver.settings import get_file_md5
+from jumpserver.utils import get_current_request
 from orgs.mixins.models import JMSOrgBaseModel
 from orgs.mixins.models import OrgManager
 from users.models import User
@@ -40,9 +41,8 @@ class WorkerQuerySet(OrgManager):
         return super().get_queryset().filter(platform__name=WORKER_NAME)
 
     def bulk_create(self, objs, batch_size=None, ignore_conflicts=False):
-        default_platform = Worker.default_platform()
         for obj in objs:
-            obj.platform = default_platform
+            obj.platform = Worker.default_platform()
         return super().bulk_create(objs, batch_size, ignore_conflicts)
 
 
@@ -69,7 +69,6 @@ class Worker(Asset):
             settings.APPS_DIR, 'libs', 'exec_scripts', 'worker'
         )
         self._remote_script_path = ''
-        self._callback: Callable = lambda *a, **b: None
 
     def save(self, *args, **kwargs):
         self.platform = self.default_platform()
@@ -131,7 +130,7 @@ class Worker(Asset):
         sftp.close()
 
     def __ensure_script_exist(self) -> None:
-        self._callback(type_='show_tip', value='正在处理脚本文件')
+        print(p.info('正在处理脚本文件'))
         platform_named = {
             'mac': ('jms_cli_mac', '/tmp/behemoth', 'md5'),
             'linux': ('jms_cli_linux', '/tmp/behemoth', 'md5sum'),
@@ -162,13 +161,14 @@ class Worker(Asset):
     def __process_commands_file(
             self, remote_commands_file: str, local_commands_file: str, token: str, **kwargs: dict
     ) -> None:
-        self._callback(type_='show_tip', value='正在生成命令文件')
+        print(p.info('正在生成命令文件'))
         encrypted_data = kwargs.get('encrypted_data', False)
         if encrypted_data:
             local_commands_file = encrypt_json_file(local_commands_file, token[:32])
 
         self._ssh_client.exec_command(f'mkdir -p {os.path.dirname(remote_commands_file)}')
         self._scp(local_commands_file, remote_commands_file, mode=0o400)
+        print(p.green('命令文件传输成功'))
 
     def __process_file(self, **kwargs: dict) -> None:
         self.__ensure_script_exist()
@@ -184,17 +184,15 @@ class Worker(Asset):
         os.remove(local_commands_file)
 
     def __execute_cmd(self, **kwargs: dict) -> None:
-        self._callback(type_='show_tip', value='正在下发命令')
+        print(p.info('开始执行命令\n'))
         revert_key = {'remote_commands_file': 'cmd_filepath'}
         params = {revert_key.get(k, k): v for k, v in kwargs.items()}
         encoded_data = base64.b64encode(json.dumps(params).encode()).decode()
         try:
-            logger.debug(f'{self._remote_script_path} --command {encoded_data} --backend')
-            __, stdout, __ = self._ssh_client.exec_command(
-                f'{self._remote_script_path} --command {encoded_data} --backend'
-            )
-            result = (stdout.read().decode() or _('Success'))
-            self._callback(type_='show_tip', value=_('Task distribution: %s') % result)
+            cmd = f'{self._remote_script_path} --command {encoded_data}'
+            logger.debug(cmd)
+            __, stdout, __ = self._ssh_client.exec_command(cmd)
+            stdout.channel.recv_exit_status()
         except SSHException as e:
             raise JMSException(str(e))
 
@@ -202,8 +200,7 @@ class Worker(Asset):
         self.__process_file(**kwargs)
         self.__execute_cmd(**kwargs)
 
-    def run(self, run_params: dict, callback: Callable) -> None:
-        self._callback = callback
+    def run(self, run_params: dict) -> None:
         self.__execute(**run_params)
         # self.__clear(**run_params) # TODO 后续放开
 
@@ -263,46 +260,50 @@ class Plan(JMSOrgBaseModel):
     asset = models.ForeignKey(Asset, on_delete=models.CASCADE, verbose_name=_('Asset'))
     account = models.ForeignKey(Account, on_delete=models.CASCADE, verbose_name=_('Account'))
     playback = models.ForeignKey(Playback, on_delete=models.CASCADE, verbose_name=_('Playback'))
+    status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
 
     class Meta:
         verbose_name = _('Plan')
         ordering = ('-date_created',)
 
-    @lazyproperty
-    def execution(self):
-        plan = self.subs.exclude(status=TaskStatus.success).order_by('serial').first() # noqa
-        if plan is None:
-            return None
-        return Execution.objects.filter(plan_id=plan.id).first()
-
 
 class SubPlan(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
     plan = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name='subs', verbose_name=_('Plan'))
+    category = models.CharField(
+        max_length=32, default=SubPlanCategory.cmd,
+        choices=PlanCategory.choices, verbose_name=_('Category')
+    )
+    execution = models.OneToOneField(
+        'behemoth.Execution', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='sub_plan', verbose_name=_('Execution')
+    )
     serial = models.IntegerField(default=0, db_index=True, verbose_name=_('Serial'))
-    status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
 
     class Meta:
         verbose_name = _('Sub plan')
-
-    def create_execution(self, user):
-        plan_meta = {
-            'name': self.plan.name, 'category': self.plan.category, 'plan_strategy': self.plan.plan_strategy, # noqa
-            'playback_strategy': self.plan.playback_strategy, 'playback_id': str(self.plan.playback.id) # noqa
-        }
-        return Execution.objects.create(
-            plan_id=self.id, asset=self.plan.asset, user_id=user.id, # noqa
-            account=self.plan.account, plan_meta=plan_meta # noqa
-        )
+        ordering = ('-serial',)
 
     def generate_name(self):
-        return f'{self.plan.name}-{local_now_date_display}'[:128]
+        return f'{self.plan.name}-{local_now_date_display()}'[:128]
+
+    def create_execution(self):
+        request = get_current_request()
+        p: Plan = self.plan # noqa
+        plan_meta = {
+            'name': p.name, 'category': p.category, 'plan_strategy': p.plan_strategy,
+            'playback_strategy': p.playback_strategy, 'playback_id': str(p.playback.id) # noqa
+        }
+        return Execution.objects.create(
+            asset=p.asset, user_id=request.user.id, account=p.account, plan_meta=plan_meta
+        )
 
     def save(self, *args, **kwargs):
         max_serial = SubPlan.objects.aggregate(Max('serial'))['serial__max'] or 0
-        self.serial_number = max_serial + 1
+        self.serial = max_serial + 1
         if not self.name:
             self.name = self.generate_name()
+        self.execution = self.create_execution()
         return super().save(*args, **kwargs)
 
 
@@ -315,12 +316,12 @@ class Execution(JMSOrgBaseModel):
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, verbose_name=_('Account'))
     # 这里是SubPlan的id
-    plan_id = models.CharField(max_length=36, verbose_name=_('Plan'))
     plan_meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
     playback_id = models.CharField(default='', max_length=36, verbose_name=_('Playback'))
+    task_id = models.CharField(max_length=36, default='', verbose_name=_('Task ID'))
 
     class Meta:
         verbose_name = _('Task')

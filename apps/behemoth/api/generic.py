@@ -14,16 +14,17 @@ from rest_framework import status as http_status
 
 from behemoth.backends import cmd_storage
 from behemoth import serializers
+from behemoth.tasks import run_task_sync
 from behemoth.const import (
     CommandStatus, TaskStatus, FORMAT_COMMAND_CACHE_KEY, FILE_COMMAND_CACHE_KEY,
     CommandCategory, PlanCategory
 )
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
-    Environment, Playback, Plan, Iteration, Execution, Command
+    Environment, Playback, Plan, Iteration, Execution, Command, SubPlan
 )
 from orgs.mixins.api import OrgBulkModelViewSet
-from common.exceptions import JMSException
+from common.exceptions import JMSException, JMSObjectDoesNotExist
 from common.utils import random_string
 from orgs.utils import get_current_org_id
 
@@ -160,9 +161,8 @@ class ExecutionViewSet(OrgBulkModelViewSet):
         for field in fields:
             setattr(cmd, field, data[field])
         cmd.save(update_fields=fields)
-        serializer = serializers.CommandSerializer(instance=cmd)
-        worker_pool.refresh_task_info(execution, 'command_cb', serializer.data)
-
+        worker_pool.record(execution, f'命令输入: {cmd.input}')
+        worker_pool.record(execution, f'命令输出: {cmd.output}\n')
         can_continue, detail = True, ''
         # 任务被手动暂停或者命令类型为“暂停”并开启暂停才不能继续执行[任务为同步类型]
         plan_category = execution.plan_meta.get('category')
@@ -180,14 +180,13 @@ class ExecutionViewSet(OrgBulkModelViewSet):
             execution.status = TaskStatus.pause
             execution.reason = data['output']
             execution.save(update_fields=['status', 'reason'])
-            worker_pool.refresh_task_info(execution, 'pause', cmd.output)
+            worker_pool.record(execution, f'任务暂停: {cmd.output}')
         return Response(status=http_status.HTTP_200_OK, data={'status': can_continue, 'detail': detail})
 
     @action(methods=['GET'], detail=True, url_path='commands')
     def get_commands(self, request, *args, **kwargs):
         commands = self.get_object().get_commands()
-        serializer = self.get_serializer_class()(commands, many=True)
-        return Response(status=http_status.HTTP_200_OK, data=serializer.data)
+        return self.get_paginated_response_from_queryset(commands)
 
     @staticmethod
     def _get_cmd(data, execution):
@@ -208,31 +207,67 @@ class PlanViewSet(OrgBulkModelViewSet):
     search_fields = ['name']
     filterset_fields = ['name', 'category']
     serializer_classes = {
-        'default': serializers.PlanSerializer,
+        'default': serializers.PlanSerializer
+    }
+
+
+class SubPlanViewSet(OrgBulkModelViewSet):
+    model = SubPlan
+    search_fields = ['name']
+    filterset_fields = ['name']
+    serializer_classes = {
+        'default': serializers.SubPlanSerializer,
+        'deploy_command': serializers.SubPlanCommandSerializer,
+        'deploy_file': serializers.SubPlanFileSerializer,
     }
     rbac_perms = {
-        'get_sub_plans': 'behemoth.view_subplan',
+        'operate_commands': 'behemoth.change_command | behemoth.change_execution',
     }
 
-    def get_serializer_class(self):
-        task_type = self.request.query_params.get('task_type')
-        serializer_class = serializers.PlanSerializer
-        if task_type == 'deploy_file':
-            serializer_class = serializers.FilePlanSerializer
-        return serializer_class
-
     def get_queryset(self):
-        return super().get_queryset().order_by('-date_created')
+        plan_id = self.request.query_params.get('plan_id', '')
+        if not plan_id:
+            raise JMSObjectDoesNotExist(object_name=_('Plan'))
+        return self.model.objects.filter(plan_id=plan_id)
 
-    @action(methods=['GET'], detail=True, url_path='sub-plans')
-    def get_sub_plans(self, request, *args, **kwargs):
-        obj = self.get_object()
-        serializer = serializers.SubPlanSerializer(obj.subs, many=True)
-        return Response({'results': serializer.data})
+    def create(self, request, *args, **kwargs):
+        plan_id = request.query_params.get('plan_id', '')
+        serializer = self.get_serializer(
+            data={'plan': plan_id, **request.data}
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(serializer.data, status=http_status.HTTP_201_CREATED)
 
-    @action(methods=['POST'], detail=True, url_path='deploy_command')
-    def append_cmd_deploy(self, request, *args, **kwargs):
-        pass
+    @staticmethod
+    def start_execution(execution):
+        if execution.status not in (TaskStatus.success, TaskStatus.executing):
+            task = run_task_sync.delay(execution)
+            execution.task_id = task.id
+            execution.save(update_fields=['task_id'])
+            return Response(status=http_status.HTTP_201_CREATED, data={'task_id': task.id})
+        else:
+            error = _('Task status: %s') % execution.status
+            return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
+
+    @staticmethod
+    def pause_execution(execution):
+        execution.status = TaskStatus.pause
+        execution.save(update_fields=['status'])
+        return Response(status=http_status.HTTP_200_OK)
+
+    @action(methods=['POST'], detail=True, url_path='operate_commands')
+    def operate_commands(self, request, *args, **kwargs):
+        action_ = request.data.get('action')
+        execution = self.get_object().execution
+        if action_ == 'start':
+            response = self.start_execution(execution)
+        elif action_ == 'pause':
+            response = self.pause_execution(execution)
+        else:
+            data = {'error': 'Params action is not valid'}
+            response = Response(status=http_status.HTTP_400_BAD_REQUEST, data=data)
+        return response
 
 
 class IterationViewSet(OrgBulkModelViewSet):

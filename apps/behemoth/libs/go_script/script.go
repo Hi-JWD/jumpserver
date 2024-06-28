@@ -494,8 +494,12 @@ func main() {
 	}
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
-		_ = jmsClient.OperateTask(opts.TaskID, TaskFailed, err)
-		logger.Fatalf("Task connect failed: %v\n", err)
+		logger.Printf("Task connect failed: %v\n", err)
+		err = jmsClient.OperateTask(opts.TaskID, TaskFailed, err)
+		if err != nil {
+			logger.Printf("Task modify failed: %v\n", err)
+		}
+		os.Exit(1)
 	}
 
 	var result string

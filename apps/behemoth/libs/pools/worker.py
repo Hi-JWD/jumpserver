@@ -1,27 +1,24 @@
 import os
 
 import json
-import redis
 
-from functools import partial
-from typing import Dict, AnyStr, Any, List
+from typing import Dict, AnyStr
 
 from django.utils.translation import gettext as _
 from django.conf import settings
-from django.core.cache import cache
 from difflib import SequenceMatcher
 from rest_framework.utils.encoders import JSONEncoder
-from redis import Redis
 
 from assets.models import Asset
 from assets.const.database import DatabaseTypes
 from behemoth import const
 from behemoth.models import Worker, Execution
 from behemoth.serializers import SimpleCommandSerializer
+from behemoth.utils import colored_printer as p
 from common.utils import get_logger
 from common.exceptions import JMSException
 from orgs.models import Organization
-
+from ops.celery.utils import get_celery_task_log_path
 
 logger = get_logger(__name__)
 
@@ -34,12 +31,6 @@ class WorkerPool(object):
         self._running_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
         self._useless_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
         # other
-        self._client: Redis | None = None
-
-    def get_cache(self):
-        if self._client is None or not self._client.ping():
-            self._client = cache.client.get_client()
-        return self._client
 
     def select_org(self, org_id=None):
         if org_id is not None:
@@ -115,43 +106,15 @@ class WorkerPool(object):
                 break
         return worker
 
-    def _pop_commands_from_cache(self, key) -> List:
-        with self.get_cache().pipeline() as pipe:
-            while True:
-                try:
-                    pipe.watch(key)
-                    commands = pipe.lrange(key, 0, -1)
-                    if not commands:
-                        pipe.unwatch()
-                        return commands
-
-                    pipe.multi()
-                    pipe.delete(key)
-                    pipe.execute()
-                    commands = [json.loads(c) for c in commands]
-                    return commands
-                except redis.WatchError:
-                    continue
-
-    def refresh_task_info(self, e: Execution, type_: AnyStr, value: Any, ttl: int = 3600 * 4):
-        client = self.get_cache()
-        cache.set(const.TASK_TYPE_CACHE_KEY.format(e.id), type_, ttl)
-        if type_ == 'command_cb':
-            client.expire(const.TASK_DATA_CACHE_KEY.format(e.id), ttl)
-            client.rpush(const.TASK_DATA_CACHE_KEY.format(e.id), json.dumps(value))
-        else:
-            cache.set(const.TASK_DATA_CACHE_KEY.format(e.id), value, ttl)
-
-    def get_task_info(self, e: Execution) -> Dict:
-        type_ = cache.get(const.TASK_TYPE_CACHE_KEY.format(e.id))
-        if type_ == 'command_cb':
-            data = self._pop_commands_from_cache(const.TASK_DATA_CACHE_KEY.format(e.id))
-        else:
-            data = cache.get(const.TASK_DATA_CACHE_KEY.format(e.id), {})
-        return {'type': type_, 'data': data}
+    @staticmethod
+    def record(e: Execution, text: str, color='info'):
+        formater = getattr(p, color, 'info')
+        log_file = get_celery_task_log_path(e.task_id)
+        with open(log_file, 'a') as f:
+            f.write(formater(text))
 
     def __pre_run(self, execution: Execution) -> None:
-        self.refresh_task_info(execution, 'show_tip',  '正在获取一个有效的工作机')
+        print(p.info('正在寻找有效的工作机...'))
         self.select_org(execution.org_id)
         execution.worker = self.__get_valid_worker(execution)
         execution.save(update_fields=['worker'])
@@ -164,13 +127,13 @@ class WorkerPool(object):
             'command_set': SimpleCommandSerializer(commands, many=True).data,
         }
         filename: str = f'{execution.id}.bs'
-        filepath = os.path.join(settings.COMMAND_DIR, filename)
+        filepath = os.path.join(settings.BEHEMOTH_DIR, filename)
         with open(filepath, 'w') as f:
             f.write(json.dumps(data, cls=JSONEncoder))
         return filepath
 
     def __build_params(self, execution: Execution) -> dict:
-        self.refresh_task_info(execution, 'show_tip', '正在构建命令执行需要的参数信息')
+        print(p.info('正在构建命令执行需要的参数信息'))
         command_filepath: str = f'{execution.id}.bs'
         local_cmds_file = self.__generate_command_file(execution)
         remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
@@ -197,8 +160,7 @@ class WorkerPool(object):
 
     def __run(self, execution: Execution) -> None:
         run_params: dict = self.__build_params(execution)
-        cb = partial(self.refresh_task_info, e=execution)
-        execution.worker.run(run_params, callback=cb)
+        execution.worker.run(run_params)
 
     def work(self, execution: Execution) -> None:
         err_msg = ''
@@ -206,17 +168,8 @@ class WorkerPool(object):
             self.__pre_run(execution)
             self.__run(execution)
         except Exception as err:
-            err_msg = f'{execution.asset} work failed: {err}'
-            logger.error(err_msg)
-            worker_pool.refresh_task_info(execution, 'error', str(err_msg))
-        finally:
-            self.done(execution, err_msg)
-
-    @staticmethod
-    def done(execution: Execution, err_msg: AnyStr) -> None:
-        execution.status = const.TaskStatus.failed if err_msg else const.TaskStatus.executing
-        execution.reason = err_msg
-        execution.save(update_fields=['status', 'reason'])
+            err_msg = f'针对 {execution.asset} 的任务执行失败: {err}'
+            print(p.red(err_msg))
 
     def check(self):
         # TODO 定时检测 self._useless_workers 中的 Worker 活性

@@ -51,3 +51,8 @@ class WorkerPlatform(models.TextChoices):
 class PlanCategory(models.TextChoices):
     sync = 'sync', _('Sync')
     deploy = 'deploy', _('Deploy')
+
+
+class SubPlanCategory(models.TextChoices):
+    file = 'file', _('File')
+    cmd = 'cmd', _('Command')
