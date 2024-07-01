@@ -10,4 +10,7 @@ __all__ = ['WorkerSerializer']
 class WorkerSerializer(AssetSerializer):
     class Meta(AssetSerializer.Meta):
         model = Worker
-        fields = AssetSerializer.Meta.fields + ['base', 'meta']
+        fields = AssetSerializer.Meta.fields + ['base', 'meta', 'envs']
+        extra_kwargs = {
+            'meta': {'write_only': True},
+        }

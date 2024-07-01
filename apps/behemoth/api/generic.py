@@ -258,7 +258,6 @@ class SubPlanViewSet(OrgBulkModelViewSet):
     def start_execution(execution):
         if execution.status not in (TaskStatus.success, TaskStatus.executing):
             task = run_task_sync.delay(execution)
-            execution.task_id = task.id
             execution.status = TaskStatus.executing
             execution.save(update_fields=['task_id', 'status'])
             return Response(status=http_status.HTTP_201_CREATED, data={'task_id': task.id})

@@ -221,6 +221,7 @@ type CmdOptions struct {
 	CmdFilepath string   `json:"cmd_filepath"`
 	CmdSet      []Cmd    `json:"command_set"`
 	Encrypted   bool     `json:"encrypted_data"`
+	Envs        string   `json:"envs"`
 }
 
 func (co *CmdOptions) ValidCmdType() bool {
@@ -487,8 +488,19 @@ func main() {
 
 	logger := GetLogger(opts.TaskID)
 	jmsClient := NewJMSClient(opts.Host, opts.Token, opts.OrgId, logger)
-
 	logger.Printf("Start executing the task")
+
+	for _, part := range strings.Split(opts.Envs, ";") {
+		value := strings.Split(part, "=")
+		if len(value) == 2 {
+			if err := os.Setenv(value[0], value[1]); err != nil {
+				logger.Fatalf("Set environment variables failed: %v, error: %v", value, err)
+			} else {
+				logger.Printf("Set environment variables: %v=%v", value[0], value[1])
+			}
+		}
+	}
+	return
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
 		logger.Printf("Task connect failed: %v\n", err)

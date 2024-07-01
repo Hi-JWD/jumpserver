@@ -34,7 +34,7 @@ class WorkerPool(object):
 
     def select_org(self, org_id=None):
         if org_id is not None:
-            self._org_id = org_id
+            self._org_id = str(org_id)
             for d in (
                     self._workers, self._default_workers,
                     self._running_workers, self._useless_workers
@@ -51,20 +51,23 @@ class WorkerPool(object):
         labels = worker.get_labels()
         if labels:
             for label in labels:
-                self._workers[worker.org_id][label][worker.name] = worker
+                self._workers[str(worker.org_id)][label][worker.name] = worker
         else:
-            self._default_workers[worker.org_id][worker.name] = worker
+            self._default_workers[str(worker.org_id)][worker.name] = worker
         logger.debug(f'Add worker：{worker}({", ".join(labels) or _("No label")})')
 
     def delete_worker(self, worker: Worker) -> None:
         self.select_org(worker.org_id)
+        worker_set = set()
         labels = worker.get_labels()
         if labels:
             for label in labels:
-                self._workers[worker.org_id][label].pop(worker.name, None)
+                w = self._workers[str(worker.org_id)][label].pop(worker.name, None)
+                worker_set.add(w)
         else:
-            self._default_workers[worker.org_id].pop(worker.name, None)
-        logger.debug(f'Delete worker：{worker}({", ".join(labels) or _("No label")})')
+            w = self._default_workers[str(worker.org_id)].pop(worker.name, None)
+            worker_set.add(w)
+        logger.debug(f'Delete worker：{worker_set}({", ".join(labels) or _("No label")})')
 
     def __select_worker(self, asset: Asset) -> Worker | None:
         worker: Worker | None = None
@@ -154,7 +157,8 @@ class WorkerPool(object):
             'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
             'auth': auth, 'token': str(token), 'task_id': str(execution.id),
             'encrypted_data': False, 'remote_commands_file': remote_cmds_file,
-            'local_commands_file': local_cmds_file, 'org_id': str(execution.org_id)
+            'local_commands_file': local_cmds_file, 'org_id': str(execution.org_id),
+            'envs': execution.worker.envs,
         }
         return params
 
@@ -169,6 +173,8 @@ class WorkerPool(object):
             self.__run(execution)
         except Exception as err:
             err_msg = f'针对 {execution.asset} 的任务执行失败: {err}'
+            execution.status = const.TaskStatus.failed
+            execution.save(update_fields=['status'])
             print(p.red(err_msg))
 
     def check(self):

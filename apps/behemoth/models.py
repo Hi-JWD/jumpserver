@@ -14,7 +14,7 @@ from django.db import models
 from paramiko.ssh_exception import SSHException
 
 from accounts.models import Account
-from assets.models import Protocol, Asset, Platform
+from assets.models import Protocol, Database, Platform, Asset
 from assets.const import Protocol as const_p, WORKER_NAME
 from behemoth.backends import cmd_storage
 from behemoth.const import (
@@ -69,6 +69,10 @@ class Worker(Asset):
             settings.APPS_DIR, 'libs', 'exec_scripts', 'worker'
         )
         self._remote_script_path = ''
+
+    @property
+    def envs(self):
+        return self.meta.get('envs', '') # noqa
 
     def save(self, *args, **kwargs):
         self.platform = self.default_platform()
@@ -257,7 +261,7 @@ class Plan(JMSOrgBaseModel):
     environment = models.ForeignKey(
         Environment, on_delete=models.CASCADE, related_name='instructions', verbose_name=_('Environment')
     )
-    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, verbose_name=_('Asset'))
+    asset = models.ForeignKey(Database, on_delete=models.CASCADE, verbose_name=_('Asset'))
     account = models.ForeignKey(Account, on_delete=models.CASCADE, verbose_name=_('Account'))
     playback = models.ForeignKey(Playback, on_delete=models.CASCADE, verbose_name=_('Playback'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
@@ -312,7 +316,7 @@ class Execution(JMSOrgBaseModel):
         Worker, on_delete=models.SET_NULL, null=True, related_name='e1s', verbose_name=_('Worker')
     )
     asset = models.ForeignKey(
-        Asset, on_delete=models.CASCADE, null=True, related_name='e2s', verbose_name=_('Asset')
+        Database, on_delete=models.CASCADE, null=True, related_name='e2s', verbose_name=_('Asset')
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, verbose_name=_('Account'))
     # 这里是SubPlan的id

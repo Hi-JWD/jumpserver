@@ -1,5 +1,6 @@
 from django.dispatch import receiver
 from django.db.models.signals import post_delete, pre_save, post_save
+from django.core.exceptions import ObjectDoesNotExist
 
 from common.signals import django_ready
 from .libs.pools.worker import worker_pool
@@ -33,9 +34,8 @@ def on_worker_delete(sender, instance, **kwargs):
 @receiver(pre_save, sender=Worker)
 def on_worker_add_pre(sender, instance, **kwargs):
     try:
-        if worker := Worker.objects.get(pk=instance.pk):
-            worker_pool.delete_worker(worker)
-    except instance.DoesNotExist:
+        worker_pool.delete_worker(instance.worker)
+    except ObjectDoesNotExist:
         pass
 
 
