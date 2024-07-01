@@ -229,7 +229,7 @@ class Command(JMSOrgBaseModel):
 
 class Environment(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
-    assets = models.ManyToManyField('assets.Asset', verbose_name=_("Assets"))
+    assets = models.ManyToManyField('assets.Database', verbose_name=_("Assets"))
 
 
 class Playback(JMSOrgBaseModel):

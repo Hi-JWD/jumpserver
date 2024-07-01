@@ -489,9 +489,6 @@ func main() {
 	jmsClient := NewJMSClient(opts.Host, opts.Token, opts.OrgId, logger)
 
 	logger.Printf("Start executing the task")
-	if err := jmsClient.OperateTask(opts.TaskID, TaskStart, nil); err != nil {
-		logger.Fatalf("Task launch failed: %v\n", err)
-	}
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
 		logger.Printf("Task connect failed: %v\n", err)

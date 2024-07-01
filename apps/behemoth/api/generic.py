@@ -32,18 +32,32 @@ from orgs.utils import get_current_org_id
 class EnvironmentViewSet(OrgBulkModelViewSet):
     model = Environment
     search_fields = ['name']
-    serializer_class = serializers.EnvironmentSerializer
+    serializer_classes = {
+        'default': serializers.EnvironmentSerializer,
+        'get_assets': serializers.AssetSerializer,
+    }
     rbac_perms = {
         'get_assets': ['behemoth.view_environment']
     }
 
-    @action(['GET'], detail=True, url_path='assets')
+    @action(['GET', 'PATCH', 'DELETE'], detail=True, url_path='assets')
     def get_assets(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = serializers.AssetSerializer(
-            instance.assets.all(), many=True
-        )
-        return Response(data=serializer.data)
+        if request.method == 'GET':
+            qs = self.get_object().assets.all()
+            return self.get_paginated_response_from_queryset(qs)
+        else:
+            instance = self.get_object()
+            serializer = serializers.AssetEnvironmentSerializer(data=request.data)
+            if serializer.is_valid():
+                assets = serializer.validated_data.get('assets')
+                action_ = serializer.validated_data['action']
+                if action_ == 'remove':
+                    instance.assets.remove(*tuple(assets))
+                else:
+                    instance.assets.add(*tuple(assets))
+                return Response(status=http_status.HTTP_200_OK)
+            else:
+                return Response(status=http_status.HTTP_400_BAD_REQUEST, data=serializer.errors)
 
 
 class PlaybackViewSet(OrgBulkModelViewSet):
@@ -51,14 +65,14 @@ class PlaybackViewSet(OrgBulkModelViewSet):
     search_fields = ['name']
     serializer_classes = {
         'default': serializers.PlaybackSerializer,
-        'get_tasks': serializers.ExecutionSerializer
+        'get_deploy_tasks': serializers.ExecutionSerializer
     }
     rbac_perms = {
-        'get_tasks': 'behemoth.view_execution',
+        'get_deploy_tasks': 'behemoth.view_execution',
     }
 
     @action(methods=['GET'], detail=True, url_path='deploy_tasks')
-    def get_tasks(self, *args, **kwargs):
+    def get_deploy_tasks(self, *args, **kwargs):
         instance = self.get_object()
         qs = Execution.objects.filter(playback_id=instance.id)
         return self.get_paginated_response_from_queryset(qs)
@@ -213,6 +227,7 @@ class PlanViewSet(OrgBulkModelViewSet):
 
 class SubPlanViewSet(OrgBulkModelViewSet):
     model = SubPlan
+    ordering = '-serial'
     search_fields = ['name']
     filterset_fields = ['name']
     serializer_classes = {
@@ -244,7 +259,8 @@ class SubPlanViewSet(OrgBulkModelViewSet):
         if execution.status not in (TaskStatus.success, TaskStatus.executing):
             task = run_task_sync.delay(execution)
             execution.task_id = task.id
-            execution.save(update_fields=['task_id'])
+            execution.status = TaskStatus.executing
+            execution.save(update_fields=['task_id', 'status'])
             return Response(status=http_status.HTTP_201_CREATED, data={'task_id': task.id})
         else:
             error = _('Task status: %s') % execution.status
