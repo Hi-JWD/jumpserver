@@ -92,7 +92,7 @@ class PlanSerializer(serializers.ModelSerializer):
             'environment', 'asset', 'account', 'playback', 'plan_strategy', 'playback_strategy'
         ]
         fields = fields_small + [
-            'created_by', 'status', 'comment', 'date_created'
+            'created_by', 'comment', 'date_created'
         ]
 
 

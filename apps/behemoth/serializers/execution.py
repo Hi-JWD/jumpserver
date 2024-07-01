@@ -24,6 +24,9 @@ class ExecutionSerializer(serializers.ModelSerializer):
         return obj.plan_meta.get('name', '')
 
     def validate(self, attrs):
+        if not self.instance:
+            return []
+
         attrs = super().validate(attrs)
         from behemoth.libs.pools.worker import worker_pool
 
