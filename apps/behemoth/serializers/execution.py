@@ -33,7 +33,7 @@ class ExecutionSerializer(serializers.ModelSerializer):
         if (attrs['status'] == const.TaskStatus.success and
                 self.instance.plan_meta['playback_strategy'] == const.PlaybackStrategy.auto):
             attrs['playback_id'] = self.instance.plan_meta['playback_id']
-            worker_pool.record(self.instance, '任务执行成功', 'green')
+            worker_pool.record(self.instance, '命令执行完成', 'green')
         elif attrs['status'] == const.TaskStatus.failed:
             worker_pool.record(self.instance, '任务执行失败', 'red')
         return attrs

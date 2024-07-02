@@ -102,6 +102,7 @@ class WorkerPool(object):
             connectivity: bool = worker.test_connectivity(False)
             if not connectivity:
                 self._useless_workers[self._org_id][str(worker.id)] = worker
+                # TODO 后续这里持续寻找
                 raise JMSException(_('Worker[%s] is not valid') % worker)
             else:
                 self.add_worker(worker)
@@ -126,6 +127,7 @@ class WorkerPool(object):
     def __generate_command_file(execution: Execution) -> str:
         # TODO 【命令缓存】命令生成后再缓存中保存一份，减少命令回调的数据查询
         commands = execution.get_commands(get_all=False)
+        print(p.info(f'共 {len(commands)} 条命令待执行'))
         data = {
             'command_set': SimpleCommandSerializer(commands, many=True).data,
         }
@@ -167,7 +169,6 @@ class WorkerPool(object):
         execution.worker.run(run_params)
 
     def work(self, execution: Execution) -> None:
-        err_msg = ''
         try:
             self.__pre_run(execution)
             self.__run(execution)
@@ -176,6 +177,8 @@ class WorkerPool(object):
             execution.status = const.TaskStatus.failed
             execution.save(update_fields=['status'])
             print(p.red(err_msg))
+        else:
+            print(p.green('任务执行成功'))
 
     def check(self):
         # TODO 定时检测 self._useless_workers 中的 Worker 活性

@@ -9,7 +9,7 @@ from django.conf import settings
 
 from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
 from common.utils import lazyproperty
-from assets.models import Asset
+from assets.models import Database
 from accounts.models import Account
 from behemoth.models import Plan, Playback, Environment, Command, Execution, SubPlan
 from behemoth.const import (
@@ -78,7 +78,7 @@ class CommandSerializer(serializers.ModelSerializer):
 class PlanSerializer(serializers.ModelSerializer):
     bind_fields = tuple()
 
-    asset = ObjectRelatedField(queryset=Asset.objects, label=_('Asset'))
+    asset = ObjectRelatedField(queryset=Database.objects, label=_('Asset'))
     account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))

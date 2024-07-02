@@ -175,8 +175,9 @@ class ExecutionViewSet(OrgBulkModelViewSet):
         for field in fields:
             setattr(cmd, field, data[field])
         cmd.save(update_fields=fields)
-        worker_pool.record(execution, f'命令输入: {cmd.input}')
-        worker_pool.record(execution, f'命令输出: {cmd.output}\n')
+        if cmd.status == CommandStatus.success:
+            worker_pool.record(execution, f'命令输入: {cmd.input}')
+            worker_pool.record(execution, f'命令输出: {cmd.output}\n')
         can_continue, detail = True, ''
         # 任务被手动暂停或者命令类型为“暂停”并开启暂停才不能继续执行[任务为同步类型]
         plan_category = execution.plan_meta.get('category')
@@ -194,7 +195,7 @@ class ExecutionViewSet(OrgBulkModelViewSet):
             execution.status = TaskStatus.pause
             execution.reason = data['output']
             execution.save(update_fields=['status', 'reason'])
-            worker_pool.record(execution, f'任务暂停: {cmd.output}')
+            worker_pool.record(execution, f'任务因为[{detail}]暂停: {cmd.output}')
         return Response(status=http_status.HTTP_200_OK, data={'status': can_continue, 'detail': detail})
 
     @action(methods=['GET'], detail=True, url_path='commands')
@@ -258,6 +259,7 @@ class SubPlanViewSet(OrgBulkModelViewSet):
     def start_execution(execution):
         if execution.status not in (TaskStatus.success, TaskStatus.executing):
             task = run_task_sync.delay(execution)
+            execution.task_id = task.id
             execution.status = TaskStatus.executing
             execution.save(update_fields=['task_id', 'status'])
             return Response(status=http_status.HTTP_201_CREATED, data={'task_id': task.id})

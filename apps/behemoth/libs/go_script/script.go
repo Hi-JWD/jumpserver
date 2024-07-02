@@ -500,7 +500,7 @@ func main() {
 			}
 		}
 	}
-	return
+
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
 		logger.Printf("Task connect failed: %v\n", err)

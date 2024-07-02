@@ -32,7 +32,6 @@ from orgs.mixins.models import JMSOrgBaseModel
 from orgs.mixins.models import OrgManager
 from users.models import User
 
-
 logger = get_logger(__name__)
 
 
@@ -72,7 +71,7 @@ class Worker(Asset):
 
     @property
     def envs(self):
-        return self.meta.get('envs', '') # noqa
+        return self.meta.get('envs', '')  # noqa
 
     def save(self, *args, **kwargs):
         self.platform = self.default_platform()
@@ -80,7 +79,7 @@ class Worker(Asset):
 
     @classmethod
     def default_platform(cls):
-        return Platform.objects.get(name=WORKER_NAME, internal=True) # noqa
+        return Platform.objects.get(name=WORKER_NAME, internal=True)  # noqa
 
     def get_account(self) -> Account:
         # 后续的账号选择策略从这里搞
@@ -144,11 +143,11 @@ class Worker(Asset):
         if not filename:
             raise JMSException(_('The worker[%s](%s) type error') % (self, self.type))
 
-        remote_path = os.path.join(remote_dir, filename)
+        self._remote_script_path = os.path.join(remote_dir, filename)
         local_path = os.path.join(
             settings.APPS_DIR, 'behemoth', 'libs', 'go_script', filename
         )
-        command = f'{md5_cmd} {remote_path}'
+        command = f'{md5_cmd} {self._remote_script_path}'
         __, stdout, __ = self._ssh_client.exec_command(command)
         stdout = stdout.read().decode().split()
         local_exist = os.path.exists(local_path)
@@ -158,8 +157,7 @@ class Worker(Asset):
         if local_exist and len(stdout) > 0 and get_file_md5(local_path) == stdout[0].strip():
             return
 
-        self._remote_script_path = remote_path
-        self._ssh_client.exec_command(f'mkdir -p {os.path.dirname(remote_path)}')
+        self._ssh_client.exec_command(f'mkdir -p {os.path.dirname(self._remote_script_path)}')
         self._scp(local_path, self._remote_script_path)
 
     def __process_commands_file(
@@ -182,7 +180,7 @@ class Worker(Asset):
         # 清理远端文件
         command = f'rm -f {remote_commands_file}'
         __, stdout, __ = self._ssh_client.exec_command(command)
-        if stdout.channel.recv_exit_status() == 0: # TODO 这里要改一下，状态码判断有问题
+        if stdout.channel.recv_exit_status() == 0:  # TODO 这里要改一下，状态码判断有问题
             logger.warning(f'Remote file({remote_commands_file}) deletion failed')
         # 清理本地文件
         os.remove(local_commands_file)
@@ -225,7 +223,7 @@ class Command(JMSOrgBaseModel):
 
     class Meta:
         verbose_name = _('Command')
-        ordering = ('index', )
+        ordering = ('index',)
 
     def __str__(self):
         return '%s(%s)' % (self.category, self.input[:10])
@@ -293,10 +291,10 @@ class SubPlan(JMSOrgBaseModel):
 
     def create_execution(self):
         request = get_current_request()
-        p: Plan = self.plan # noqa
+        p: Plan = self.plan  # noqa
         plan_meta = {
             'name': p.name, 'category': p.category, 'plan_strategy': p.plan_strategy,
-            'playback_strategy': p.playback_strategy, 'playback_id': str(p.playback.id) # noqa
+            'playback_strategy': p.playback_strategy, 'playback_id': str(p.playback.id)  # noqa
         }
         return Execution.objects.create(
             asset=p.asset, user_id=request.user.id, account=p.account, plan_meta=plan_meta

@@ -6,7 +6,4 @@ from behemoth.libs.pools.worker import worker_pool
 
 @shared_task(verbose_name=_('Worker run task'))
 def run_task_sync(execution):
-    try:
-        worker_pool.work(execution)
-    except Exception as e:
-        worker_pool.record(execution, str(e))
+    worker_pool.work(execution)
