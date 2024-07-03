@@ -37,6 +37,12 @@ class PlaybackStrategy(models.TextChoices):
     never = 'never', _('Never add')
 
 
+class FormatType(models.TextChoices):
+    line_break = 'line_break', _('Line break format')
+    sql = 'sql', _('SQL format')
+    oracle = 'oracle', _('Oracle format')
+
+
 class CommandCategory(models.TextChoices):
     command = 'command', _('Command')
     pause = 'pause', _('Pause')

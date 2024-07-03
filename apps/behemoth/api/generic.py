@@ -1,7 +1,5 @@
 import os
 
-import sqlparse
-
 from typing import AnyStr
 
 from django.utils.translation import gettext as _
@@ -23,9 +21,9 @@ from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
     Environment, Playback, Plan, Iteration, Execution, Command, SubPlan
 )
-from orgs.mixins.api import OrgBulkModelViewSet
+from common.utils import is_uuid
 from common.exceptions import JMSException, JMSObjectDoesNotExist
-from common.utils import random_string
+from orgs.mixins.api import OrgBulkModelViewSet
 from orgs.utils import get_current_org_id
 
 
@@ -83,6 +81,7 @@ class CommandViewSet(OrgBulkModelViewSet):
     serializer_classes = (
         ('default', serializers.CommandSerializer),
         ('upload_commands', serializers.UploadCommandSerializer),
+        ('format_commands', serializers.FormatCommandSerializer),
     )
     rbac_perms = {
         'format_commands': 'behemoth.view_command',
@@ -99,21 +98,11 @@ class CommandViewSet(OrgBulkModelViewSet):
         items.append(item)
         cache.set(cache_key, items, 3600)
 
-    @staticmethod
-    def convert_commands(commands: AnyStr):
-        statements = sqlparse.split(commands)
-        format_query = {
-            'keyword_case': 'upper', 'strip_comments': True,
-            'use_space_around_operators': True, 'strip_whitespace': True
-        }
-        return [sqlparse.format(s, **format_query) for s in statements]
-
     @action(['POST'], detail=False, url_path='format')
     def format_commands(self, request, *args, **kwargs):
-        token = random_string(16)
-        commands = self.convert_commands(request.data['commands'])
-        cache.set(FORMAT_COMMAND_CACHE_KEY.format(token), commands, 3600)
-        return Response(data={'token': token, 'commands': commands})
+        serializer = self.get_serializer_class()(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(data=serializer.data)
 
     @action(['POST'], detail=False, url_path='upload')
     def upload_commands(self, request, *args, **kwargs):
@@ -237,12 +226,12 @@ class SubPlanViewSet(OrgBulkModelViewSet):
         'deploy_file': serializers.SubPlanFileSerializer,
     }
     rbac_perms = {
-        'operate_commands': 'behemoth.change_command | behemoth.change_execution',
+        'operate_task': 'behemoth.change_command | behemoth.change_execution',
     }
 
     def get_queryset(self):
         plan_id = self.request.query_params.get('plan_id', '')
-        if not plan_id:
+        if not is_uuid(plan_id):
             raise JMSObjectDoesNotExist(object_name=_('Plan'))
         return self.model.objects.filter(plan_id=plan_id)
 
@@ -258,11 +247,18 @@ class SubPlanViewSet(OrgBulkModelViewSet):
     @staticmethod
     def start_execution(execution):
         if execution.status not in (TaskStatus.success, TaskStatus.executing):
-            task = run_task_sync.delay(execution)
+            params = {}
+            if execution.task_id:
+                params['task_id'] = execution.task_id
+            task = run_task_sync.apply_async((execution,), **params)
             execution.task_id = task.id
             execution.status = TaskStatus.executing
             execution.save(update_fields=['task_id', 'status'])
-            return Response(status=http_status.HTTP_201_CREATED, data={'task_id': task.id})
+            return Response(
+                status=http_status.HTTP_201_CREATED, data={
+                    'task_id': task.id, 'task_status': TaskStatus.executing
+                }
+            )
         else:
             error = _('Task status: %s') % execution.status
             return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
@@ -271,10 +267,12 @@ class SubPlanViewSet(OrgBulkModelViewSet):
     def pause_execution(execution):
         execution.status = TaskStatus.pause
         execution.save(update_fields=['status'])
-        return Response(status=http_status.HTTP_200_OK)
+        return Response(status=http_status.HTTP_200_OK, data={
+            'task_status': TaskStatus.pause
+        })
 
-    @action(methods=['POST'], detail=True, url_path='operate_commands')
-    def operate_commands(self, request, *args, **kwargs):
+    @action(methods=['POST'], detail=True, url_path='operate_task')
+    def operate_task(self, request, *args, **kwargs):
         action_ = request.data.get('action')
         execution = self.get_object().execution
         if action_ == 'start':

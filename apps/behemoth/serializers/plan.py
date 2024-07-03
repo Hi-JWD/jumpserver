@@ -1,3 +1,5 @@
+import sqlparse
+
 from typing import AnyStr, Dict
 
 from rest_framework import serializers
@@ -8,13 +10,14 @@ from django.utils._os import safe_join
 from django.conf import settings
 
 from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
-from common.utils import lazyproperty
+from common.utils import lazyproperty, random_string
 from assets.models import Database
 from accounts.models import Account
 from behemoth.models import Plan, Playback, Environment, Command, Execution, SubPlan
+from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, CommandCategory,
-    FILE_COMMAND_CACHE_KEY, PlaybackStrategy
+    FILE_COMMAND_CACHE_KEY, PlaybackStrategy, FormatType
 )
 
 
@@ -22,6 +25,40 @@ class SimpleCommandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Command
         fields = ['id', 'input', 'index', 'category']
+
+
+class FormatCommandSerializer(serializers.Serializer):
+    format_type = serializers.ChoiceField(choices=FormatType.choices)
+    command = serializers.CharField(write_only=True, label=_("Command"), required=True)
+    command_list = serializers.ListSerializer(
+        read_only=True, child=serializers.CharField(), label=_("Commands")
+    )
+    token = serializers.CharField(read_only=True, max_length=16, label=_('Token'))
+
+    @staticmethod
+    def convert_commands_by_sqlparse(commands: AnyStr):
+        statements = sqlparse.split(commands)
+        format_query = {
+            'keyword_case': 'upper', 'strip_comments': True,
+            'use_space_around_operators': True, 'strip_whitespace': True
+        }
+        return [sqlparse.format(s, **format_query) for s in statements]
+
+    def get_commands(self, attrs):
+        func_map = {
+            FormatType.line_break: lambda s: s.split(),
+            FormatType.sql: self.convert_commands_by_sqlparse,
+            FormatType.oracle: oracle_parser,
+        }
+        commands = func_map[attrs['format_type']](attrs['command'])
+        cache.set(FORMAT_COMMAND_CACHE_KEY.format(attrs['token']), commands, 3600)
+        return commands
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        attrs['token'] = random_string(16)
+        attrs['command_list'] = self.get_commands(attrs)
+        return attrs
 
 
 class UploadCommandSerializer(serializers.Serializer):

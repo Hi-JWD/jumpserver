@@ -208,7 +208,6 @@ type Auth struct {
 
 type CmdOptions struct {
 	CommandBase64 string `json:"-"`
-	Backend       bool   `json:"-"`
 
 	TaskID      string   `json:"task_id"`
 	Host        string   `json:"host"`
@@ -471,16 +470,9 @@ func GetLogger(taskId string) *log.Logger {
 func main() {
 	opts := CmdOptions{}
 	flag.StringVar(&opts.CommandBase64, "command", opts.CommandBase64, "命令")
-	flag.BoolVar(&opts.Backend, "backend", false, "后台")
 	// 解析命令行标志
 	flag.Parse()
 
-	if opts.Backend {
-		cmd := exec.Command(os.Args[0], "--command", opts.CommandBase64)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		_ = cmd.Start()
-		os.Exit(0)
-	}
 	if err := opts.Valid(); err != nil {
 		fmt.Printf("参数校验错误: %v\n", err)
 		return
