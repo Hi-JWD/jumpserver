@@ -115,7 +115,9 @@ class CommandSerializer(serializers.ModelSerializer):
 class PlanSerializer(serializers.ModelSerializer):
     bind_fields = tuple()
 
-    asset = ObjectRelatedField(queryset=Database.objects, label=_('Asset'))
+    asset = ObjectRelatedField(
+        queryset=Database.objects, attrs=('id', 'name', 'address'), label=_('Asset')
+    )
     account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))

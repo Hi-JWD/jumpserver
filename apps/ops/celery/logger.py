@@ -207,11 +207,21 @@ class CeleryThreadTaskFileHandler(CeleryThreadingLoggerHandler):
         for f in self.thread_id_fd_mapper.values():
             f.flush()
 
+    @staticmethod
+    def _start_from_head(file):
+        file.seek(0)
+        content = file.read()
+        replaced_content = content.replace(CELERY_LOG_MAGIC_MARK, b'\n')
+        file.seek(0)
+        file.truncate()
+        file.write(replaced_content)
+
     def handle_task_start(self, task_id):
         log_path = get_celery_task_log_path(task_id)
         thread_id = self.get_current_thread_id()
         self.task_id_thread_id_mapper[task_id] = thread_id
-        f = open(log_path, 'ab')
+        f = open(log_path, 'ab+')
+        self._start_from_head(f)
         self.thread_id_fd_mapper[thread_id] = f
 
     def handle_task_end(self, task_id):

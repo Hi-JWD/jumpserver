@@ -30,6 +30,7 @@ view_nodes_data = [
 
 # 第三层 app 节点，手动创建
 app_nodes_data = [
+    {'id': 'behemoth', 'view': 'view_console'},
     {'id': 'users', 'view': 'view_console'},
     {'id': 'assets', 'view': 'view_console'},
     {'id': 'accounts', 'name': _('Accounts'), 'view': 'view_console'},

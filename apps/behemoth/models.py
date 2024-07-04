@@ -4,8 +4,6 @@ import json
 
 import paramiko
 
-from typing import Callable
-
 from django.utils.translation import gettext as _
 from django.db.models import Max
 from django.conf import settings
@@ -30,7 +28,7 @@ from jumpserver.settings import get_file_md5
 from jumpserver.utils import get_current_request
 from orgs.mixins.models import JMSOrgBaseModel
 from orgs.mixins.models import OrgManager
-from users.models import User
+
 
 logger = get_logger(__name__)
 
@@ -191,10 +189,11 @@ class Worker(Asset):
         params = {revert_key.get(k, k): v for k, v in kwargs.items()}
         encoded_data = base64.b64encode(json.dumps(params).encode()).decode()
         try:
-            cmd = f'{self._remote_script_path} --command {encoded_data}'
-            logger.debug(cmd)
-            __, stdout, __ = self._ssh_client.exec_command(cmd)
-            stdout.channel.recv_exit_status()
+            cmd = f'{self._remote_script_path} --command {encoded_data} --with_env'
+            __, stdout, stderr = self._ssh_client.exec_command(cmd)
+            error = stderr.read().decode()
+            if error:
+                raise JMSException(error)
         except SSHException as e:
             raise JMSException(str(e))
 
@@ -212,7 +211,7 @@ class Command(JMSOrgBaseModel):
     任务类型为“同步”，后续考虑保存并创建execution会多复制一份冗余的command对象集，用来保存对应的命令执行结果
     怎么根据“部署”去分类这些命令需要考虑一下
     """
-    input = models.CharField(max_length=1024, blank=True, verbose_name=_('Input'))
+    input = models.TextField(blank=True, verbose_name=_('Input'))
     output = models.CharField(max_length=1024, blank=True, verbose_name=_('Output'))
     index = models.IntegerField(db_index=True, verbose_name=_('Index'))
     status = models.CharField(max_length=32, default=CommandStatus.waiting, verbose_name=_('Status'))
@@ -240,6 +239,19 @@ class Playback(JMSOrgBaseModel):
         Environment, on_delete=models.CASCADE, related_name='playbacks',
         null=True, verbose_name=_('Environment')
     )
+
+    def create_execution(self, pause_data):
+        sub_plan = SubPlan(name=_('Pause'))
+        sub_plan.save()
+        PlaybackExecution.objects.create(
+            playback=self, execution=sub_plan.execution,
+            plan_name='', sub_plan_name=sub_plan.name
+        )
+        Command.objects.create(
+            input=pause_data['name'], output=pause_data['descript'],
+            index=0, execution_id=sub_plan.execution.id,
+            category=CommandCategory.pause, pause=pause_data['pause']
+        )
 
 
 class Plan(JMSOrgBaseModel):
@@ -271,7 +283,7 @@ class Plan(JMSOrgBaseModel):
 
 class SubPlan(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
-    plan = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name='subs', verbose_name=_('Plan'))
+    plan = models.ForeignKey(Plan, default=None, null=True, on_delete=models.CASCADE, related_name='subs', verbose_name=_('Plan'))
     category = models.CharField(
         max_length=32, default=SubPlanCategory.cmd,
         choices=PlanCategory.choices, verbose_name=_('Category')
@@ -292,12 +304,16 @@ class SubPlan(JMSOrgBaseModel):
     def create_execution(self):
         request = get_current_request()
         p: Plan = self.plan  # noqa
-        plan_meta = {
-            'name': p.name, 'category': p.category, 'plan_strategy': p.plan_strategy,
-            'playback_strategy': p.playback_strategy, 'playback_id': str(p.playback.id)  # noqa
-        }
+        if not p:
+            plan_meta, asset, account = {}, None, None
+        else:
+            plan_meta = {
+                'name': p.name, 'category': p.category, 'plan_strategy': p.plan_strategy,
+                'playback_strategy': p.playback_strategy, 'playback_id': str(p.playback.id)  # noqa
+            }
+            asset, account = p.asset, p.account
         return Execution.objects.create(
-            asset=p.asset, user_id=request.user.id, account=p.account, plan_meta=plan_meta
+            asset=asset, user_id=request.user.id, account=account, plan_meta=plan_meta
         )
 
     def save(self, *args, **kwargs):
@@ -322,29 +338,26 @@ class Execution(JMSOrgBaseModel):
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
-    playback_id = models.CharField(default='', max_length=36, verbose_name=_('Playback'))
     task_id = models.CharField(max_length=36, default='', verbose_name=_('Task ID'))
 
     class Meta:
         verbose_name = _('Task')
         ordering = ['-date_created']
 
-    @property
-    def user(self):
-        err = _('User not found')
-        if not self.user_id:
-            raise JMSException(err)
-
-        u = User.objects.filter(id=self.user_id).first()
-        if not u:
-            raise JMSException(err)
-        return u
-
     def get_commands(self, get_all=True):
         queryset = cmd_storage.get_queryset().filter(execution_id=self.id)
         if not get_all:
             queryset = queryset.exclude(status=CommandStatus.success)
         return queryset
+
+
+class PlaybackExecution(JMSOrgBaseModel):
+    playback = models.ForeignKey(
+        Playback, related_name='executions', on_delete=models.CASCADE, verbose_name=_('Playback')
+    )
+    execution = models.ForeignKey(Execution, on_delete=models.CASCADE, verbose_name=_('Execution'))
+    plan_name = models.CharField(max_length=128, verbose_name=_('Plan name'))
+    sub_plan_name = models.CharField(max_length=128, verbose_name=_('Sub plan name'))
 
 
 class Instruction(JMSOrgBaseModel):

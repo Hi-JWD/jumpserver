@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from common.serializers.fields import ObjectRelatedField
 
-from ..models import Execution
+from ..models import Execution, PlaybackExecution
 from .. import const
 
 
@@ -17,7 +17,7 @@ class ExecutionSerializer(serializers.ModelSerializer):
         model = Execution
         fields_mini = ['id', 'name', 'status']
         fields_small = fields_mini + ['date_updated', 'updated_by', 'created_by', 'reason']
-        fields = fields_small + ['asset', 'account', 'playback_id']
+        fields = fields_small + ['asset', 'account']
 
     @staticmethod
     def get_name(obj):
@@ -30,9 +30,14 @@ class ExecutionSerializer(serializers.ModelSerializer):
         attrs = super().validate(attrs)
         from behemoth.libs.pools.worker import worker_pool
 
+        plan_meta = self.instance.plan_meta
         if (attrs['status'] == const.TaskStatus.success and
-                self.instance.plan_meta['playback_strategy'] == const.PlaybackStrategy.auto):
-            attrs['playback_id'] = self.instance.plan_meta['playback_id']
+                plan_meta['playback_strategy'] == const.PlaybackStrategy.auto):
+            PlaybackExecution.objects.create(
+                execution=self.instance, plan_name=plan_meta['name'],
+                sub_plan_name=self.instance.sub_plan.name,
+                playback_id=self.instance.plan_meta['playback_id'],
+            )
             worker_pool.record(self.instance, '命令执行完成', 'green')
         elif attrs['status'] == const.TaskStatus.failed:
             worker_pool.record(self.instance, '任务执行失败', 'red')

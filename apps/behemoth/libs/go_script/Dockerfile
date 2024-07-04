@@ -4,7 +4,6 @@ WORKDIR /script
 
 COPY . .
 
-# ARG APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
 ARG APT_MIRROR=mirrors.ustc.edu.cn
 # ARG APT_MIRROR=mirrors.aliyun.com
 RUN sed -i "s@dl-cdn.alpinelinux.org@${APT_MIRROR}@g" /etc/apk/repositories \

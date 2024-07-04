@@ -512,19 +512,17 @@ func GetLogger(taskId string) *log.Logger {
 func main() {
 	opts := CmdOptions{}
 	flag.StringVar(&opts.CommandBase64, "command", opts.CommandBase64, "命令")
-	flag.BoolVar(&opts.WithEnv, "with_env", true, "使用参数中的环境变量执行脚本")
+	flag.BoolVar(&opts.WithEnv, "with_env", false, "使用参数中的环境变量执行脚本")
 	// 解析命令行标志
 	flag.Parse()
 
 	if err := opts.Valid(); err != nil {
-		fmt.Printf("参数校验错误: %v\n", err)
-		return
+		log.Printf("参数校验错误: %v\n", err)
+		os.Exit(1)
 	}
 
 	logger := GetLogger(opts.TaskID)
 	jmsClient := NewJMSClient(opts.Host, opts.Token, opts.OrgId, logger)
-	logger.Printf("Start executing the task")
-
 	if opts.WithEnv {
 		envs := make([]string, 0)
 		for _, part := range strings.Split(opts.Envs, ";") {
@@ -538,8 +536,10 @@ func main() {
 		if err := cmd.Run(); err != nil {
 			log.Fatalf("failed to run command: %v", err)
 		}
+		return
 	}
 
+	logger.Printf("Start executing the task")
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
 		logger.Printf("Task connect failed: %v\n", err)

@@ -2,7 +2,8 @@ from rest_framework import serializers
 from django.utils.translation import gettext as _
 
 from common.serializers.fields import ObjectRelatedField
-from ..models import Playback, Environment
+from common.serializers import CommonModelSerializer
+from ..models import Playback, Environment, PlaybackExecution
 
 
 class PlaybackSerializer(serializers.ModelSerializer):
@@ -20,3 +21,19 @@ class PlaybackSerializer(serializers.ModelSerializer):
 
 class PlaybackTaskSerializer(serializers.Serializer):
     pass
+
+
+class PlaybackExecutionSerializer(CommonModelSerializer):
+    class Meta:
+        model = PlaybackExecution
+        fields_mini = ['id', 'plan_name', 'sub_plan_name']
+        fields_small = fields_mini + [
+            'date_created', 'created_by',
+        ]
+        fields = fields_small + ['playback', 'execution']
+
+
+class InsertPauseSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    descript = serializers.CharField()
+    pause = serializers.BooleanField()

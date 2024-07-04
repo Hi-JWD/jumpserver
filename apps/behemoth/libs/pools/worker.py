@@ -1,11 +1,12 @@
-import os
-
+import base64
 import json
+import os
 
 from typing import Dict, AnyStr
 
 from django.utils.translation import gettext as _
 from django.conf import settings
+from django.core.cache import cache
 from difflib import SequenceMatcher
 from rest_framework.utils.encoders import JSONEncoder
 
@@ -15,10 +16,12 @@ from behemoth import const
 from behemoth.models import Worker, Execution
 from behemoth.serializers import SimpleCommandSerializer
 from behemoth.utils import colored_printer as p
-from common.utils import get_logger
+from common.utils import get_logger, random_string
 from common.exceptions import JMSException
 from orgs.models import Organization
 from ops.celery.utils import get_celery_task_log_path
+from jumpserver.utils import get_current_request
+
 
 logger = get_logger(__name__)
 
@@ -137,12 +140,24 @@ class WorkerPool(object):
             f.write(json.dumps(data, cls=JSONEncoder))
         return filepath
 
+    @staticmethod
+    def __create_token(user_id: str) -> str:
+        expiration = settings.TOKEN_EXPIRATION or 3600
+        remote_addr = base64.b16encode('0.0.0.0'.encode('utf-8'))  # .replace(b'=', '')
+        cache_key = '%s_%s' % (user_id, remote_addr)
+        token = cache.get(cache_key)
+        if not token:
+            token = random_string(36)
+        cache.set(token, user_id, expiration)
+        cache.set('%s_%s' % (user_id, remote_addr), token, expiration)
+        return token
+
     def __build_params(self, execution: Execution) -> dict:
         print(p.info('正在构建命令执行需要的参数信息'))
         command_filepath: str = f'{execution.id}.bs'
         local_cmds_file = self.__generate_command_file(execution)
         remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
-        token, __ = execution.user.create_bearer_token()
+        token = self.__create_token(execution.user_id)
         auth = {
             'address': execution.asset.address,
             'username': execution.account.username,
@@ -151,11 +166,11 @@ class WorkerPool(object):
         }
         if execution.asset.type == DatabaseTypes.MYSQL:
             cmd_type = script = 'mysql'
-            auth['port'] = execution.asset.get_protocol_port('mysql'),
+            auth['port'] = execution.asset.get_protocol_port('mysql')
         elif execution.asset.type == DatabaseTypes.ORACLE:
             cmd_type = script = 'oracle'
             auth.update({
-                'port': execution.asset.get_protocol_port('mysql'),
+                'port': execution.asset.get_protocol_port('oracle'),
                 'privileged': execution.account.privileged
             })
         else:
@@ -174,6 +189,7 @@ class WorkerPool(object):
         execution.worker.run(run_params)
 
     def work(self, execution: Execution) -> None:
+        print(p.green('开始执行任务'))
         try:
             self.__pre_run(execution)
             self.__run(execution)

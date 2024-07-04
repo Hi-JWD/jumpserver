@@ -1,7 +1,5 @@
 import os
 
-from typing import AnyStr
-
 from django.utils.translation import gettext as _
 from django.core.cache import cache
 from django.utils._os import safe_join
@@ -14,7 +12,7 @@ from behemoth.backends import cmd_storage
 from behemoth import serializers
 from behemoth.tasks import run_task_sync
 from behemoth.const import (
-    CommandStatus, TaskStatus, FORMAT_COMMAND_CACHE_KEY, FILE_COMMAND_CACHE_KEY,
+    CommandStatus, TaskStatus, FILE_COMMAND_CACHE_KEY,
     CommandCategory, PlanCategory
 )
 from behemoth.libs.pools.worker import worker_pool
@@ -63,17 +61,25 @@ class PlaybackViewSet(OrgBulkModelViewSet):
     search_fields = ['name']
     serializer_classes = {
         'default': serializers.PlaybackSerializer,
-        'get_deploy_tasks': serializers.ExecutionSerializer
+        'get_playbacks_tasks': serializers.PlaybackExecutionSerializer,
+        'insert_pause': serializers.InsertPauseSerializer,
     }
     rbac_perms = {
-        'get_deploy_tasks': 'behemoth.view_execution',
+        'get_playbacks_tasks': 'behemoth.view_execution',
+        'insert_pause': 'behemoth.add_execution',
     }
 
-    @action(methods=['GET'], detail=True, url_path='deploy_tasks')
-    def get_deploy_tasks(self, *args, **kwargs):
-        instance = self.get_object()
-        qs = Execution.objects.filter(playback_id=instance.id)
+    @action(methods=['GET'], detail=True, url_path='playback_tasks')
+    def get_playbacks_tasks(self, *args, **kwargs):
+        qs = self.get_object().executions.all()
         return self.get_paginated_response_from_queryset(qs)
+
+    @action(methods=['POST'], detail=True, url_path='insert_pause')
+    def insert_pause(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.get_object().create_execution(serializer.data)
+        return Response(status=http_status.HTTP_201_CREATED)
 
 
 class CommandViewSet(OrgBulkModelViewSet):
@@ -100,13 +106,13 @@ class CommandViewSet(OrgBulkModelViewSet):
 
     @action(['POST'], detail=False, url_path='format')
     def format_commands(self, request, *args, **kwargs):
-        serializer = self.get_serializer_class()(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(data=serializer.data)
 
     @action(['POST'], detail=False, url_path='upload')
     def upload_commands(self, request, *args, **kwargs):
-        serializer = self.get_serializer_class()(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         mark_id = serializer.data['mark_id']
         action_ = serializer.data['action']
         if action_ == 'cache_pause':
@@ -146,7 +152,7 @@ class ExecutionViewSet(OrgBulkModelViewSet):
 
     @action(methods=['PATCH'], detail=True, url_path='command')
     def update_command(self, request, *args, **kwargs):
-        serializer = self.get_serializer_class()(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.data
         execution = self.get_object()
@@ -265,6 +271,10 @@ class SubPlanViewSet(OrgBulkModelViewSet):
 
     @staticmethod
     def pause_execution(execution):
+        if execution.status != TaskStatus.executing:
+            error = _('Task status: %s') % execution.status
+            return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
+
         execution.status = TaskStatus.pause
         execution.save(update_fields=['status'])
         return Response(status=http_status.HTTP_200_OK, data={
