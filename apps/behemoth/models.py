@@ -135,7 +135,7 @@ class Worker(Asset):
     def __ensure_script_exist(self) -> None:
         print(p.info('正在处理脚本文件'))
         platform_named = {
-            'mac': ('jms_cli_mac', '/tmp/behemoth', 'md5'),
+            'mac': ('jms_cli_darwin', '/tmp/behemoth', 'md5'),
             'linux': ('jms_cli_linux', '/tmp/behemoth', 'md5sum'),
             'windows': ('jms_cli_windows.exe', r'C:\Windows\Temp', ''),
         }

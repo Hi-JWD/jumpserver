@@ -21,6 +21,7 @@ import (
 
 	"github.com/creack/pty"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/godror/godror"
 )
 
 const (
@@ -181,10 +182,49 @@ func (s *MySQLHandler) Close() {
 	_ = s.db.Close()
 }
 
+type OracleHandler struct {
+	opts CmdOptions
+
+	db *sql.DB
+}
+
+func (s *OracleHandler) Connect() error {
+	dsn := fmt.Sprintf(
+		`user="%s" password="%s" connectString="%s:%v/%s" sysdba=%v`,
+		s.opts.Auth.Username, s.opts.Auth.Password, s.opts.Auth.Address,
+		s.opts.Auth.Port, s.opts.Auth.DBName, s.opts.Auth.Privileged,
+	)
+	db, err := sql.Open("godror", dsn)
+	if err != nil {
+		return err
+	}
+	if err = db.Ping(); err != nil {
+		return err
+	}
+	s.db = db
+	return nil
+}
+
+func (s *OracleHandler) DoCommand(command string) (string, error) {
+	r, err := s.db.Exec(command)
+	if err != nil {
+		return "", err
+	}
+	affected, _ := r.RowsAffected()
+	return fmt.Sprintf("Affected rows: %v", affected), nil
+
+}
+
+func (s *OracleHandler) Close() {
+	_ = s.db.Close()
+}
+
 func getHandler(opts CmdOptions) BaseHandler {
 	switch opts.CmdType {
 	case "mysql":
 		return &MySQLHandler{opts: opts}
+	case "oracle":
+		return &OracleHandler{opts: opts}
 	case "script":
 		return &ScriptHandler{opts: opts}
 	}
@@ -199,15 +239,17 @@ type Cmd struct {
 }
 
 type Auth struct {
-	Address  string `json:"address"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	DBName   string `json:"db_name"`
+	Address    string `json:"address"`
+	Port       int    `json:"port"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	DBName     string `json:"db_name"`
+	Privileged bool   `json:"privileged"`
 }
 
 type CmdOptions struct {
 	CommandBase64 string `json:"-"`
+	WithEnv       bool   `json:"-"`
 
 	TaskID      string   `json:"task_id"`
 	Host        string   `json:"host"`
@@ -470,6 +512,7 @@ func GetLogger(taskId string) *log.Logger {
 func main() {
 	opts := CmdOptions{}
 	flag.StringVar(&opts.CommandBase64, "command", opts.CommandBase64, "命令")
+	flag.BoolVar(&opts.WithEnv, "with_env", true, "使用参数中的环境变量执行脚本")
 	// 解析命令行标志
 	flag.Parse()
 
@@ -482,14 +525,18 @@ func main() {
 	jmsClient := NewJMSClient(opts.Host, opts.Token, opts.OrgId, logger)
 	logger.Printf("Start executing the task")
 
-	for _, part := range strings.Split(opts.Envs, ";") {
-		value := strings.Split(part, "=")
-		if len(value) == 2 {
-			if err := os.Setenv(value[0], value[1]); err != nil {
-				logger.Fatalf("Set environment variables failed: %v, error: %v", value, err)
-			} else {
-				logger.Printf("Set environment variables: %v=%v", value[0], value[1])
-			}
+	if opts.WithEnv {
+		envs := make([]string, 0)
+		for _, part := range strings.Split(opts.Envs, ";") {
+			envs = append(envs, part)
+			logger.Printf("Set environment variable %s", part)
+		}
+		cmd := exec.Command(os.Args[0], "--command", opts.CommandBase64)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Env = append(os.Environ(), envs...)
+		if err := cmd.Run(); err != nil {
+			log.Fatalf("failed to run command: %v", err)
 		}
 	}
 

@@ -143,18 +143,23 @@ class WorkerPool(object):
         local_cmds_file = self.__generate_command_file(execution)
         remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
         token, __ = execution.user.create_bearer_token()
+        auth = {
+            'address': execution.asset.address,
+            'username': execution.account.username,
+            'password': execution.account.password,
+            'db_name': execution.asset.database.db_name
+        }
         if execution.asset.type == DatabaseTypes.MYSQL:
             cmd_type = script = 'mysql'
-            auth = {
-                'address': execution.asset.address,
+            auth['port'] = execution.asset.get_protocol_port('mysql'),
+        elif execution.asset.type == DatabaseTypes.ORACLE:
+            cmd_type = script = 'oracle'
+            auth.update({
                 'port': execution.asset.get_protocol_port('mysql'),
-                'username': execution.account.username,
-                'password': execution.account.password,
-                'db_name': execution.asset.database.db_name
-            }
+                'privileged': execution.account.privileged
+            })
         else:
             cmd_type = script = 'script'
-            auth = {}
         params: dict = {
             'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
             'auth': auth, 'token': str(token), 'task_id': str(execution.id),
