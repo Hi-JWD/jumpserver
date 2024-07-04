@@ -46,3 +46,4 @@ test.py
 .test/
 jms_cli*
 test.go
+*.so
