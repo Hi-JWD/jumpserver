@@ -13,11 +13,14 @@ from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
 from common.utils import lazyproperty, random_string
 from assets.models import Database
 from accounts.models import Account
-from behemoth.models import Plan, Playback, Environment, Command, Execution, SubPlan
+from behemoth.models import (
+    Plan, Playback, Environment, Command, Execution, SubPlan,
+    SyncPlanCommandRelation
+)
 from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, CommandCategory,
-    FILE_COMMAND_CACHE_KEY, PlaybackStrategy, FormatType
+    FILE_COMMAND_CACHE_KEY, PlaybackStrategy, FormatType, PlanCategory
 )
 
 
@@ -83,7 +86,7 @@ class SubPlanSerializer(serializers.ModelSerializer):
         fields_mini = ['id', 'name', 'serial']
         fields = fields_mini + [
             'date_created', 'created_by', 'execution',
-            'status', 'task_id'
+            'status', 'task_id', 'plan_id'
         ]
 
     @staticmethod
@@ -112,8 +115,8 @@ class CommandSerializer(serializers.ModelSerializer):
         return data
 
 
-class PlanSerializer(serializers.ModelSerializer):
-    bind_fields = tuple()
+class SyncPlanSerializer(serializers.ModelSerializer):
+    _relation_map = {}
 
     asset = ObjectRelatedField(
         queryset=Database.objects, attrs=('id', 'name', 'address'), label=_('Asset')
@@ -122,17 +125,59 @@ class PlanSerializer(serializers.ModelSerializer):
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
-    playback_strategy = LabeledChoiceField(choices=PlaybackStrategy.choices, label=_('Playback strategy'))
 
     class Meta:
         model = Plan
         fields_mini = ['id', 'name', 'category']
         fields_small = fields_mini + [
-            'environment', 'asset', 'account', 'playback', 'plan_strategy', 'playback_strategy'
+            'environment', 'asset', 'account', 'playback', 'plan_strategy'
         ]
         fields = fields_small + [
             'created_by', 'comment', 'date_created'
         ]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        attrs['category'] = PlanCategory.sync
+        return attrs
+
+    def get_or_create_relation(self, plan_name, plan):
+        if obj := self._relation_map.get(plan_name):
+            return obj
+        obj = SyncPlanCommandRelation.objects.create(
+            plan_name=plan_name, sync_plan=plan
+        )
+        self._relation_map[plan_name] = obj
+        return obj
+
+    def create(self, validated_data):
+        plan = super().create(validated_data)
+        execution_id = plan.create_sub_plan().execution.id
+        executions = list(plan.playback.executions.values('execution_id', 'plan_name'))
+        # 遍历循环走SQL了吗
+        index = 0
+        for item in executions:
+            command_objs = []
+            relation = self.get_or_create_relation(item['plan_name'], plan)
+            commands = Command.objects.filter(execution_id=item['execution_id']).order_by('index')
+            for command in commands:
+                new_command = Command(
+                    **command.to_dict(), relation_id=relation.id, index=index,
+                    execution_id=execution_id
+                )
+                command_objs.append(new_command)
+                index += 1
+            Command.objects.bulk_create(command_objs)
+        return plan
+
+
+class DeployPlanSerializer(SyncPlanSerializer):
+    playback_strategy = LabeledChoiceField(
+        choices=PlaybackStrategy.choices, label=_('Playback strategy')
+    )
+
+    class Meta(SyncPlanSerializer.Meta):
+        fields = SyncPlanSerializer.Meta.fields + ['playback_strategy']
 
 
 class BaseSubPlanSerializer(serializers.ModelSerializer):
@@ -224,7 +269,3 @@ class SubPlanFileSerializer(BaseSubPlanSerializer):
 
     def get_commands(self):
         return cache.get(FILE_COMMAND_CACHE_KEY.format(self.mark_id), [])
-
-
-class SyncPlanSerializer(serializers.Serializer):
-    pass

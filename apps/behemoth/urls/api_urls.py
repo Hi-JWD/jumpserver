@@ -17,6 +17,7 @@ router.register(r'commands', api.CommandViewSet, 'command')
 router.register(r'executions', api.ExecutionViewSet, 'executions')
 
 urlpatterns = [
+    path('sync-plan/relation/tree/', api.SyncPlanRelationTree.as_view(), name='sync-plan-tree'),
 ]
 
 urlpatterns += router.urls

@@ -4,6 +4,7 @@ from django.utils.translation import gettext as _
 from django.core.cache import cache
 from django.utils._os import safe_join
 from django.conf import settings
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -17,7 +18,8 @@ from behemoth.const import (
 )
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
-    Environment, Playback, Plan, Iteration, Execution, Command, SubPlan
+    Environment, Playback, Plan, Iteration, SyncPlanCommandRelation,
+    Execution, Command, SubPlan
 )
 from common.utils import is_uuid
 from common.exceptions import JMSException, JMSObjectDoesNotExist
@@ -215,10 +217,18 @@ class ExecutionViewSet(OrgBulkModelViewSet):
 class PlanViewSet(OrgBulkModelViewSet):
     model = Plan
     search_fields = ['name']
-    filterset_fields = ['name', 'category']
+    filterset_fields = ['name']
     serializer_classes = {
-        'default': serializers.PlanSerializer
+        'default': serializers.DeployPlanSerializer,
+        'deploy': serializers.DeployPlanSerializer,
+        'sync': serializers.SyncPlanSerializer,
     }
+
+    def get_queryset(self):
+        qs = self.model.objects.all()
+        if category := self.request.query_params.get('action'):
+            qs = qs.filter(category=category)
+        return qs
 
 
 class SubPlanViewSet(OrgBulkModelViewSet):
@@ -299,3 +309,25 @@ class IterationViewSet(OrgBulkModelViewSet):
     model = Iteration
     search_fields = ['name']
     serializer_class = serializers.IterationSerializer
+
+
+class SyncPlanRelationTree(APIView):
+    rbac_perms = {
+        'GET': 'behemoth.view_syncplancommandrelation'
+    }
+
+    @staticmethod
+    def get(request, *args, **kwargs):
+        tree_data = [
+        ]
+        plan_id = request.query_params.get('plan_id')
+        if not is_uuid(plan_id):
+            raise JMSObjectDoesNotExist(object_name=_('Plan'))
+
+        qs = SyncPlanCommandRelation.objects.filter(sync_plan_id=plan_id)
+        for i, obj in enumerate(qs, 1):
+            label = obj.plan_name or _('Special')
+            tree_data.append({
+                'id': f'1{i}', 'name': label, 'pId': '0', 'open': False,
+            })
+        return Response(data=tree_data)

@@ -21,9 +21,9 @@ class TaskStatus(models.TextChoices):
 
 
 class CommandStatus(models.TextChoices):
-    waiting = 'waiting'
-    success = 'success'
-    failed = 'failed'
+    not_start = 'not_start', _('Not Started')
+    success = 'success', _('Success')
+    failed = 'failed', _('Failed')
 
 
 class PlanStrategy(models.TextChoices):

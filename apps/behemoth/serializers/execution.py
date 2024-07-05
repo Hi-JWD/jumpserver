@@ -33,6 +33,7 @@ class ExecutionSerializer(serializers.ModelSerializer):
         plan_meta = self.instance.plan_meta
         if (attrs['status'] == const.TaskStatus.success and
                 plan_meta['playback_strategy'] == const.PlaybackStrategy.auto):
+            # TODO 这里要考虑往同步计划中同步相关命令，抽个函数
             PlaybackExecution.objects.create(
                 execution=self.instance, plan_name=plan_meta['name'],
                 sub_plan_name=self.instance.sub_plan.name,

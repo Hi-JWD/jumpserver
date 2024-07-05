@@ -9,6 +9,7 @@ from django.db.models import Max
 from django.conf import settings
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.db import models
+from django.forms.models import model_to_dict
 from paramiko.ssh_exception import SSHException
 
 from accounts.models import Account
@@ -214,11 +215,12 @@ class Command(JMSOrgBaseModel):
     input = models.TextField(blank=True, verbose_name=_('Input'))
     output = models.CharField(max_length=1024, blank=True, verbose_name=_('Output'))
     index = models.IntegerField(db_index=True, verbose_name=_('Index'))
-    status = models.CharField(max_length=32, default=CommandStatus.waiting, verbose_name=_('Status'))
+    status = models.CharField(max_length=32, default=CommandStatus.not_start, verbose_name=_('Status'))
     execution_id = models.CharField(max_length=36, verbose_name=_('Execution'))
     timestamp = models.IntegerField(default=0, db_index=True)
     category = models.CharField(max_length=16, default=CommandCategory.command, verbose_name=_('Category'))
     pause = models.BooleanField(default=False, verbose_name=_('Pause'))
+    relation_id = models.CharField(default=None, null=True, max_length=36, verbose_name=_('Sync plan relation'))
 
     class Meta:
         verbose_name = _('Command')
@@ -226,6 +228,10 @@ class Command(JMSOrgBaseModel):
 
     def __str__(self):
         return '%s(%s)' % (self.category, self.input[:10])
+
+    def to_dict(self):
+        fields = ['input', 'category', 'pause']
+        return model_to_dict(self, fields=fields)
 
 
 class Environment(JMSOrgBaseModel):
@@ -243,6 +249,7 @@ class Playback(JMSOrgBaseModel):
     def create_execution(self, pause_data):
         sub_plan = SubPlan(name=_('Pause'))
         sub_plan.save()
+        # TODO 这里要考虑往同步计划中同步相关命令，抽个函数
         PlaybackExecution.objects.create(
             playback=self, execution=sub_plan.execution,
             plan_name='', sub_plan_name=sub_plan.name
@@ -279,6 +286,9 @@ class Plan(JMSOrgBaseModel):
     class Meta:
         verbose_name = _('Plan')
         ordering = ('-date_created',)
+
+    def create_sub_plan(self):
+        return SubPlan.objects.create(plan=self)
 
 
 class SubPlan(JMSOrgBaseModel):
@@ -317,7 +327,9 @@ class SubPlan(JMSOrgBaseModel):
         )
 
     def save(self, *args, **kwargs):
-        max_serial = SubPlan.objects.aggregate(Max('serial'))['serial__max'] or 0
+        max_serial = SubPlan.objects.filter(
+            plan=self.plan
+        ).aggregate(Max('serial'))['serial__max'] or 0
         self.serial = max_serial + 1
         if not self.name:
             self.name = self.generate_name()
@@ -333,7 +345,6 @@ class Execution(JMSOrgBaseModel):
         Database, on_delete=models.CASCADE, null=True, related_name='e2s', verbose_name=_('Asset')
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, verbose_name=_('Account'))
-    # 这里是SubPlan的id
     plan_meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
@@ -349,6 +360,13 @@ class Execution(JMSOrgBaseModel):
         if not get_all:
             queryset = queryset.exclude(status=CommandStatus.success)
         return queryset
+    
+    
+class SyncPlanCommandRelation(JMSOrgBaseModel):
+    plan_name = models.CharField(max_length=128, verbose_name=_('Plan name'))
+    sync_plan = models.ForeignKey(
+        Plan, related_name='relations', on_delete=models.CASCADE, verbose_name=_('Sync plan')
+    )
 
 
 class PlaybackExecution(JMSOrgBaseModel):
@@ -358,6 +376,9 @@ class PlaybackExecution(JMSOrgBaseModel):
     execution = models.ForeignKey(Execution, on_delete=models.CASCADE, verbose_name=_('Execution'))
     plan_name = models.CharField(max_length=128, verbose_name=_('Plan name'))
     sub_plan_name = models.CharField(max_length=128, verbose_name=_('Sub plan name'))
+
+    class Meta:
+        ordering = ('date_created',)
 
 
 class Instruction(JMSOrgBaseModel):

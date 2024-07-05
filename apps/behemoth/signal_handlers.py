@@ -1,10 +1,11 @@
 from django.dispatch import receiver
-from django.db.models.signals import post_delete, pre_save, post_save
+from django.db.models.signals import pre_delete, pre_save, post_save, post_delete
 from django.core.exceptions import ObjectDoesNotExist
 
 from common.signals import django_ready
 from .libs.pools.worker import worker_pool
-from .models import Worker
+from .const import PlanCategory
+from .models import Worker, Plan, Command
 
 
 @receiver(django_ready)
@@ -16,6 +17,13 @@ def init_worker_pool(sender, **kwargs):
 
     for w in workers:
         worker_pool.add_worker(w)
+
+
+@receiver(pre_delete, sender=Plan)
+def sync_plan_delete(sender, instance, **kwargs):
+    if instance.category == PlanCategory.sync:
+        relation_ids = instance.relations.values_list('id', flat=True)
+        Command.objects.filter(relation_id__in=list(relation_ids)).delete()
 
 
 @receiver(post_delete, sender=Worker)
