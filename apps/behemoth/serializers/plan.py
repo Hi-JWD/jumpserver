@@ -115,11 +115,9 @@ class CommandSerializer(serializers.ModelSerializer):
         return data
 
 
-class SyncPlanSerializer(serializers.ModelSerializer):
-    _relation_map = {}
-
+class BasePlanSerializer(serializers.ModelSerializer):
     asset = ObjectRelatedField(
-        queryset=Database.objects, attrs=('id', 'name', 'address'), label=_('Asset')
+        queryset=Database.objects, attrs=('id', 'name', 'address', 'type'), label=_('Asset')
     )
     account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
@@ -136,12 +134,18 @@ class SyncPlanSerializer(serializers.ModelSerializer):
             'created_by', 'comment', 'date_created'
         ]
 
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-        attrs['category'] = PlanCategory.sync
-        return attrs
 
-    def get_or_create_relation(self, plan_name, plan):
+class SyncPlanSerializer(BasePlanSerializer):
+    _relation_map = {}
+
+    playback_strategy = LabeledChoiceField(
+        choices=PlaybackStrategy.choices, label=_('Playback strategy')
+    )
+
+    class Meta(BasePlanSerializer.Meta):
+        fields = BasePlanSerializer.Meta.fields
+
+    def _get_or_create_relation(self, plan_name, plan):
         if obj := self._relation_map.get(plan_name):
             return obj
         obj = SyncPlanCommandRelation.objects.create(
@@ -149,6 +153,11 @@ class SyncPlanSerializer(serializers.ModelSerializer):
         )
         self._relation_map[plan_name] = obj
         return obj
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        attrs['category'] = PlanCategory.sync
+        return attrs
 
     def create(self, validated_data):
         plan = super().create(validated_data)
@@ -158,7 +167,7 @@ class SyncPlanSerializer(serializers.ModelSerializer):
         index = 0
         for item in executions:
             command_objs = []
-            relation = self.get_or_create_relation(item['plan_name'], plan)
+            relation = self._get_or_create_relation(item['plan_name'], plan)
             commands = Command.objects.filter(execution_id=item['execution_id']).order_by('index')
             for command in commands:
                 new_command = Command(
@@ -171,13 +180,13 @@ class SyncPlanSerializer(serializers.ModelSerializer):
         return plan
 
 
-class DeployPlanSerializer(SyncPlanSerializer):
+class DeployPlanSerializer(BasePlanSerializer):
     playback_strategy = LabeledChoiceField(
         choices=PlaybackStrategy.choices, label=_('Playback strategy')
     )
 
-    class Meta(SyncPlanSerializer.Meta):
-        fields = SyncPlanSerializer.Meta.fields + ['playback_strategy']
+    class Meta(BasePlanSerializer.Meta):
+        fields = BasePlanSerializer.Meta.fields + ['playback_strategy']
 
 
 class BaseSubPlanSerializer(serializers.ModelSerializer):
