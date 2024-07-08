@@ -10,6 +10,7 @@ FORMAT_COMMAND_CACHE_KEY = 'format-command-cache-{}'
 FILE_COMMAND_CACHE_KEY = 'command:pause:{}'
 TASK_TYPE_CACHE_KEY = 'task-info-type:{}'
 TASK_DATA_CACHE_KEY = 'task-info-data:{}'
+PLAN_TASK_ACTIVE_KEY = 'active_plan_user_info:{}'
 
 
 class TaskStatus(models.TextChoices):

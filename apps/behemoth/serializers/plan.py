@@ -20,7 +20,8 @@ from behemoth.models import (
 from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, CommandCategory,
-    FILE_COMMAND_CACHE_KEY, PlaybackStrategy, FormatType, PlanCategory
+    FILE_COMMAND_CACHE_KEY, PlaybackStrategy, FormatType, PlanCategory,
+    PLAN_TASK_ACTIVE_KEY
 )
 
 
@@ -138,12 +139,16 @@ class BasePlanSerializer(serializers.ModelSerializer):
 class SyncPlanSerializer(BasePlanSerializer):
     _relation_map = {}
 
-    playback_strategy = LabeledChoiceField(
-        choices=PlaybackStrategy.choices, label=_('Playback strategy')
-    )
+    users = serializers.SerializerMethodField(label=_('Users'))
 
     class Meta(BasePlanSerializer.Meta):
-        fields = BasePlanSerializer.Meta.fields
+        fields = BasePlanSerializer.Meta.fields + ['users']
+
+    @staticmethod
+    def get_users(obj):
+        ttl = cache.ttl(PLAN_TASK_ACTIVE_KEY.format(obj.id))
+        users = cache.get(PLAN_TASK_ACTIVE_KEY.format(obj.id), [])
+        return {'ttl': ttl, 'users': users}
 
     def _get_or_create_relation(self, plan_name, plan):
         if obj := self._relation_map.get(plan_name):

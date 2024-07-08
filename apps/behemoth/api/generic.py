@@ -14,13 +14,14 @@ from behemoth import serializers
 from behemoth.tasks import run_task_sync
 from behemoth.const import (
     CommandStatus, TaskStatus, FILE_COMMAND_CACHE_KEY,
-    CommandCategory, PlanCategory
+    CommandCategory, PlanCategory, PLAN_TASK_ACTIVE_KEY
 )
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
     Environment, Playback, Plan, Iteration, SyncPlanCommandRelation,
     Execution, Command, SubPlan
 )
+from common.management.commands import status
 from common.utils import is_uuid
 from common.exceptions import JMSException, JMSObjectDoesNotExist
 from orgs.mixins.api import OrgBulkModelViewSet
@@ -80,7 +81,7 @@ class PlaybackViewSet(OrgBulkModelViewSet):
     def insert_pause(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        self.get_object().create_execution(serializer.data)
+        self.get_object().create_pause(serializer.data)
         return Response(status=http_status.HTTP_201_CREATED)
 
 
@@ -197,7 +198,10 @@ class ExecutionViewSet(OrgBulkModelViewSet):
 
     @action(methods=['GET'], detail=True, url_path='commands')
     def get_commands(self, request, *args, **kwargs):
+        relation_id = request.query_params.get('relation_id')
         commands = self.get_object().get_commands()
+        if relation_id:
+            commands = commands.filter(relation_id=relation_id)
         return self.get_paginated_response_from_queryset(commands)
 
     @staticmethod
@@ -223,12 +227,25 @@ class PlanViewSet(OrgBulkModelViewSet):
         'deploy': serializers.DeployPlanSerializer,
         'sync': serializers.SyncPlanSerializer,
     }
+    rbac_perms = {
+        'start_task': 'behemoth.change_execution',
+    }
 
     def get_queryset(self):
         qs = self.model.objects.all()
         if category := self.request.query_params.get('action'):
             qs = qs.filter(category=category)
         return qs
+
+    @action(methods=['POST'], detail=True, url_path='start-task')
+    def start_task(self, request, *args, **kwargs):
+        obj = self.get_object()
+        users = cache.get(PLAN_TASK_ACTIVE_KEY.format(obj.id), [])
+        users.append(f'{request.user.name}({request.user.username})')
+        result = list(set(users))
+        cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), result, timeout=3600)
+        data = {'ttl': 3600, 'users': result}
+        return Response(status=http_status.HTTP_201_CREATED, data=data)
 
 
 class SubPlanViewSet(OrgBulkModelViewSet):
@@ -318,8 +335,7 @@ class SyncPlanRelationTree(APIView):
 
     @staticmethod
     def get(request, *args, **kwargs):
-        tree_data = [
-        ]
+        tree_data = []
         plan_id = request.query_params.get('plan_id')
         if not is_uuid(plan_id):
             raise JMSObjectDoesNotExist(object_name=_('Plan'))
@@ -328,6 +344,6 @@ class SyncPlanRelationTree(APIView):
         for i, obj in enumerate(qs, 1):
             label = obj.plan_name or _('Special')
             tree_data.append({
-                'id': f'1{i}', 'name': label, 'pId': '0', 'open': False,
+                'id': f'1{i}', 'name': label, 'value': obj.id, 'pId': '0', 'open': False,
             })
         return Response(data=tree_data)

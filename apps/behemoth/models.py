@@ -246,18 +246,35 @@ class Playback(JMSOrgBaseModel):
         null=True, verbose_name=_('Environment')
     )
 
-    def create_execution(self, pause_data):
-        sub_plan = SubPlan(name=_('Pause'))
-        sub_plan.save()
-        # TODO 这里要考虑往同步计划中同步相关命令，抽个函数
-        PlaybackExecution.objects.create(
+    @staticmethod
+    def _create_command(**data):
+        Command.objects.create()
+
+    def create_pause(self, pause_data):
+        sub_plan = SubPlan.objects.create(name=_('Pause'))
+        pe = PlaybackExecution.objects.create(
             playback=self, execution=sub_plan.execution,
-            plan_name='', sub_plan_name=sub_plan.name
+            plan_name=pause_data['name'], sub_plan_name=sub_plan.name
         )
+        plan_objs = self.plans.filter(category=PlanCategory.sync) # noqa
+        relation_ids = []
+        for plan in plan_objs:
+            obj = SyncPlanCommandRelation.objects.create(
+                plan_name=pe.plan_name, sync_plan=plan
+            )
+            e_id = plan.subs.values_list('execution_id', flat=True).first()
+            relation_ids.append((obj.id, e_id))
+        for r_id, e_id in relation_ids:
+            Command.objects.create(
+                input=pause_data['name'], output=pause_data['descript'],
+                index=0, execution_id=e_id, relation_id=r_id,
+                category=CommandCategory.pause, pause=pause_data['pause'],
+            )
+
         Command.objects.create(
             input=pause_data['name'], output=pause_data['descript'],
             index=0, execution_id=sub_plan.execution.id,
-            category=CommandCategory.pause, pause=pause_data['pause']
+            category=CommandCategory.pause, pause=pause_data['pause'],
         )
 
 
@@ -280,7 +297,9 @@ class Plan(JMSOrgBaseModel):
     )
     asset = models.ForeignKey(Database, on_delete=models.CASCADE, verbose_name=_('Asset'))
     account = models.ForeignKey(Account, on_delete=models.CASCADE, verbose_name=_('Account'))
-    playback = models.ForeignKey(Playback, on_delete=models.CASCADE, verbose_name=_('Playback'))
+    playback = models.ForeignKey(
+        Playback, related_name='plans', on_delete=models.CASCADE, verbose_name=_('Playback')
+    )
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
 
     class Meta:
