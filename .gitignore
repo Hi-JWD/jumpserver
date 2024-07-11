@@ -47,3 +47,4 @@ test.py
 jms_cli*
 test.go
 *.so
+*.zip

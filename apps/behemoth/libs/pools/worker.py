@@ -196,7 +196,8 @@ class WorkerPool(object):
         except Exception as err:
             err_msg = f'针对 {execution.asset} 的任务执行失败: {err}'
             execution.status = const.TaskStatus.failed
-            execution.save(update_fields=['status'])
+            execution.reason = err_msg
+            execution.save(update_fields=['status', 'reason'])
             print(p.red(err_msg))
         else:
             print(p.green('任务执行成功'))

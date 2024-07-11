@@ -191,6 +191,7 @@ class Worker(Asset):
         encoded_data = base64.b64encode(json.dumps(params).encode()).decode()
         try:
             cmd = f'{self._remote_script_path} --command {encoded_data} --with_env'
+            logger.debug('Behemoth cmd: %s' % cmd)
             __, stdout, stderr = self._ssh_client.exec_command(cmd)
             error = stderr.read().decode()
             if error:

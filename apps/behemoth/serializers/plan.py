@@ -77,9 +77,10 @@ class UploadCommandSerializer(serializers.Serializer):
 
 class SubPlanSerializer(serializers.ModelSerializer):
     execution = ObjectRelatedField(
-        queryset=Execution.objects, attrs=('id', 'status'), label=_('Execution')
+        queryset=Execution.objects, attrs=('id', ), label=_('Execution')
     )
     status = serializers.SerializerMethodField(label=_('Status'))
+    reason = serializers.SerializerMethodField(label=_('Reason'))
     task_id = serializers.SerializerMethodField(label=_('Task ID'))
 
     class Meta:
@@ -87,12 +88,16 @@ class SubPlanSerializer(serializers.ModelSerializer):
         fields_mini = ['id', 'name', 'serial']
         fields = fields_mini + [
             'date_created', 'created_by', 'execution',
-            'status', 'task_id', 'plan_id'
+            'status', 'task_id', 'plan_id', 'reason'
         ]
 
     @staticmethod
     def get_status(obj):
         return obj.execution.status
+
+    @staticmethod
+    def get_reason(obj):
+        return obj.execution.reason
 
     @staticmethod
     def get_task_id(obj):
@@ -197,7 +202,7 @@ class DeployPlanSerializer(BasePlanSerializer):
 class BaseSubPlanSerializer(serializers.ModelSerializer):
     bind_fields = ['token']
 
-    name = serializers.CharField(required=False, label=_('Name'))
+    name = serializers.CharField(required=False, allow_blank=True, label=_('Name'))
     token = serializers.CharField(write_only=True, max_length=16, label=_('Token'))
 
     class Meta:

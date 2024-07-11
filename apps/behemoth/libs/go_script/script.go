@@ -526,8 +526,11 @@ func main() {
 	if opts.WithEnv {
 		envs := make([]string, 0)
 		for _, part := range strings.Split(opts.Envs, ";") {
+			if part == "" {
+				continue
+			}
 			envs = append(envs, part)
-			logger.Printf("Set environment variable %s", part)
+			logger.Printf("Set environment variable: %s", part)
 		}
 		cmd := exec.Command(os.Args[0], "--command", opts.CommandBase64)
 		cmd.Stdout = os.Stdout
