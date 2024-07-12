@@ -20,10 +20,20 @@ from common.utils import get_logger, random_string
 from common.exceptions import JMSException
 from orgs.models import Organization
 from ops.celery.utils import get_celery_task_log_path
-from jumpserver.utils import get_current_request
 
 
 logger = get_logger(__name__)
+
+
+class AWorker(object):
+    def __init__(self, id='', name='', org_id=''):
+        self.id = id
+        self.name = name
+        self.org_id = str(org_id)
+
+    @staticmethod
+    def get_labels():
+        return []
 
 
 class WorkerPool(object):
@@ -31,17 +41,13 @@ class WorkerPool(object):
         self._org_id = Organization.DEFAULT_ID
         self._workers: Dict[AnyStr, Dict[AnyStr, Dict[AnyStr, Worker]]] = {}
         self._default_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
-        self._running_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
-        self._useless_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
         # other
+        self.worker_status_key = ':worker_status_key:'
 
     def select_org(self, org_id=None):
         if org_id is not None:
             self._org_id = str(org_id)
-            for d in (
-                    self._workers, self._default_workers,
-                    self._running_workers, self._useless_workers
-            ):
+            for d in (self._workers, self._default_workers):
                 d.setdefault(self._org_id, {})
 
     def __get_workers(self) -> list[Worker]:
@@ -59,7 +65,7 @@ class WorkerPool(object):
             self._default_workers[str(worker.org_id)][worker.name] = worker
         logger.debug(f'Add worker：{worker}({", ".join(labels) or _("No label")})')
 
-    def delete_worker(self, worker: Worker) -> None:
+    def delete_worker(self, worker: Worker | AWorker) -> None:
         self.select_org(worker.org_id)
         worker_set = set()
         labels = worker.get_labels()
@@ -95,7 +101,19 @@ class WorkerPool(object):
 
         return worker
 
-    def __get_valid_worker(self, execution: Execution) -> Worker:
+    def mark_worker_status(self, w: Worker) -> None:
+        workers = cache.get(self.worker_status_key, [])
+        workers.append({'id': w.id, 'name': w.name, 'org_id': w.org_id})
+        cache.set(self.worker_status_key, workers, timeout=3600 * 24)
+
+    def refresh_all_workers(self) -> None:
+        workers = cache.get(self.worker_status_key, [])
+        for worker in workers:
+            self.delete_worker(AWorker(**worker))
+            if worker := Worker.objects.filter(id=worker['id']):
+                self.add_worker(worker)
+
+    def __get_valid_worker(self, execution: Execution) -> str:
         while True:
             # 根据资产属性选择一个工作机
             worker: Worker | None = self.__select_worker(execution.asset)
@@ -104,14 +122,11 @@ class WorkerPool(object):
             # 检查工作机是否可连接
             connectivity: bool = worker.test_connectivity(False)
             if not connectivity:
-                self._useless_workers[self._org_id][str(worker.id)] = worker
-                # TODO 后续这里持续寻找
-                raise JMSException(_('Worker[%s] is not valid') % worker)
+                print(p.yellow(_('Worker[%s] is not valid') % worker))
             else:
                 self.add_worker(worker)
-                self._running_workers[self._org_id][str(execution.id)] = worker
                 break
-        return worker
+        return worker.id
 
     @staticmethod
     def record(e: Execution, text: str, color='info'):
@@ -123,12 +138,14 @@ class WorkerPool(object):
     def __pre_run(self, execution: Execution) -> None:
         print(p.info('正在寻找有效的工作机...'))
         self.select_org(execution.org_id)
-        execution.worker = self.__get_valid_worker(execution)
-        execution.save(update_fields=['worker'])
+        self.refresh_all_workers()
+        execution.worker_id = self.__get_valid_worker(execution)
+        execution.save(update_fields=['worker_id'])
 
     @staticmethod
     def __generate_command_file(execution: Execution) -> str:
         # TODO 【命令缓存】命令生成后再缓存中保存一份，减少命令回调的数据查询
+        # TODO 如果命令更新了，对应的execution下的命令缓存要及时刷新
         commands = execution.get_commands(get_all=False)
         print(p.info(f'共 {len(commands)} 条命令待执行'))
         data = {
@@ -201,10 +218,6 @@ class WorkerPool(object):
             print(p.red(err_msg))
         else:
             print(p.green('任务执行成功'))
-
-    def check(self):
-        # TODO 定时检测 self._useless_workers 中的 Worker 活性
-        pass
 
 
 worker_pool = WorkerPool()

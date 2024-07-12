@@ -1,6 +1,5 @@
 from django.dispatch import receiver
-from django.db.models.signals import pre_delete, pre_save, post_save, post_delete
-from django.core.exceptions import ObjectDoesNotExist
+from django.db.models.signals import pre_delete, post_save, post_delete
 
 from common.signals import django_ready
 from .libs.pools.worker import worker_pool
@@ -26,19 +25,6 @@ def sync_plan_delete(sender, instance, **kwargs):
         Command.objects.filter(relation_id__in=list(relation_ids)).delete()
 
 
-@receiver(post_delete, sender=Worker)
-def on_worker_delete(sender, instance, **kwargs):
-    worker_pool.delete_worker(instance)
-
-
-@receiver(pre_save, sender=Worker)
-def on_worker_add_pre(sender, instance, **kwargs):
-    try:
-        worker_pool.delete_worker(instance.worker)
-    except ObjectDoesNotExist:
-        pass
-
-
-@receiver(post_save, sender=Worker)
-def on_worker_add(sender, instance, created, **kwargs):
-    worker_pool.add_worker(instance)
+@receiver([post_delete, post_save], sender=Worker)
+def update_worker_pool(sender, instance, **kwargs):
+    worker_pool.mark_worker_status(instance)

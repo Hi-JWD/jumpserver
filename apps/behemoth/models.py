@@ -296,10 +296,10 @@ class Plan(JMSOrgBaseModel):
     environment = models.ForeignKey(
         Environment, on_delete=models.CASCADE, related_name='instructions', verbose_name=_('Environment')
     )
-    asset = models.ForeignKey(Database, on_delete=models.CASCADE, verbose_name=_('Asset'))
-    account = models.ForeignKey(Account, on_delete=models.CASCADE, verbose_name=_('Account'))
+    asset = models.ForeignKey(Database, null=True, on_delete=models.SET_NULL, verbose_name=_('Asset'))
+    account = models.ForeignKey(Account, null=True, on_delete=models.SET_NULL, verbose_name=_('Account'))
     playback = models.ForeignKey(
-        Playback, related_name='plans', on_delete=models.CASCADE, verbose_name=_('Playback')
+        Playback, related_name='plans', null=True, on_delete=models.SET_NULL, verbose_name=_('Playback')
     )
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
 
