@@ -19,13 +19,36 @@ from behemoth.const import (
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
     Environment, Playback, Plan, Iteration, SyncPlanCommandRelation,
-    Execution, Command, SubPlan
+    Execution, Command
 )
 from common.management.commands import status
 from common.utils import is_uuid
 from common.exceptions import JMSException, JMSObjectDoesNotExist
 from orgs.mixins.api import OrgBulkModelViewSet
 from orgs.utils import get_current_org_id
+
+
+class ExecutionMixin:
+    @staticmethod
+    def start_task(execution: Execution, response_data: dict | None = None):
+        if execution.status not in (TaskStatus.success, TaskStatus.executing):
+            params = {}
+            if execution.task_id:
+                params['task_id'] = execution.task_id
+            # task = run_task_sync.apply_async((execution,), **params)
+            task = run_task_sync(execution)
+            execution.task_id = task.id
+            execution.status = TaskStatus.executing
+            execution.save(update_fields=['task_id', 'status'])
+            data = {
+                'task_id': task.id, 'task_status': TaskStatus.executing
+            }
+            if response_data:
+                data.update(response_data)
+            return Response(status=http_status.HTTP_201_CREATED, data=data)
+        else:
+            error = _('Task status: %s') % execution.status
+            return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
 
 
 class EnvironmentViewSet(OrgBulkModelViewSet):
@@ -141,17 +164,71 @@ class CommandViewSet(OrgBulkModelViewSet):
         return Response(status=http_status.HTTP_200_OK)
 
 
-class ExecutionViewSet(OrgBulkModelViewSet):
+class ExecutionViewSet(ExecutionMixin ,OrgBulkModelViewSet):
     model = Execution
+    search_fields = ['name']
+    filterset_fields = ['name']
     serializer_classes = {
         'default': serializers.ExecutionSerializer,
         'update_command': serializers.ExecutionCommandSerializer,
-        'get_commands': serializers.CommandSerializer
+        'get_commands': serializers.CommandSerializer,
+        'deploy_command': serializers.CommandExecutionSerializer,
+        'deploy_file': serializers.FileExecutionSerializer,
     }
     rbac_perms = {
         'update_command': 'behemoth.change_command',
         'get_commands': 'behemoth.view_command',
+        'operate_task': 'behemoth.change_command | behemoth.change_execution',
     }
+
+    def get_queryset(self):
+        plan_id = self.request.query_params.get('plan_id', '')
+        qs = self.model.objects.all()
+        if is_uuid(plan_id):
+            qs = qs.filter(plan_id=plan_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        plan_id = request.query_params.get('plan_id', '')
+        serializer = self.get_serializer(
+            data={'plan': plan_id, **request.data}
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(serializer.data, status=http_status.HTTP_201_CREATED)
+
+    @staticmethod
+    def pause_execution(execution):
+        if execution.status != TaskStatus.executing:
+            error = _('Task status: %s') % execution.status
+            return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        execution.status = TaskStatus.pause
+        execution.save(update_fields=['status'])
+        worker_pool.record(execution, f'任务被手动暂停了', color='yellow')
+        return Response(status=http_status.HTTP_200_OK, data={
+            'task_status': TaskStatus.pause
+        })
+
+    @action(methods=['POST'], detail=True, url_path='operate_task')
+    def operate_task(self, request, *args, **kwargs):
+        action_ = request.data.get('action')
+        if action_ == 'start':
+            response = self.start_task(self.get_object())
+        elif action_ == 'pause':
+            response = self.pause_execution(self.get_object())
+        elif action_ == 'success':
+            execution = self.get_object()
+            execution.status = TaskStatus.success
+            execution.save(update_fields=['status'])
+            worker_pool.record(execution, f'任务执行成功', color='green')
+            response = Response(status=http_status.HTTP_200_OK, data={
+                'task_status': TaskStatus.success
+            })
+        else:
+            data = {'error': 'Params action is not valid'}
+            response = Response(status=http_status.HTTP_400_BAD_REQUEST, data=data)
+        return response
 
     @action(methods=['PATCH'], detail=True, url_path='command')
     def update_command(self, request, *args, **kwargs):
@@ -178,7 +255,7 @@ class ExecutionViewSet(OrgBulkModelViewSet):
             worker_pool.record(execution, f'命令输出: {cmd.output}\n')
         can_continue, detail = True, ''
         # 任务被手动暂停或者命令类型为“暂停”并开启暂停才不能继续执行[任务为同步类型]
-        plan_category = execution.plan_meta.get('category')
+        plan_category = execution.plan.category
         if execution.status == TaskStatus.pause:
             can_continue = False
             detail = _('Manual paused')
@@ -218,7 +295,7 @@ class ExecutionViewSet(OrgBulkModelViewSet):
         pass
 
 
-class PlanViewSet(OrgBulkModelViewSet):
+class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Plan
     search_fields = ['name']
     filterset_fields = ['name']
@@ -228,7 +305,7 @@ class PlanViewSet(OrgBulkModelViewSet):
         'sync': serializers.SyncPlanSerializer,
     }
     rbac_perms = {
-        'start_task': 'behemoth.change_execution',
+        'start_sync_task': 'behemoth.change_execution',
     }
 
     def get_queryset(self):
@@ -237,89 +314,26 @@ class PlanViewSet(OrgBulkModelViewSet):
             qs = qs.filter(category=category)
         return qs
 
-    @action(methods=['POST'], detail=True, url_path='start-task')
-    def start_task(self, request, *args, **kwargs):
+    @action(methods=['POST'], detail=True, url_path='start-sync-task')
+    def start_sync_task(self, request, *args, **kwargs):
         obj = self.get_object()
         users = cache.get(PLAN_TASK_ACTIVE_KEY.format(obj.id), [])
         users.append(f'{request.user.name}({request.user.username})')
         result = list(set(users))
-        cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), result, timeout=3600)
-        data = {'ttl': 3600, 'users': result}
-        return Response(status=http_status.HTTP_201_CREATED, data=data)
-
-
-class SubPlanViewSet(OrgBulkModelViewSet):
-    model = SubPlan
-    ordering = '-serial'
-    search_fields = ['name']
-    filterset_fields = ['name']
-    serializer_classes = {
-        'default': serializers.SubPlanSerializer,
-        'deploy_command': serializers.SubPlanCommandSerializer,
-        'deploy_file': serializers.SubPlanFileSerializer,
-    }
-    rbac_perms = {
-        'operate_task': 'behemoth.change_command | behemoth.change_execution',
-    }
-
-    def get_queryset(self):
-        plan_id = self.request.query_params.get('plan_id', '')
-        if not is_uuid(plan_id):
-            raise JMSObjectDoesNotExist(object_name=_('Plan'))
-        return self.model.objects.filter(plan_id=plan_id)
-
-    def create(self, request, *args, **kwargs):
-        plan_id = request.query_params.get('plan_id', '')
-        serializer = self.get_serializer(
-            data={'plan': plan_id, **request.data}
-        )
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        return Response(serializer.data, status=http_status.HTTP_201_CREATED)
-
-    @staticmethod
-    def start_execution(execution):
-        if execution.status not in (TaskStatus.success, TaskStatus.executing):
-            params = {}
-            if execution.task_id:
-                params['task_id'] = execution.task_id
-            task = run_task_sync.apply_async((execution,), **params)
-            execution.task_id = task.id
-            execution.status = TaskStatus.executing
-            execution.save(update_fields=['task_id', 'status'])
-            return Response(
-                status=http_status.HTTP_201_CREATED, data={
-                    'task_id': task.id, 'task_status': TaskStatus.executing
-                }
+        participants = settings.SYNC_PLAN_REQUIRED_PARTICIPANTS
+        wait_timeout = settings.SYNC_PLAN_WAIT_PARTICIPANT_IDLE
+        if len(result) >= participants:
+            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), [], timeout=wait_timeout)
+            return self.start_task(
+                obj.executions.first(), response_data={'users': [str(request.user)]}
             )
         else:
-            error = _('Task status: %s') % execution.status
-            return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
-
-    @staticmethod
-    def pause_execution(execution):
-        if execution.status != TaskStatus.executing:
-            error = _('Task status: %s') % execution.status
-            return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
-
-        execution.status = TaskStatus.pause
-        execution.save(update_fields=['status'])
-        return Response(status=http_status.HTTP_200_OK, data={
-            'task_status': TaskStatus.pause
-        })
-
-    @action(methods=['POST'], detail=True, url_path='operate_task')
-    def operate_task(self, request, *args, **kwargs):
-        action_ = request.data.get('action')
-        execution = self.get_object().execution
-        if action_ == 'start':
-            response = self.start_execution(execution)
-        elif action_ == 'pause':
-            response = self.pause_execution(execution)
-        else:
-            data = {'error': 'Params action is not valid'}
-            response = Response(status=http_status.HTTP_400_BAD_REQUEST, data=data)
-        return response
+            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), result, timeout=wait_timeout)
+        data = {
+            'ttl': wait_timeout, 'users': result,
+            'participants': participants, 'wait_timeout': wait_timeout
+        }
+        return Response(status=http_status.HTTP_200_OK, data=data)
 
 
 class IterationViewSet(OrgBulkModelViewSet):

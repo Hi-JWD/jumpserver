@@ -5,7 +5,6 @@ import json
 import paramiko
 
 from django.utils.translation import gettext as _
-from django.db.models import Max
 from django.conf import settings
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.db import models
@@ -18,7 +17,7 @@ from assets.const import Protocol as const_p, WORKER_NAME
 from behemoth.backends import cmd_storage
 from behemoth.const import (
     TaskStatus, CommandStatus, PlanStrategy, PlanCategory,
-    CommandCategory, WorkerPlatform, PlaybackStrategy, SubPlanCategory
+    CommandCategory, WorkerPlatform, PlaybackStrategy, ExecutionCategory
 )
 from behemoth.utils import encrypt_json_file, colored_printer as p
 from common.db.encoder import ModelJSONFieldEncoder
@@ -72,6 +71,27 @@ class Worker(Asset):
     def envs(self):
         return self.meta.get('envs', '')  # noqa
 
+    def __get_ssh_client(self):
+        try:
+            account: Account = self.get_account()
+        except Exception as error:
+            logger.error(f'Task worker get account failed: {error}')
+            return None
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(
+            hostname=self.address, port=self.get_target_ssh_port(),
+            username=account.username, password=account.password, timeout=15
+        )
+        return client
+
+    @property
+    def ssh_client(self):
+        if self._ssh_client is None:
+            self._ssh_client = self.__get_ssh_client()
+        return self._ssh_client
+
     def save(self, *args, **kwargs):
         self.platform = self.default_platform()
         return super().save(*args, **kwargs)
@@ -97,32 +117,18 @@ class Worker(Asset):
             port = 0
         return port
 
-    def test_connectivity(self, immediate_disconnect=True) -> bool:
+    def test_connectivity(self) -> bool:
         connectivity: bool = False
         try:
-            account: Account = self.get_account()
-        except Exception as error:
-            logger.error(f'Task worker set account failed: {error}')
-            return False
-
-        try:
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(
-                hostname=self.address, port=self.get_target_ssh_port(),
-                username=account.username, password=account.password, timeout=15
-            )
-            connectivity = True
-            if not immediate_disconnect:
-                self._ssh_client = client
-            else:
+            client = self.__get_ssh_client()
+            if connectivity := bool(client):
                 client.close()
         except Exception as error:
             logger.error(f'Task worker test ssh connect failed: {error}')
         return connectivity
 
     def _scp(self, local_path: str, remote_path: str, mode=0o544) -> None:
-        sftp = self._ssh_client.open_sftp()
+        sftp = self.ssh_client.open_sftp()
         try:
             sftp.remove(remote_path)
         except IOError:
@@ -147,7 +153,7 @@ class Worker(Asset):
             settings.APPS_DIR, 'behemoth', 'libs', 'go_script', filename
         )
         command = f'{md5_cmd} {self._remote_script_path}'
-        __, stdout, __ = self._ssh_client.exec_command(command)
+        __, stdout, __ = self.ssh_client.exec_command(command)
         stdout = stdout.read().decode().split()
         local_exist = os.path.exists(local_path)
         if not local_exist:
@@ -156,7 +162,7 @@ class Worker(Asset):
         if local_exist and len(stdout) > 0 and get_file_md5(local_path) == stdout[0].strip():
             return
 
-        self._ssh_client.exec_command(f'mkdir -p {os.path.dirname(self._remote_script_path)}')
+        self.ssh_client.exec_command(f'mkdir -p {os.path.dirname(self._remote_script_path)}')
         self._scp(local_path, self._remote_script_path)
 
     def __process_commands_file(
@@ -167,7 +173,7 @@ class Worker(Asset):
         if encrypted_data:
             local_commands_file = encrypt_json_file(local_commands_file, token[:32])
 
-        self._ssh_client.exec_command(f'mkdir -p {os.path.dirname(remote_commands_file)}')
+        self.ssh_client.exec_command(f'mkdir -p {os.path.dirname(remote_commands_file)}')
         self._scp(local_commands_file, remote_commands_file, mode=0o400)
         print(p.green('命令文件传输成功'))
 
@@ -178,7 +184,7 @@ class Worker(Asset):
     def __clear(self, remote_commands_file: str, local_commands_file: str, **kwargs: dict) -> None:
         # 清理远端文件
         command = f'rm -f {remote_commands_file}'
-        __, stdout, __ = self._ssh_client.exec_command(command)
+        __, stdout, __ = self.ssh_client.exec_command(command)
         if stdout.channel.recv_exit_status() == 0:  # TODO 这里要改一下，状态码判断有问题
             logger.warning(f'Remote file({remote_commands_file}) deletion failed')
         # 清理本地文件
@@ -192,7 +198,7 @@ class Worker(Asset):
         try:
             cmd = f'{self._remote_script_path} --command {encoded_data} --with_env'
             logger.debug('Behemoth cmd: %s' % cmd)
-            __, stdout, stderr = self._ssh_client.exec_command(cmd)
+            __, stdout, stderr = self.ssh_client.exec_command(cmd)
             error = stderr.read().decode()
             if error:
                 raise JMSException(error)
@@ -232,6 +238,8 @@ class Command(JMSOrgBaseModel):
 
     def to_dict(self):
         fields = ['input', 'category', 'pause']
+        if self.category == CommandCategory.pause:
+            fields += ['output']
         return model_to_dict(self, fields=fields)
 
 
@@ -252,31 +260,33 @@ class Playback(JMSOrgBaseModel):
         Command.objects.create()
 
     def create_pause(self, pause_data):
-        sub_plan = SubPlan.objects.create(name=_('Pause'))
+        # TODO 这里插入的暂停要给所有这个回放关联的同步计划添加到最后执行的execution的最后一条命令上
+        execution = Execution.objects.create(name=_('Pause'))
+        Command.objects.create(
+            input=pause_data['input'], output=pause_data['output'], index=0,
+            execution_id=execution.id, category=CommandCategory.pause,
+            pause=pause_data['pause'], status=CommandStatus.success,
+        )
+
         pe = PlaybackExecution.objects.create(
-            playback=self, execution=sub_plan.execution,
-            plan_name=pause_data['name'], sub_plan_name=sub_plan.name
+            playback=self, execution=execution, plan_name=pause_data['input']
         )
         plan_objs = self.plans.filter(category=PlanCategory.sync) # noqa
-        relation_ids = []
         for plan in plan_objs:
             obj = SyncPlanCommandRelation.objects.create(
                 plan_name=pe.plan_name, sync_plan=plan
             )
-            e_id = plan.subs.values_list('execution_id', flat=True).first()
-            relation_ids.append((obj.id, e_id))
-        for r_id, e_id in relation_ids:
-            Command.objects.create(
-                input=pause_data['name'], output=pause_data['descript'],
-                index=0, execution_id=e_id, relation_id=r_id,
-                category=CommandCategory.pause, pause=pause_data['pause'],
-            )
-
-        Command.objects.create(
-            input=pause_data['name'], output=pause_data['descript'],
-            index=0, execution_id=sub_plan.execution.id,
-            category=CommandCategory.pause, pause=pause_data['pause'],
-        )
+            if plan_e := plan.executions.first():
+                plan_e.cmd_idx += 1
+                Command.objects.create(
+                    input=pause_data['input'], output=pause_data['output'],
+                    index=plan_e.cmd_idx, execution_id=plan_e.id, relation_id=obj.id,
+                    category=CommandCategory.pause, pause=pause_data['pause'],
+                )
+                meta_obj = plan_e.get_meta_obj()
+                meta_obj.meta.update({meta_obj.get_next_serial(): {'cmd_range': 1}})
+                meta_obj.save(update_fields=['meta'])
+                plan_e.save(update_fields=['cmd_idx'])
 
 
 class Plan(JMSOrgBaseModel):
@@ -307,57 +317,28 @@ class Plan(JMSOrgBaseModel):
         verbose_name = _('Plan')
         ordering = ('-date_created',)
 
-    def create_sub_plan(self):
-        return SubPlan.objects.create(plan=self)
-
-
-class SubPlan(JMSOrgBaseModel):
-    name = models.CharField(max_length=128, verbose_name=_('Name'))
-    plan = models.ForeignKey(Plan, default=None, null=True, on_delete=models.CASCADE, related_name='subs', verbose_name=_('Plan'))
-    category = models.CharField(
-        max_length=32, default=SubPlanCategory.cmd,
-        choices=PlanCategory.choices, verbose_name=_('Category')
-    )
-    execution = models.OneToOneField(
-        'behemoth.Execution', on_delete=models.CASCADE, null=True, blank=True,
-        related_name='sub_plan', verbose_name=_('Execution')
-    )
-    serial = models.IntegerField(default=0, db_index=True, verbose_name=_('Serial'))
-
-    class Meta:
-        verbose_name = _('Sub plan')
-        ordering = ('-serial',)
-
-    def generate_name(self):
-        return f'{self.plan.name}-{local_now_date_display()}'[:128]
-
     def create_execution(self):
         request = get_current_request()
-        p: Plan = self.plan  # noqa
-        if not p:
-            plan_meta, asset, account = {}, None, None
-        else:
-            plan_meta = {
-                'name': p.name, 'category': p.category, 'plan_strategy': p.plan_strategy,
-                'playback_strategy': p.playback_strategy, 'playback_id': str(p.playback.id)  # noqa
-            }
-            asset, account = p.asset, p.account
-        return Execution.objects.create(
-            asset=asset, user_id=request.user.id, account=account, plan_meta=plan_meta
-        )
+        return Execution.objects.create(plan=self, user_id=request.user.id)
 
-    def save(self, *args, **kwargs):
-        max_serial = SubPlan.objects.filter(
-            plan=self.plan
-        ).aggregate(Max('serial'))['serial__max'] or 0
-        self.serial = max_serial + 1
-        if not self.name:
-            self.name = self.generate_name()
-        self.execution = self.create_execution()
-        return super().save(*args, **kwargs)
+
+class PlanExecution(JMSOrgBaseModel):
+    execution_id = models.UUIDField(verbose_name=_('Execution'))
+    meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
+
+    def get_next_serial(self):
+        return len(self.meta.keys()) # noqa
 
 
 class Execution(JMSOrgBaseModel):
+    name = models.CharField(default='', max_length=128, verbose_name=_('Name'))
+    plan = models.ForeignKey(
+        Plan, null=True, on_delete=models.CASCADE, related_name='executions', verbose_name=_('Plan')
+    )
+    category = models.CharField(
+        max_length=32, default=ExecutionCategory.cmd,
+        choices=ExecutionCategory.choices, verbose_name=_('Category')
+    )
     worker = models.ForeignKey(
         Worker, on_delete=models.SET_NULL, null=True, related_name='e1s', verbose_name=_('Worker')
     )
@@ -365,15 +346,26 @@ class Execution(JMSOrgBaseModel):
         Database, on_delete=models.CASCADE, null=True, related_name='e2s', verbose_name=_('Asset')
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, verbose_name=_('Account'))
-    plan_meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
     task_id = models.CharField(max_length=36, default='', verbose_name=_('Task ID'))
+    cmd_idx = models.IntegerField(default=-1, verbose_name=_('Current command index'))
 
     class Meta:
         verbose_name = _('Task')
-        ordering = ['-date_created']
+        ordering = ('date_created',)
+
+    def get_meta_obj(self):
+        return PlanExecution.objects.get_or_create(execution_id=self.id)[0]
+
+    def generate_name(self):
+        return f'{self.plan.name}-{local_now_date_display()}'[:128]
+
+    def save(self, *args, **kwargs):
+        if not self.name:
+            self.name = self.generate_name()
+        return super().save(*args, **kwargs)
 
     def get_commands(self, get_all=True):
         queryset = cmd_storage.get_queryset().filter(execution_id=self.id)
@@ -395,7 +387,7 @@ class PlaybackExecution(JMSOrgBaseModel):
     )
     execution = models.ForeignKey(Execution, on_delete=models.CASCADE, verbose_name=_('Execution'))
     plan_name = models.CharField(max_length=128, verbose_name=_('Plan name'))
-    sub_plan_name = models.CharField(max_length=128, verbose_name=_('Sub plan name'))
+    meta = models.JSONField(default=dict, verbose_name=_('Meta'))
 
     class Meta:
         ordering = ('date_created',)

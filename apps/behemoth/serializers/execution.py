@@ -10,34 +10,29 @@ from .. import const
 class ExecutionSerializer(serializers.ModelSerializer):
     asset = ObjectRelatedField(read_only=True, attrs=('id', 'name', 'address'), label=_('Asset'))
     account = ObjectRelatedField(read_only=True, attrs=('id', 'name', 'username'), label=_('Account'))
-    name = serializers.SerializerMethodField(label=_('Name'))
     status = serializers.ChoiceField(choices=const.TaskStatus)
 
     class Meta:
         model = Execution
         fields_mini = ['id', 'name', 'status']
-        fields_small = fields_mini + ['date_updated', 'updated_by', 'created_by', 'reason']
-        fields = fields_small + ['asset', 'account']
-
-    @staticmethod
-    def get_name(obj):
-        return obj.plan_meta.get('name', '')
+        fields_small = fields_mini + ['date_created', 'updated_by', 'created_by', 'reason']
+        fields = fields_small + ['asset', 'account', 'task_id']
 
     def validate(self, attrs):
-        if not self.instance:
-            return []
-
         attrs = super().validate(attrs)
+        if not self.instance:
+            return attrs
+
         from behemoth.libs.pools.worker import worker_pool
 
-        plan_meta = self.instance.plan_meta
         if (attrs['status'] == const.TaskStatus.success and
-                plan_meta['playback_strategy'] == const.PlaybackStrategy.auto):
-            # TODO 这里要考虑往同步计划中同步相关命令，抽个函数
+                self.instance.plan.playback_strategy == const.PlaybackStrategy.auto):
+            meta = {
+                'asset': self.instance.asset.name, 'account': self.instance.account.username
+            }
             PlaybackExecution.objects.create(
-                execution=self.instance, plan_name=plan_meta['name'],
-                sub_plan_name=self.instance.sub_plan.name,
-                playback_id=self.instance.plan_meta['playback_id'],
+                execution=self.instance, plan_name=self.instance.plan.name,
+                meta=meta, playback=self.instance.plan.playback,
             )
             worker_pool.record(self.instance, '命令执行完成', 'green')
         elif attrs['status'] == const.TaskStatus.failed:

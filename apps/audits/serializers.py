@@ -91,7 +91,7 @@ class OperateLogSerializer(BulkOrgResourceModelSerializer):
         fields_small = fields_mini + [
             "user", "action", "resource_type",
             "resource", "remote_addr", "datetime",
-            "org_id",
+            "org_id", 'diff'
         ]
         fields = fields_small
 

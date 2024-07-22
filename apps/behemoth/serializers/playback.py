@@ -26,7 +26,7 @@ class PlaybackTaskSerializer(serializers.Serializer):
 class PlaybackExecutionSerializer(CommonModelSerializer):
     class Meta:
         model = PlaybackExecution
-        fields_mini = ['id', 'plan_name', 'sub_plan_name']
+        fields_mini = ['id', 'plan_name']
         fields_small = fields_mini + [
             'date_created', 'created_by',
         ]
@@ -34,6 +34,6 @@ class PlaybackExecutionSerializer(CommonModelSerializer):
 
 
 class InsertPauseSerializer(serializers.Serializer):
-    name = serializers.CharField()
-    descript = serializers.CharField()
+    input = serializers.CharField()
+    output = serializers.CharField()
     pause = serializers.BooleanField()

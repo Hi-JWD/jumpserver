@@ -60,6 +60,6 @@ class PlanCategory(models.TextChoices):
     deploy = 'deploy', _('Deploy')
 
 
-class SubPlanCategory(models.TextChoices):
+class ExecutionCategory(models.TextChoices):
     file = 'file', _('File')
     cmd = 'cmd', _('Command')

@@ -7,7 +7,7 @@ __all__ = [
     'SecurityPasswordRuleSerializer', 'SecuritySessionSerializer',
     'SecurityAuthSerializer', 'SecuritySettingSerializer',
     'SecurityLoginLimitSerializer', 'SecurityBasicSerializer',
-    'SecurityBlockIPSerializer'
+    'SecurityBlockIPSerializer', 'SecurityBehemothSerializer'
 ]
 
 
@@ -186,6 +186,15 @@ class SecurityAuthSerializer(serializers.Serializer):
         return data
 
 
+class SecurityBehemothSerializer(serializers.Serializer):
+    SYNC_PLAN_REQUIRED_PARTICIPANTS = serializers.IntegerField(
+        min_value=2, max_value=10, default=2, label=_('Sync task participants')
+    )
+    SYNC_PLAN_WAIT_PARTICIPANT_IDLE = serializers.IntegerField(
+        min_value=60, max_value=3600*24*365, default=3600, label=_('Sync task wait participant idle')
+    )
+
+
 class SecuritySessionSerializer(serializers.Serializer):
     SECURITY_WATERMARK_ENABLED = serializers.BooleanField(
         required=True, label=_('Enable watermark'),
@@ -227,7 +236,7 @@ class SecurityBasicSerializer(serializers.Serializer):
 class SecuritySettingSerializer(
     SecurityPasswordRuleSerializer, SecurityAuthSerializer,
     SecuritySessionSerializer, SecurityBasicSerializer,
-    SecurityLoginLimitSerializer,
+    SecurityLoginLimitSerializer, SecurityBehemothSerializer,
 ):
     PREFIX_TITLE = _('Security')
 

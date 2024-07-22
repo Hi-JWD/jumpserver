@@ -2,6 +2,7 @@ import base64
 import json
 import os
 
+from collections import OrderedDict
 from typing import Dict, AnyStr
 
 from django.utils.translation import gettext as _
@@ -13,9 +14,10 @@ from rest_framework.utils.encoders import JSONEncoder
 from assets.models import Asset
 from assets.const.database import DatabaseTypes
 from behemoth import const
-from behemoth.models import Worker, Execution
+from behemoth.models import Worker, Execution, Plan
 from behemoth.serializers import SimpleCommandSerializer
 from behemoth.utils import colored_printer as p
+from behemoth.const import PlanCategory
 from common.utils import get_logger, random_string
 from common.exceptions import JMSException
 from orgs.models import Organization
@@ -78,7 +80,12 @@ class WorkerPool(object):
             worker_set.add(w)
         logger.debug(f'Delete worker：{worker_set}({", ".join(labels) or _("No label")})')
 
-    def __select_worker(self, asset: Asset) -> Worker | None:
+    def _select_worker(self) -> Worker | None:
+        all_workers: list[Worker] = self.__get_workers()
+        worker = all_workers.pop() if len(all_workers) > 0 else None
+        return worker
+
+    def _select_worker_forever(self, asset: Asset) -> Worker | None:
         worker: Worker | None = None
         if not (labels := asset.get_labels()):
             all_workers: list[Worker] = self.__get_workers()
@@ -110,17 +117,18 @@ class WorkerPool(object):
         workers = cache.get(self.worker_status_key, [])
         for worker in workers:
             self.delete_worker(AWorker(**worker))
-            if worker := Worker.objects.filter(id=worker['id']):
+            if worker := Worker.objects.filter(id=worker['id']).first():
                 self.add_worker(worker)
+        cache.set(self.worker_status_key, [], timeout=3600 * 24)
 
     def __get_valid_worker(self, execution: Execution) -> str:
         while True:
             # 根据资产属性选择一个工作机
-            worker: Worker | None = self.__select_worker(execution.asset)
+            worker: Worker | None = self._select_worker()
             if not worker:
                 raise JMSException(_('Not found a valid worker'))
             # 检查工作机是否可连接
-            connectivity: bool = worker.test_connectivity(False)
+            connectivity: bool = worker.test_connectivity()
             if not connectivity:
                 print(p.yellow(_('Worker[%s] is not valid') % worker))
             else:
@@ -143,16 +151,14 @@ class WorkerPool(object):
         execution.save(update_fields=['worker_id'])
 
     @staticmethod
-    def __generate_command_file(execution: Execution) -> str:
+    def __generate_command_file(commands, command_filename) -> str:
         # TODO 【命令缓存】命令生成后再缓存中保存一份，减少命令回调的数据查询
         # TODO 如果命令更新了，对应的execution下的命令缓存要及时刷新
-        commands = execution.get_commands(get_all=False)
         print(p.info(f'共 {len(commands)} 条命令待执行'))
         data = {
             'command_set': SimpleCommandSerializer(commands, many=True).data,
         }
-        filename: str = f'{execution.id}.bs'
-        filepath = os.path.join(settings.BEHEMOTH_DIR, filename)
+        filepath = os.path.join(settings.BEHEMOTH_DIR, command_filename)
         with open(filepath, 'w') as f:
             f.write(json.dumps(data, cls=JSONEncoder))
         return filepath
@@ -169,41 +175,94 @@ class WorkerPool(object):
         cache.set('%s_%s' % (user_id, remote_addr), token, expiration)
         return token
 
-    def __build_params(self, execution: Execution) -> dict:
-        print(p.info('正在构建命令执行需要的参数信息'))
-        command_filepath: str = f'{execution.id}.bs'
-        local_cmds_file = self.__generate_command_file(execution)
-        remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
-        token = self.__create_token(execution.user_id)
-        auth = {
-            'address': execution.asset.address,
-            'username': execution.account.username,
-            'password': execution.account.password,
-            'db_name': execution.asset.database.db_name
-        }
-        if execution.asset.type == DatabaseTypes.MYSQL:
+    @staticmethod
+    def __get_cmd_type(asset, account, auth):
+        if asset.type == DatabaseTypes.MYSQL:
             cmd_type = script = 'mysql'
-            auth['port'] = execution.asset.get_protocol_port('mysql')
-        elif execution.asset.type == DatabaseTypes.ORACLE:
+            auth['port'] = asset.get_protocol_port('mysql')
+        elif asset.type == DatabaseTypes.ORACLE:
             cmd_type = script = 'oracle'
             auth.update({
-                'port': execution.asset.get_protocol_port('oracle'),
-                'privileged': execution.account.privileged
+                'port': asset.get_protocol_port('oracle'),
+                'privileged': account.privileged
             })
         else:
             cmd_type = script = 'script'
-        params: dict = {
-            'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
-            'auth': auth, 'token': str(token), 'task_id': str(execution.id),
-            'encrypted_data': False, 'remote_commands_file': remote_cmds_file,
-            'local_commands_file': local_cmds_file, 'org_id': str(execution.org_id),
-            'envs': execution.worker.envs,
+        return cmd_type, script, auth
+
+    def __build_params(self, execution: Execution) -> list:
+        print(p.info('正在构建命令执行需要的参数信息'))
+        token = self.__create_token(execution.user_id)
+        param_list = []
+        param_obj = {
+            'host': settings.SITE_URL, 'token': str(token),
+            'task_id': str(execution.id), 'encrypted_data': False,
+            'org_id': str(execution.org_id), 'envs': execution.worker.envs,
         }
-        return params
+        if execution.plan.category == PlanCategory.sync:
+            print(p.info('此任务是同步类型任务，开始将不同环境的同名机器进行认证信息转换'))
+            meta = execution.get_meta_obj().meta
+            sorted_meta = OrderedDict(sorted(meta.items(), key=lambda item: item[0]))
+            environment = execution.plan.environment
+            commands, start, end = [], 0, 0
+            for key, auth_info in sorted_meta.items():
+                # TODO 暂停特殊处理下
+                if any((auth_info['asset'], auth_info['account'])):
+                    pass
+
+                asset = environment.assets.filter(name=auth_info['asset']).first()
+                if not asset:
+                    raise JMSException('环境[%s]下未找到资产[%s]' % (environment, auth_info['asset']))
+
+                account = asset.filter(username=auth_info['account']).first()
+                if not account:
+                    raise JMSException(
+                        '环境[%s]下的资产[%s]未找到账号[%s]' % (environment, auth_info['asset'], auth_info['account'])
+                    )
+
+                end += int(auth_info['cmd_range'])
+                command_filepath: str = f'{execution.id}-{key}.bs'
+                if not commands:
+                    commands = execution.get_commands(get_all=False)
+
+                local_cmds_file = self.__generate_command_file(commands[start:end], command_filepath)
+                remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
+                auth = {
+                    'address': asset.address, 'db_name': asset.db_name,
+                    'username': account.username, 'password': account.password,
+                }
+                cmd_type, script, auth = self.__get_cmd_type(asset, account, auth)
+                param_list.append({
+                    'cmd_type': cmd_type, 'script': script,
+                    'auth': auth, 'remote_commands_file': remote_cmds_file,
+                    'local_commands_file': local_cmds_file, **param_obj
+                })
+                start = end
+        else:
+            auth = {
+                'address': execution.asset.address,
+                'username': execution.account.username,
+                'password': execution.account.password,
+                'db_name': execution.asset.database.db_name
+            }
+            cmd_type, script, auth = self.__get_cmd_type(
+                execution.asset, execution.account, auth
+            )
+            command_filename: str = f'{execution.id}.bs'
+            commands = execution.get_commands(get_all=False)
+            local_cmds_file = self.__generate_command_file(commands, command_filename)
+            remote_cmds_file = f'/tmp/behemoth/commands/{command_filename}'
+            param_list.append({
+                'cmd_type': cmd_type, 'script': script,
+                'auth': auth, 'remote_commands_file': remote_cmds_file,
+                'local_commands_file': local_cmds_file, **param_obj
+            })
+        return param_list
 
     def __run(self, execution: Execution) -> None:
-        run_params: dict = self.__build_params(execution)
-        execution.worker.run(run_params)
+        run_params: list = self.__build_params(execution)
+        for param in run_params:
+            execution.worker.run(param)
 
     def work(self, execution: Execution) -> None:
         print(p.green('开始执行任务'))
@@ -211,13 +270,14 @@ class WorkerPool(object):
             self.__pre_run(execution)
             self.__run(execution)
         except Exception as err:
-            err_msg = f'针对 {execution.asset} 的任务执行失败: {err}'
+            err_msg = f'{execution.asset} 的任务执行失败: {err}'
             execution.status = const.TaskStatus.failed
             execution.reason = err_msg
             execution.save(update_fields=['status', 'reason'])
             print(p.red(err_msg))
-        else:
-            print(p.green('任务执行成功'))
+
+    def work_plan(self, plan: Plan):
+        pass
 
 
 worker_pool = WorkerPool()

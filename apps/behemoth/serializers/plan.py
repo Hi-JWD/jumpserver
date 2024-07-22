@@ -14,14 +14,13 @@ from common.utils import lazyproperty, random_string
 from assets.models import Database
 from accounts.models import Account
 from behemoth.models import (
-    Plan, Playback, Environment, Command, Execution, SubPlan,
-    SyncPlanCommandRelation
+    Plan, Playback, Environment, Command, Execution, SyncPlanCommandRelation
 )
 from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, CommandCategory,
     FILE_COMMAND_CACHE_KEY, PlaybackStrategy, FormatType, PlanCategory,
-    PLAN_TASK_ACTIVE_KEY
+    PLAN_TASK_ACTIVE_KEY, TaskStatus
 )
 
 
@@ -50,7 +49,7 @@ class FormatCommandSerializer(serializers.Serializer):
 
     def get_commands(self, attrs):
         func_map = {
-            FormatType.line_break: lambda s: s.split(),
+            FormatType.line_break: lambda s: [c for c in s.split('\n') if c],
             FormatType.sql: self.convert_commands_by_sqlparse,
             FormatType.oracle: oracle_parser,
         }
@@ -75,35 +74,6 @@ class UploadCommandSerializer(serializers.Serializer):
     index = serializers.CharField(required=False, max_length=32, label=_('Index'))
 
 
-class SubPlanSerializer(serializers.ModelSerializer):
-    execution = ObjectRelatedField(
-        queryset=Execution.objects, attrs=('id', ), label=_('Execution')
-    )
-    status = serializers.SerializerMethodField(label=_('Status'))
-    reason = serializers.SerializerMethodField(label=_('Reason'))
-    task_id = serializers.SerializerMethodField(label=_('Task ID'))
-
-    class Meta:
-        model = SubPlan
-        fields_mini = ['id', 'name', 'serial']
-        fields = fields_mini + [
-            'date_created', 'created_by', 'execution',
-            'status', 'task_id', 'plan_id', 'reason'
-        ]
-
-    @staticmethod
-    def get_status(obj):
-        return obj.execution.status
-
-    @staticmethod
-    def get_reason(obj):
-        return obj.execution.reason
-
-    @staticmethod
-    def get_task_id(obj):
-        return obj.execution.task_id
-
-
 class CommandSerializer(serializers.ModelSerializer):
     class Meta(SimpleCommandSerializer.Meta):
         fields = SimpleCommandSerializer.Meta.fields + [
@@ -122,10 +92,6 @@ class CommandSerializer(serializers.ModelSerializer):
 
 
 class BasePlanSerializer(serializers.ModelSerializer):
-    asset = ObjectRelatedField(
-        queryset=Database.objects, attrs=('id', 'name', 'address', 'type'), label=_('Asset')
-    )
-    account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
@@ -133,27 +99,39 @@ class BasePlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Plan
         fields_mini = ['id', 'name', 'category']
-        fields_small = fields_mini + [
-            'environment', 'asset', 'account', 'playback', 'plan_strategy'
-        ]
-        fields = fields_small + [
-            'created_by', 'comment', 'date_created'
-        ]
+        fields_small = fields_mini + ['environment', 'playback', 'plan_strategy']
+        fields = fields_small + ['created_by', 'comment', 'date_created']
 
 
 class SyncPlanSerializer(BasePlanSerializer):
     _relation_map = {}
 
     users = serializers.SerializerMethodField(label=_('Users'))
+    execution = serializers.SerializerMethodField(label=_('Execution'))
 
     class Meta(BasePlanSerializer.Meta):
-        fields = BasePlanSerializer.Meta.fields + ['users']
+        fields = BasePlanSerializer.Meta.fields + ['users', 'execution']
+
+    @staticmethod
+    def get_execution(obj):
+        if execution := obj.executions.values('id', 'status', 'task_id').first(): # noqa
+            return execution
+        return {}
 
     @staticmethod
     def get_users(obj):
         ttl = cache.ttl(PLAN_TASK_ACTIVE_KEY.format(obj.id))
         users = cache.get(PLAN_TASK_ACTIVE_KEY.format(obj.id), [])
-        return {'ttl': ttl, 'users': users}
+        participants = settings.SYNC_PLAN_REQUIRED_PARTICIPANTS
+        wait_timeout = settings.SYNC_PLAN_WAIT_PARTICIPANT_IDLE
+        p_e = obj.executions.values('status', 'updated_by').first()
+        if TaskStatus.not_start == p_e['status']:
+            return {
+                'ttl': ttl, 'users': users,
+                'wait_timeout': wait_timeout, 'participants': participants
+            }
+        else:
+            return {'ttl': -1, 'users': [p_e['updated_by']]}
 
     def _get_or_create_relation(self, plan_name, plan):
         if obj := self._relation_map.get(plan_name):
@@ -171,44 +149,55 @@ class SyncPlanSerializer(BasePlanSerializer):
 
     def create(self, validated_data):
         plan = super().create(validated_data)
-        execution_id = plan.create_sub_plan().execution.id
-        executions = list(plan.playback.executions.values('execution_id', 'plan_name'))
-        # 遍历循环走SQL了吗
-        index = 0
-        for item in executions:
+        execution = plan.create_execution()
+        meta_obj = execution.get_meta_obj()
+        executions = list(plan.playback.executions.values('execution_id', 'plan_name', 'meta'))
+        # 遍历循环走SQL了吗？So crazy!
+        for serial, item in enumerate(executions):
+            asset, account = item['meta'].get('asset'), item['meta'].get('account')
             command_objs = []
             relation = self._get_or_create_relation(item['plan_name'], plan)
             commands = Command.objects.filter(execution_id=item['execution_id']).order_by('index')
             for command in commands:
-                new_command = Command(
-                    **command.to_dict(), relation_id=relation.id, index=index,
-                    execution_id=execution_id
+                execution.cmd_idx += 1
+                command_objs.append(
+                    Command(
+                        **command.to_dict(), relation_id=relation.id,
+                        index=execution.cmd_idx, execution_id=execution.id
+                    )
                 )
-                command_objs.append(new_command)
-                index += 1
             Command.objects.bulk_create(command_objs)
+            meta_obj.meta.update({
+                serial: {'account': account, 'asset': asset, 'cmd_range': len(command_objs)}
+            })
+        execution.save(update_fields=['cmd_idx'])
+        meta_obj.save(update_fields=['meta'])
         return plan
 
 
 class DeployPlanSerializer(BasePlanSerializer):
+    asset = ObjectRelatedField(
+        queryset=Database.objects, attrs=('id', 'name', 'address', 'type'), label=_('Asset')
+    )
+    account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
     playback_strategy = LabeledChoiceField(
         choices=PlaybackStrategy.choices, label=_('Playback strategy')
     )
 
     class Meta(BasePlanSerializer.Meta):
-        fields = BasePlanSerializer.Meta.fields + ['playback_strategy']
+        fields = BasePlanSerializer.Meta.fields + ['asset', 'account', 'playback_strategy']
 
 
-class BaseSubPlanSerializer(serializers.ModelSerializer):
+class BaseCreateExecutionSerializer(serializers.ModelSerializer):
     bind_fields = ['token']
 
     name = serializers.CharField(required=False, allow_blank=True, label=_('Name'))
     token = serializers.CharField(write_only=True, max_length=16, label=_('Token'))
 
     class Meta:
-        model = SubPlan
+        model = Execution
         fields_mini = ['id', 'name']
-        fields = fields_mini + ['serial', 'created_by', 'date_created'] + ['token', 'plan']
+        fields = fields_mini + ['created_by', 'date_created'] + ['token', 'plan']
 
     def bind_attr(self, validated_data):
         for field in self.bind_fields:
@@ -241,15 +230,19 @@ class BaseSubPlanSerializer(serializers.ModelSerializer):
         with transaction.atomic():
             command_objs = []
             for i, c in enumerate(commands):
-                command = Command(
-                    execution_id=instance.execution.id, index=i, **self._format(c)
+                command_objs.append(
+                    Command(execution_id=instance.id, index=i, **self._format(c))
                 )
-                command_objs.append(command)
             commands = Command.objects.bulk_create(command_objs)
         return commands
 
     def create(self, validated_data):
         self.bind_attr(validated_data)
+        plan = validated_data['plan']
+        validated_data.update({
+            'asset': plan.asset, 'account': plan.account,
+            'user_id': self.context['request'].user.id
+        })
         instance = super().create(validated_data)
         self.create_commands(instance)
         return instance
@@ -260,18 +253,18 @@ class BaseSubPlanSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class SubPlanCommandSerializer(BaseSubPlanSerializer):
-    class Meta(BaseSubPlanSerializer.Meta):
-        fields = BaseSubPlanSerializer.Meta.fields
+class CommandExecutionSerializer(BaseCreateExecutionSerializer):
+    class Meta(BaseCreateExecutionSerializer.Meta):
+        fields = BaseCreateExecutionSerializer.Meta.fields
 
 
-class SubPlanFileSerializer(BaseSubPlanSerializer):
-    bind_fields = BaseSubPlanSerializer.bind_fields + ['mark_id']
+class FileExecutionSerializer(BaseCreateExecutionSerializer):
+    bind_fields = BaseCreateExecutionSerializer.bind_fields + ['mark_id']
 
     mark_id = serializers.CharField(write_only=True, required=True, max_length=32, label=_('Mark ID'))
 
-    class Meta(BaseSubPlanSerializer.Meta):
-        fields = BaseSubPlanSerializer.Meta.fields + [
+    class Meta(BaseCreateExecutionSerializer.Meta):
+        fields = BaseCreateExecutionSerializer.Meta.fields + [
             'mark_id'
         ]
 
