@@ -6,7 +6,6 @@ from rest_framework import serializers
 from django.utils.translation import gettext as _
 from django.db import transaction
 from django.core.cache import cache
-from django.utils._os import safe_join
 from django.conf import settings
 
 from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
@@ -14,20 +13,20 @@ from common.utils import lazyproperty, random_string
 from assets.models import Database
 from accounts.models import Account
 from behemoth.models import (
-    Plan, Playback, Environment, Command, Execution, SyncPlanCommandRelation
+    Plan, Playback, Environment, Command, PlaybackExecution,
+    Execution, ObjectExtend
 )
 from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
-    PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, CommandCategory,
-    FILE_COMMAND_CACHE_KEY, PlaybackStrategy, FormatType, PlanCategory,
-    PLAN_TASK_ACTIVE_KEY, TaskStatus
+    PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, PlaybackStrategy,
+    FormatType, PlanCategory, PLAN_TASK_ACTIVE_KEY, TaskStatus
 )
 
 
 class SimpleCommandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Command
-        fields = ['id', 'input', 'index', 'category']
+        fields = ['id', 'input', 'index']
 
 
 class FormatCommandSerializer(serializers.Serializer):
@@ -64,31 +63,13 @@ class FormatCommandSerializer(serializers.Serializer):
         return attrs
 
 
-class UploadCommandSerializer(serializers.Serializer):
-    ACTION_CHOICES = [
-        ('cache_pause', 'cache_pause'),
-        ('cache_file', 'cache_file')
-    ]
-    mark_id = serializers.CharField(required=True, max_length=32, label=_('Mark ID'))
-    action = serializers.ChoiceField(choices=ACTION_CHOICES, label=_('Type'))
-    index = serializers.CharField(required=False, max_length=32, label=_('Index'))
-
-
 class CommandSerializer(serializers.ModelSerializer):
+    status = serializers.ChoiceField(choices=TaskStatus.choices, label=_('Status'))
+
     class Meta(SimpleCommandSerializer.Meta):
         fields = SimpleCommandSerializer.Meta.fields + [
             'output', 'status', 'timestamp', 'pause'
         ]
-
-    @lazyproperty
-    def filepath_prefix(self):
-        return len(safe_join(settings.SHARE_DIR, 'command_upload_file')) + 22
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        if instance.category == CommandCategory.file:
-            data['input'] = data['input'][self.filepath_prefix:]
-        return data
 
 
 class BasePlanSerializer(serializers.ModelSerializer):
@@ -104,74 +85,78 @@ class BasePlanSerializer(serializers.ModelSerializer):
 
 
 class SyncPlanSerializer(BasePlanSerializer):
-    _relation_map = {}
-
     users = serializers.SerializerMethodField(label=_('Users'))
+    playback_executions = serializers.ListSerializer(
+        child=serializers.CharField(max_length=36), label=_('Playback executions')
+    )
     execution = serializers.SerializerMethodField(label=_('Execution'))
 
     class Meta(BasePlanSerializer.Meta):
-        fields = BasePlanSerializer.Meta.fields + ['users', 'execution']
+        fields = BasePlanSerializer.Meta.fields + ['users', 'execution', 'playback_executions']
 
     @staticmethod
     def get_execution(obj):
-        if execution := obj.executions.values('id', 'status', 'task_id').first(): # noqa
-            return execution
-        return {}
+        task_id, status = '', TaskStatus.not_start
+        for e in obj.executions.values('status', 'task_id'):
+            task_id = e['task_id']
+            if e['status'] != TaskStatus.success:
+                status = e['status']
+                break
+            else:
+                status = e['status']
+        return {'task_id': task_id, 'status': status}
 
     @staticmethod
     def get_users(obj):
         ttl = cache.ttl(PLAN_TASK_ACTIVE_KEY.format(obj.id))
         users = cache.get(PLAN_TASK_ACTIVE_KEY.format(obj.id), [])
-        participants = settings.SYNC_PLAN_REQUIRED_PARTICIPANTS
-        wait_timeout = settings.SYNC_PLAN_WAIT_PARTICIPANT_IDLE
-        p_e = obj.executions.values('status', 'updated_by').first()
-        if TaskStatus.not_start == p_e['status']:
+        participants = getattr(settings, 'SYNC_PLAN_REQUIRED_PARTICIPANTS', 2)
+        wait_timeout = getattr(settings, 'SYNC_PLAN_WAIT_PARTICIPANT_IDLE', 3600)
+
+        count = obj.executions.exclude(status=TaskStatus.success).count()
+        if count != 0:
             return {
                 'ttl': ttl, 'users': users,
                 'wait_timeout': wait_timeout, 'participants': participants
             }
         else:
-            return {'ttl': -1, 'users': [p_e['updated_by']]}
-
-    def _get_or_create_relation(self, plan_name, plan):
-        if obj := self._relation_map.get(plan_name):
-            return obj
-        obj = SyncPlanCommandRelation.objects.create(
-            plan_name=plan_name, sync_plan=plan
-        )
-        self._relation_map[plan_name] = obj
-        return obj
+            return {'ttl': -1, 'users': []}
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
         attrs['category'] = PlanCategory.sync
         return attrs
 
+    def update(self, instance, validated_data):
+        validated_data.pop('playback_executions', None)
+        return super().update(instance, validated_data)
+
     def create(self, validated_data):
+        execution_ids = validated_data.pop('playback_executions', [])
+        executions = PlaybackExecution.objects.filter(
+            id__in=execution_ids
+        ).values('execution_id', 'plan_name', 'meta', 'execution__category')
         plan = super().create(validated_data)
-        execution = plan.create_execution()
-        meta_obj = execution.get_meta_obj()
-        executions = list(plan.playback.executions.values('execution_id', 'plan_name', 'meta'))
+        ObjectExtend.objects.create(
+            obj_id=plan.id, category=Plan._meta.db_table,
+            meta={'playback_executions': execution_ids}
+        )
         # 遍历循环走SQL了吗？So crazy!
         for serial, item in enumerate(executions):
-            asset, account = item['meta'].get('asset'), item['meta'].get('account')
+            asset_name = item['meta'].get('asset', '')
+            account_username = item['meta'].get('account', '')
+            execution = plan.create_execution(
+                asset_name=asset_name, account_username=account_username,
+                category=item['execution__category']
+            )
             command_objs = []
-            relation = self._get_or_create_relation(item['plan_name'], plan)
             commands = Command.objects.filter(execution_id=item['execution_id']).order_by('index')
-            for command in commands:
-                execution.cmd_idx += 1
+            for idx, command in enumerate(commands):
                 command_objs.append(
-                    Command(
-                        **command.to_dict(), relation_id=relation.id,
-                        index=execution.cmd_idx, execution_id=execution.id
-                    )
+                    Command(**command.to_dict(), index=idx, execution_id=execution.id)
                 )
             Command.objects.bulk_create(command_objs)
-            meta_obj.meta.update({
-                serial: {'account': account, 'asset': asset, 'cmd_range': len(command_objs)}
-            })
-        execution.save(update_fields=['cmd_idx'])
-        meta_obj.save(update_fields=['meta'])
+            commands.filter(has_delete=True).delete()
         return plan
 
 
@@ -185,7 +170,9 @@ class DeployPlanSerializer(BasePlanSerializer):
     )
 
     class Meta(BasePlanSerializer.Meta):
-        fields = BasePlanSerializer.Meta.fields + ['asset', 'account', 'playback_strategy']
+        fields = BasePlanSerializer.Meta.fields + [
+            'version', 'asset', 'account', 'playback_strategy'
+        ]
 
 
 class BaseCreateExecutionSerializer(serializers.ModelSerializer):
@@ -197,7 +184,9 @@ class BaseCreateExecutionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Execution
         fields_mini = ['id', 'name']
-        fields = fields_mini + ['created_by', 'date_created'] + ['token', 'plan']
+        fields_small = fields_mini + ['created_by', 'date_created']
+        fields_fk = ['plan']
+        fields = fields_small + fields_fk + ['token']
 
     def bind_attr(self, validated_data):
         for field in self.bind_fields:
@@ -213,12 +202,10 @@ class BaseCreateExecutionSerializer(serializers.ModelSerializer):
             pause = match.group(3) == 'TRUE'
         if name and describe:
             input_, output = name, describe
-            category = CommandCategory.pause
         else:
             input_, output = c, ''
-            category = CommandCategory.command
         command = {
-            'input': input_, 'output': output, 'category': category, 'pause': pause
+            'input': input_, 'output': output, 'pause': pause
         }
         return command
 
@@ -256,28 +243,3 @@ class BaseCreateExecutionSerializer(serializers.ModelSerializer):
 class CommandExecutionSerializer(BaseCreateExecutionSerializer):
     class Meta(BaseCreateExecutionSerializer.Meta):
         fields = BaseCreateExecutionSerializer.Meta.fields
-
-
-class FileExecutionSerializer(BaseCreateExecutionSerializer):
-    bind_fields = BaseCreateExecutionSerializer.bind_fields + ['mark_id']
-
-    mark_id = serializers.CharField(write_only=True, required=True, max_length=32, label=_('Mark ID'))
-
-    class Meta(BaseCreateExecutionSerializer.Meta):
-        fields = BaseCreateExecutionSerializer.Meta.fields + [
-            'mark_id'
-        ]
-
-    @staticmethod
-    def _format(c: Dict) -> Dict:
-        if c['category'] == CommandCategory.pause:
-            input_, output, pause = c['name'], c['describe'], c['pause']
-        else:
-            input_, output, pause = c['filepath'], '', False
-        return {
-            'input': input_, 'output': output,
-            'category': c['category'], 'pause': pause
-        }
-
-    def get_commands(self):
-        return cache.get(FILE_COMMAND_CACHE_KEY.format(self.mark_id), [])

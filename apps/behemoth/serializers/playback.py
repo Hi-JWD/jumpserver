@@ -15,8 +15,8 @@ class PlaybackSerializer(serializers.ModelSerializer):
     class Meta:
         model = Playback
         fields_mini = ['id', 'name']
-        fields_small = fields_mini + ['environment']
-        fields = fields_small
+        fields_small = fields_mini + ['created_by', 'date_created']
+        fields = fields_small + ['environment', 'comment']
 
 
 class PlaybackTaskSerializer(serializers.Serializer):
@@ -24,13 +24,19 @@ class PlaybackTaskSerializer(serializers.Serializer):
 
 
 class PlaybackExecutionSerializer(CommonModelSerializer):
+    plan_version = serializers.SerializerMethodField()
+
     class Meta:
         model = PlaybackExecution
         fields_mini = ['id', 'plan_name']
         fields_small = fields_mini + [
             'date_created', 'created_by',
         ]
-        fields = fields_small + ['playback', 'execution']
+        fields = fields_small + ['playback', 'execution', 'plan_version']
+
+    @staticmethod
+    def get_plan_version(obj):
+        return obj.meta.get('plan_version')
 
 
 class InsertPauseSerializer(serializers.Serializer):

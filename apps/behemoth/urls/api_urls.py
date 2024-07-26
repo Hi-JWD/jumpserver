@@ -24,7 +24,6 @@ def test(*args, **kwargs):
 
 
 urlpatterns = [
-    path('sync-plan/relation/tree/', api.SyncPlanRelationTree.as_view(), name='sync-plan-tree'),
     path('test/', test)
 ]
 

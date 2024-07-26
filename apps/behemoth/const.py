@@ -44,12 +44,6 @@ class FormatType(models.TextChoices):
     oracle = 'oracle', _('Oracle format')
 
 
-class CommandCategory(models.TextChoices):
-    command = 'command', _('Command')
-    pause = 'pause', _('Pause')
-    file = 'file', _('File')
-
-
 class WorkerPlatform(models.TextChoices):
     linux = 'linux', _('Linux')
     mac = 'mac', _('Mac')
@@ -63,3 +57,5 @@ class PlanCategory(models.TextChoices):
 class ExecutionCategory(models.TextChoices):
     file = 'file', _('File')
     cmd = 'cmd', _('Command')
+    pause = 'pause', _('Pause')
+

@@ -1,6 +1,7 @@
 import base64
 import os
 import json
+import uuid
 
 import paramiko
 
@@ -17,7 +18,7 @@ from assets.const import Protocol as const_p, WORKER_NAME
 from behemoth.backends import cmd_storage
 from behemoth.const import (
     TaskStatus, CommandStatus, PlanStrategy, PlanCategory,
-    CommandCategory, WorkerPlatform, PlaybackStrategy, ExecutionCategory
+    WorkerPlatform, PlaybackStrategy, ExecutionCategory
 )
 from behemoth.utils import encrypt_json_file, colored_printer as p
 from common.db.encoder import ModelJSONFieldEncoder
@@ -28,7 +29,6 @@ from jumpserver.settings import get_file_md5
 from jumpserver.utils import get_current_request
 from orgs.mixins.models import JMSOrgBaseModel
 from orgs.mixins.models import OrgManager
-
 
 logger = get_logger(__name__)
 
@@ -138,13 +138,13 @@ class Worker(Asset):
         sftp.close()
 
     def __ensure_script_exist(self) -> None:
-        print(p.info('正在处理脚本文件'))
+        print(p.info(_('Processing script file')))
         platform_named = {
-            'mac': ('jms_cli_darwin', '/tmp/behemoth', 'md5'),
-            'linux': ('jms_cli_linux', '/tmp/behemoth', 'md5sum'),
-            'windows': ('jms_cli_windows.exe', r'C:\Windows\Temp', ''),
+            'mac': ('jms_cli_darwin', '/tmp/behemoth', 'md5', -1),
+            'linux': ('jms_cli_linux', '/tmp/behemoth', 'md5sum', 0),
+            'windows': ('jms_cli_windows.exe', r'C:\Windows\Temp', '', 0),
         }
-        filename, remote_dir, md5_cmd = platform_named.get(str(self.base), ('', '', ''))
+        filename, remote_dir, md5_cmd, md5_index = platform_named.get(str(self.base), ('', '', ''))
         if not filename:
             raise JMSException(_('The worker[%s](%s) type error') % (self, self.type))
 
@@ -159,23 +159,29 @@ class Worker(Asset):
         if not local_exist:
             raise JMSException(_('Worker script(%s) does not exist') % filename)
 
-        if local_exist and len(stdout) > 0 and get_file_md5(local_path) == stdout[0].strip():
+        if (local_exist and len(stdout) > 0
+                and get_file_md5(local_path) == stdout[md5_index].strip()):
             return
 
         self.ssh_client.exec_command(f'mkdir -p {os.path.dirname(self._remote_script_path)}')
-        self._scp(local_path, self._remote_script_path)
+        self._scp(str(local_path), str(self._remote_script_path))
 
     def __process_commands_file(
-            self, remote_commands_file: str, local_commands_file: str, token: str, **kwargs: dict
+            self, remote_commands_file: str, local_commands_file: str,
+            token: str, **kwargs: dict
     ) -> None:
         print(p.info('正在生成命令文件'))
         encrypted_data = kwargs.get('encrypted_data', False)
         if encrypted_data:
             local_commands_file = encrypt_json_file(local_commands_file, token[:32])
 
-        self.ssh_client.exec_command(f'mkdir -p {os.path.dirname(remote_commands_file)}')
+        remote_command_dir = os.path.dirname(remote_commands_file)
+        self.ssh_client.exec_command(f'mkdir -p {remote_command_dir}')
         self._scp(local_commands_file, remote_commands_file, mode=0o400)
-        print(p.green('命令文件传输成功'))
+        if cmd_file := kwargs.pop('cmd_file_real', ''):
+            cmd_filename = os.path.basename(cmd_file)
+            self._scp(cmd_file, os.path.join(remote_command_dir, cmd_filename), mode=0o400)
+        print(p.cyan(_('Command file transfer successful')))
 
     def __process_file(self, **kwargs: dict) -> None:
         self.__ensure_script_exist()
@@ -185,15 +191,17 @@ class Worker(Asset):
         # 清理远端文件
         command = f'rm -f {remote_commands_file}'
         __, stdout, __ = self.ssh_client.exec_command(command)
-        if stdout.channel.recv_exit_status() == 0:  # TODO 这里要改一下，状态码判断有问题
+        if stdout.channel.recv_exit_status() == 0:
             logger.warning(f'Remote file({remote_commands_file}) deletion failed')
         # 清理本地文件
         os.remove(local_commands_file)
 
     def __execute_cmd(self, **kwargs: dict) -> None:
-        print(p.info('开始执行命令\n'))
-        revert_key = {'remote_commands_file': 'cmd_filepath'}
-        params = {revert_key.get(k, k): v for k, v in kwargs.items()}
+        print(p.info(_('Start executing commands') + '\n'))
+        revert_key = {'remote_commands_file': 'cmd_set_filepath'}
+        exclude_params = ['local_commands_file', 'cmd_file_real']
+        params = {revert_key.get(k, k): v for k, v in kwargs.items() if k not in exclude_params}
+        logger.debug('Behemoth cmd params: %s' % params)
         encoded_data = base64.b64encode(json.dumps(params).encode()).decode()
         try:
             cmd = f'{self._remote_script_path} --command {encoded_data} --with_env'
@@ -211,41 +219,38 @@ class Worker(Asset):
 
     def run(self, run_params: dict) -> None:
         self.__execute(**run_params)
-        # self.__clear(**run_params) # TODO 后续放开
+        # self.__clear(**run_params) # 先不清理了，稳定了再说
 
 
 class Command(JMSOrgBaseModel):
-    """
-    任务类型为“同步”，后续考虑保存并创建execution会多复制一份冗余的command对象集，用来保存对应的命令执行结果
-    怎么根据“部署”去分类这些命令需要考虑一下
-    """
     input = models.TextField(blank=True, verbose_name=_('Input'))
     output = models.CharField(max_length=1024, blank=True, verbose_name=_('Output'))
     index = models.IntegerField(db_index=True, verbose_name=_('Index'))
     status = models.CharField(max_length=32, default=CommandStatus.not_start, verbose_name=_('Status'))
     execution_id = models.CharField(max_length=36, verbose_name=_('Execution'))
     timestamp = models.IntegerField(default=0, db_index=True)
-    category = models.CharField(max_length=16, default=CommandCategory.command, verbose_name=_('Category'))
     pause = models.BooleanField(default=False, verbose_name=_('Pause'))
-    relation_id = models.CharField(default=None, null=True, max_length=36, verbose_name=_('Sync plan relation'))
+    has_delete = models.BooleanField(default=False, verbose_name=_('Delete'))
 
     class Meta:
         verbose_name = _('Command')
         ordering = ('index',)
 
     def __str__(self):
-        return '%s(%s)' % (self.category, self.input[:10])
+        return f'{_("Command")}: {self.input[:10]}'
 
-    def to_dict(self):
-        fields = ['input', 'category', 'pause']
-        if self.category == CommandCategory.pause:
-            fields += ['output']
+    def to_dict(self, extra=None):
+        extra_fields = extra or []
+        fields = ['input', 'pause'] + extra_fields
         return model_to_dict(self, fields=fields)
 
 
 class Environment(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
     assets = models.ManyToManyField('assets.Database', verbose_name=_("Assets"))
+
+    def __str__(self):
+        return self.name
 
 
 class Playback(JMSOrgBaseModel):
@@ -255,38 +260,16 @@ class Playback(JMSOrgBaseModel):
         null=True, verbose_name=_('Environment')
     )
 
-    @staticmethod
-    def _create_command(**data):
-        Command.objects.create()
-
     def create_pause(self, pause_data):
-        # TODO 这里插入的暂停要给所有这个回放关联的同步计划添加到最后执行的execution的最后一条命令上
-        execution = Execution.objects.create(name=_('Pause'))
+        execution = Execution.objects.create(name=_('Pause'), category=ExecutionCategory.pause)
         Command.objects.create(
             input=pause_data['input'], output=pause_data['output'], index=0,
-            execution_id=execution.id, category=CommandCategory.pause,
-            pause=pause_data['pause'], status=CommandStatus.success,
+            execution_id=execution.id, pause=pause_data['pause'],
         )
 
-        pe = PlaybackExecution.objects.create(
+        PlaybackExecution.objects.create(
             playback=self, execution=execution, plan_name=pause_data['input']
         )
-        plan_objs = self.plans.filter(category=PlanCategory.sync) # noqa
-        for plan in plan_objs:
-            obj = SyncPlanCommandRelation.objects.create(
-                plan_name=pe.plan_name, sync_plan=plan
-            )
-            if plan_e := plan.executions.first():
-                plan_e.cmd_idx += 1
-                Command.objects.create(
-                    input=pause_data['input'], output=pause_data['output'],
-                    index=plan_e.cmd_idx, execution_id=plan_e.id, relation_id=obj.id,
-                    category=CommandCategory.pause, pause=pause_data['pause'],
-                )
-                meta_obj = plan_e.get_meta_obj()
-                meta_obj.meta.update({meta_obj.get_next_serial(): {'cmd_range': 1}})
-                meta_obj.save(update_fields=['meta'])
-                plan_e.save(update_fields=['cmd_idx'])
 
 
 class Plan(JMSOrgBaseModel):
@@ -312,22 +295,37 @@ class Plan(JMSOrgBaseModel):
         Playback, related_name='plans', null=True, on_delete=models.SET_NULL, verbose_name=_('Playback')
     )
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
+    version = models.CharField(max_length=32, default='', verbose_name=_('Version'))
 
     class Meta:
         verbose_name = _('Plan')
         ordering = ('-date_created',)
 
-    def create_execution(self):
+    def create_execution(self, with_auth=False, **other):
         request = get_current_request()
-        return Execution.objects.create(plan=self, user_id=request.user.id)
+        params = {
+            'user_id': request.user.id, 'plan': self, **other
+        }
+        if with_auth:
+            params.update({'asset': self.asset, 'account': self.account})
+        return Execution.objects.create(**params)
+
+    @property
+    def playback_executions(self):
+        obj = ObjectExtend.objects.filter(
+            obj_id=self.id
+        ).values('meta').first() or {'meta': {}}
+        return obj['meta'].get('playback_executions', [])
 
 
-class PlanExecution(JMSOrgBaseModel):
-    execution_id = models.UUIDField(verbose_name=_('Execution'))
-    meta = models.JSONField(default=dict, verbose_name=_('Plan meta'))
+class ObjectExtend(models.Model):
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True)
+    obj_id = models.UUIDField(verbose_name=_('Model object'))
+    meta = models.JSONField(default=dict, verbose_name=_('Meta'))
+    category = models.CharField(max_length=128, verbose_name=_('Category'))
 
-    def get_next_serial(self):
-        return len(self.meta.keys()) # noqa
+    class Meta:
+        verbose_name = _('Object extend')
 
 
 class Execution(JMSOrgBaseModel):
@@ -346,18 +344,16 @@ class Execution(JMSOrgBaseModel):
         Database, on_delete=models.CASCADE, null=True, related_name='e2s', verbose_name=_('Asset')
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, verbose_name=_('Account'))
+    asset_name = models.CharField(max_length=128, default='-', verbose_name=_('Asset name'))
+    account_username = models.CharField(max_length=128, default='-', verbose_name=_('Account username'))
     user_id = models.CharField(max_length=36, verbose_name=_('User'))
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
     task_id = models.CharField(max_length=36, default='', verbose_name=_('Task ID'))
-    cmd_idx = models.IntegerField(default=-1, verbose_name=_('Current command index'))
 
     class Meta:
         verbose_name = _('Task')
         ordering = ('date_created',)
-
-    def get_meta_obj(self):
-        return PlanExecution.objects.get_or_create(execution_id=self.id)[0]
 
     def generate_name(self):
         return f'{self.plan.name}-{local_now_date_display()}'[:128]
@@ -372,13 +368,6 @@ class Execution(JMSOrgBaseModel):
         if not get_all:
             queryset = queryset.exclude(status=CommandStatus.success)
         return queryset
-    
-    
-class SyncPlanCommandRelation(JMSOrgBaseModel):
-    plan_name = models.CharField(max_length=128, verbose_name=_('Plan name'))
-    sync_plan = models.ForeignKey(
-        Plan, related_name='relations', on_delete=models.CASCADE, verbose_name=_('Sync plan')
-    )
 
 
 class PlaybackExecution(JMSOrgBaseModel):
@@ -387,6 +376,7 @@ class PlaybackExecution(JMSOrgBaseModel):
     )
     execution = models.ForeignKey(Execution, on_delete=models.CASCADE, verbose_name=_('Execution'))
     plan_name = models.CharField(max_length=128, verbose_name=_('Plan name'))
+    # plan_version, asset_name, account_username
     meta = models.JSONField(default=dict, verbose_name=_('Meta'))
 
     class Meta:

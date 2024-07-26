@@ -25,12 +25,16 @@ import (
 )
 
 const (
-	MySQLPrefix = "mysql> "
-	RetryTime   = 3
-	TaskStart   = "executing"
-	TaskFailed  = "failed"
-	TaskSuccess = "success"
-	Pause       = "pause"
+	MySQLPrefix    = "mysql> "
+	RetryTime      = 3
+	TaskStart      = "executing"
+	TaskFailed     = "failed"
+	TaskSuccess    = "success"
+	OracleTemplate = `SET ECHO ON;
+SET SERVEROUTPUT ON;
+WHENEVER SQLERROR EXIT SQL.SQLCODE;
+@%s;
+EXIT;`
 )
 
 type LocalCommand struct {
@@ -147,6 +151,64 @@ func (s *ScriptHandler) Close() {
 	_ = s.lCmd.Close()
 }
 
+type LocalScriptHandler struct {
+	opts CmdOptions
+}
+
+func (s *LocalScriptHandler) Connect() error {
+	_, err := exec.LookPath(s.opts.Script)
+	if err != nil {
+		return fmt.Errorf("%s 命令不存在，请在工作机上配置相应命令", s.opts.Script)
+	}
+	return nil
+}
+
+func (s *LocalScriptHandler) CreateTempFile() (string, error) {
+	file, err := os.CreateTemp("", "entry-*.txt")
+	if err != nil {
+		return "", err
+	}
+	content := fmt.Sprintf(OracleTemplate, s.opts.CmdFile)
+	if _, err := file.Write([]byte(content)); err != nil {
+		return "", err
+	}
+	return file.Name(), nil
+}
+
+func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
+	var connectionStr string
+	var args []string
+	if s.opts.Script == "mysql" {
+		_ = os.Setenv("MYSQL_PWD", s.opts.Auth.Password)
+		username := fmt.Sprintf("-u%s", s.opts.Auth.Username)
+		host := fmt.Sprintf("-h%s", s.opts.Auth.Address)
+		port := fmt.Sprintf("-P%v", s.opts.Auth.Port)
+		database := fmt.Sprintf("-D%s", s.opts.Auth.DBName)
+		sqlPath := fmt.Sprintf("source %s", s.opts.CmdFile)
+		args = append(args, username, host, port, database, "-t", "-e", sqlPath)
+	} else if s.opts.Script == "oracle" {
+		connectionStr = fmt.Sprintf(
+			"%s/\"%s\"@%s:%d/%s", s.opts.Auth.Username, s.opts.Auth.Password, s.opts.Auth.Address, s.opts.Auth.Port, s.opts.Auth.DBName,
+		)
+		if s.opts.Auth.Privileged {
+			connectionStr += " as sysdba"
+		}
+		path, err := s.CreateTempFile()
+		if err != nil {
+			return "", err
+		}
+		args = append(args, "-L", "-S", connectionStr, "@"+path)
+	}
+	cmd := exec.Command(s.opts.Script, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (s *LocalScriptHandler) Close() {}
+
 type MySQLHandler struct {
 	opts CmdOptions
 
@@ -227,6 +289,8 @@ func getHandler(opts CmdOptions) BaseHandler {
 		return &OracleHandler{opts: opts}
 	case "script":
 		return &ScriptHandler{opts: opts}
+	case "local_script":
+		return &LocalScriptHandler{opts: opts}
 	}
 	return nil
 }
@@ -251,22 +315,23 @@ type CmdOptions struct {
 	CommandBase64 string `json:"-"`
 	WithEnv       bool   `json:"-"`
 
-	TaskID      string   `json:"task_id"`
-	Host        string   `json:"host"`
-	Token       string   `json:"token"`
-	OrgId       string   `json:"org_id"`
-	Script      string   `json:"script"`
-	ScriptArgs  []string `json:"script_args"`
-	Auth        Auth     `json:"auth"`
-	CmdType     string   `json:"cmd_type"`
-	CmdFilepath string   `json:"cmd_filepath"`
-	CmdSet      []Cmd    `json:"command_set"`
-	Encrypted   bool     `json:"encrypted_data"`
-	Envs        string   `json:"envs"`
+	TaskID         string   `json:"task_id"`
+	Host           string   `json:"host"`
+	Token          string   `json:"token"`
+	OrgId          string   `json:"org_id"`
+	Script         string   `json:"script"`
+	ScriptArgs     []string `json:"script_args"`
+	Auth           Auth     `json:"auth"`
+	CmdType        string   `json:"cmd_type"`
+	CmdFile        string   `json:"cmd_file"`
+	CmdSetFilepath string   `json:"cmd_set_filepath"`
+	CmdSet         []Cmd    `json:"command_set"`
+	Encrypted      bool     `json:"encrypted_data"`
+	Envs           string   `json:"envs"`
 }
 
 func (co *CmdOptions) ValidCmdType() bool {
-	validType := []string{"mysql", "oracle", "script"}
+	validType := []string{"mysql", "oracle", "script", "local_script"}
 	for _, vType := range validType {
 		if co.CmdType == vType {
 			return true
@@ -293,11 +358,14 @@ func (co *CmdOptions) aesCBCDecrypt(ciphertext []byte) ([]byte, error) {
 }
 
 func (co *CmdOptions) ParseCmdFile() error {
-	if _, err := os.Stat(co.CmdFilepath); err != nil {
-		return fmt.Errorf("命令文件不存在: %s", err)
+	if _, err := os.Stat(co.CmdSetFilepath); err != nil {
+		return fmt.Errorf("命令文件集合(命令)不存在: %s", err)
+	}
+	if _, err := os.Stat(co.CmdFile); err != nil {
+		return fmt.Errorf("命令文件(文件)不存在: %s", err)
 	}
 
-	text, err := os.ReadFile(co.CmdFilepath)
+	text, err := os.ReadFile(co.CmdSetFilepath)
 	if err != nil {
 		return fmt.Errorf("读取命令文件内容失败: %s", err)
 	}
@@ -549,19 +617,15 @@ func main() {
 		err = jmsClient.OperateTask(opts.TaskID, TaskFailed, err)
 		if err != nil {
 			logger.Printf("Task modify failed: %v\n", err)
+			os.Exit(1)
 		}
-		os.Exit(1)
+		os.Exit(0)
 	}
 
 	var result string
 	var err error
 	for _, command := range opts.CmdSet {
-		if command.Category == Pause {
-			result, err = "", nil
-		} else {
-			result, err = handler.DoCommand(command.Value)
-		}
-		time.Sleep(2 * time.Second)
+		result, err = handler.DoCommand(command.Value)
 		resp, err := jmsClient.CommandCB(opts.TaskID, &command, result, err)
 		if err != nil {
 			logger.Fatalf("Command callback failed: %v\n", err)

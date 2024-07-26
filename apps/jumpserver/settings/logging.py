@@ -132,6 +132,10 @@ LOGGING = {
         'azure': {
             'handlers': ['null'],
             'level': 'ERROR'
+        },
+        'paramiko.sftp': {
+            'handlers': ['null'],
+            'level': 'ERROR'
         }
     }
 }

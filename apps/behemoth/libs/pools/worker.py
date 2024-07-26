@@ -1,23 +1,24 @@
 import base64
 import json
 import os
+import time
 
-from collections import OrderedDict
 from typing import Dict, AnyStr
 
 from django.utils.translation import gettext as _
 from django.conf import settings
 from django.core.cache import cache
 from difflib import SequenceMatcher
+from django.core.files.storage import default_storage
 from rest_framework.utils.encoders import JSONEncoder
 
 from assets.models import Asset
 from assets.const.database import DatabaseTypes
-from behemoth import const
+from behemoth.const import TaskStatus, ExecutionCategory
+from behemoth.exceptions import PauseException
 from behemoth.models import Worker, Execution, Plan
 from behemoth.serializers import SimpleCommandSerializer
 from behemoth.utils import colored_printer as p
-from behemoth.const import PlanCategory
 from common.utils import get_logger, random_string
 from common.exceptions import JMSException
 from orgs.models import Organization
@@ -45,6 +46,7 @@ class WorkerPool(object):
         self._default_workers: Dict[AnyStr, Dict[AnyStr, Worker]] = {}
         # other
         self.worker_status_key = ':worker_status_key:'
+        self.execution_status_key = 'execution_status_key_{}'
 
     def select_org(self, org_id=None):
         if org_id is not None:
@@ -143,25 +145,39 @@ class WorkerPool(object):
         with open(log_file, 'a') as f:
             f.write(formater(text))
 
+    def refresh_task_status(self, executions: list[Execution]) -> None:
+        for execution in executions:
+            self.mark_task_status(execution.id, '')
+
+    def is_task_failed(self, execution_id: str) -> bool:
+        if not execution_id:
+            return False
+        return cache.get(self.execution_status_key.format(execution_id), '') == TaskStatus.failed
+
+    def mark_task_status(self, execution_id: str, status: str):
+        cache.set(self.execution_status_key.format(execution_id), status)
+
     def __pre_run(self, execution: Execution) -> None:
-        print(p.info('正在寻找有效的工作机...'))
+        print(p.info(_('Looking for effective worker...')))
         self.select_org(execution.org_id)
         self.refresh_all_workers()
         execution.worker_id = self.__get_valid_worker(execution)
         execution.save(update_fields=['worker_id'])
 
     @staticmethod
-    def __generate_command_file(commands, command_filename) -> str:
-        # TODO 【命令缓存】命令生成后再缓存中保存一份，减少命令回调的数据查询
-        # TODO 如果命令更新了，对应的execution下的命令缓存要及时刷新
-        print(p.info(f'共 {len(commands)} 条命令待执行'))
+    def __generate_command_file(commands: list, execution: Execution) -> (str, str):
+        print(p.info(_('Total of %s command are waiting to be executed') % len(commands)))
+        cmd_file = ''
         data = {
             'command_set': SimpleCommandSerializer(commands, many=True).data,
         }
-        filepath = os.path.join(settings.BEHEMOTH_DIR, command_filename)
+        filename: str = f'{execution.id}.bs'
+        filepath = os.path.join(settings.BEHEMOTH_DIR, filename)
         with open(filepath, 'w') as f:
             f.write(json.dumps(data, cls=JSONEncoder))
-        return filepath
+        if execution.category == ExecutionCategory.file:
+            cmd_file = default_storage.path(commands[0].input)
+        return filepath, cmd_file
 
     @staticmethod
     def __create_token(user_id: str) -> str:
@@ -190,91 +206,77 @@ class WorkerPool(object):
             cmd_type = script = 'script'
         return cmd_type, script, auth
 
-    def __build_params(self, execution: Execution) -> list:
-        print(p.info('正在构建命令执行需要的参数信息'))
+    def __build_params(self, execution: Execution) -> dict | None:
+        commands = execution.get_commands(get_all=False)
+        if not commands:
+            print(p.yellow(_('There are no commands for this task. Skip')))
+            return None
+
+        if execution.category == ExecutionCategory.pause:
+            for command in commands:
+                command.status = TaskStatus.success
+                command.timestamp = int(time.time())
+                command.save(update_fields=['status', 'timestamp'])
+
+                execution.status = TaskStatus.success
+                execution.save(update_fields=['status'])
+                reason = f'{_("Task pause")}({_("Command paused")}):\n {command.input}: ({command.output})'
+                raise PauseException(reason)
+            else:
+                return None
+
+        if not execution.asset or not execution.account:
+            raise JMSException(_('Task has no asset or account'))
+
+        print(p.info(_('Building the params required for command execution')))
+        remote_command_dir = f'/tmp/behemoth/commands/{execution.id}'
+        command_filepath: str = f'{execution.id}.bs'
+        local_cmds_file, cmd_file = self.__generate_command_file(commands, execution)
+        remote_cmds_file = os.path.join(remote_command_dir, command_filepath)
         token = self.__create_token(execution.user_id)
-        param_list = []
-        param_obj = {
-            'host': settings.SITE_URL, 'token': str(token),
-            'task_id': str(execution.id), 'encrypted_data': False,
-            'org_id': str(execution.org_id), 'envs': execution.worker.envs,
+        auth = {
+            'address': execution.asset.address,
+            'username': execution.account.username,
+            'password': execution.account.password,
+            'db_name': execution.asset.database.db_name
         }
-        if execution.plan.category == PlanCategory.sync:
-            print(p.info('此任务是同步类型任务，开始将不同环境的同名机器进行认证信息转换'))
-            meta = execution.get_meta_obj().meta
-            sorted_meta = OrderedDict(sorted(meta.items(), key=lambda item: item[0]))
-            environment = execution.plan.environment
-            commands, start, end = [], 0, 0
-            for key, auth_info in sorted_meta.items():
-                # TODO 暂停特殊处理下
-                if any((auth_info['asset'], auth_info['account'])):
-                    pass
-
-                asset = environment.assets.filter(name=auth_info['asset']).first()
-                if not asset:
-                    raise JMSException('环境[%s]下未找到资产[%s]' % (environment, auth_info['asset']))
-
-                account = asset.filter(username=auth_info['account']).first()
-                if not account:
-                    raise JMSException(
-                        '环境[%s]下的资产[%s]未找到账号[%s]' % (environment, auth_info['asset'], auth_info['account'])
-                    )
-
-                end += int(auth_info['cmd_range'])
-                command_filepath: str = f'{execution.id}-{key}.bs'
-                if not commands:
-                    commands = execution.get_commands(get_all=False)
-
-                local_cmds_file = self.__generate_command_file(commands[start:end], command_filepath)
-                remote_cmds_file = f'/tmp/behemoth/commands/{command_filepath}'
-                auth = {
-                    'address': asset.address, 'db_name': asset.db_name,
-                    'username': account.username, 'password': account.password,
-                }
-                cmd_type, script, auth = self.__get_cmd_type(asset, account, auth)
-                param_list.append({
-                    'cmd_type': cmd_type, 'script': script,
-                    'auth': auth, 'remote_commands_file': remote_cmds_file,
-                    'local_commands_file': local_cmds_file, **param_obj
-                })
-                start = end
-        else:
-            auth = {
-                'address': execution.asset.address,
-                'username': execution.account.username,
-                'password': execution.account.password,
-                'db_name': execution.asset.database.db_name
-            }
-            cmd_type, script, auth = self.__get_cmd_type(
-                execution.asset, execution.account, auth
-            )
-            command_filename: str = f'{execution.id}.bs'
-            commands = execution.get_commands(get_all=False)
-            local_cmds_file = self.__generate_command_file(commands, command_filename)
-            remote_cmds_file = f'/tmp/behemoth/commands/{command_filename}'
-            param_list.append({
-                'cmd_type': cmd_type, 'script': script,
-                'auth': auth, 'remote_commands_file': remote_cmds_file,
-                'local_commands_file': local_cmds_file, **param_obj
+        if execution.asset.type == DatabaseTypes.MYSQL:
+            if execution.category == ExecutionCategory.cmd:
+                cmd_type = script = 'mysql'
+            else:
+                cmd_type = 'local_script'
+                script = 'mysql'
+            auth['port'] = execution.asset.get_protocol_port('mysql')
+        elif execution.asset.type == DatabaseTypes.ORACLE:
+            if execution.category == ExecutionCategory.cmd:
+                cmd_type = script = 'oracle'
+            else:
+                cmd_type = 'local_script'
+                script = 'sqlplus'
+            auth.update({
+                'port': execution.asset.get_protocol_port('oracle'),
+                'privileged': execution.account.privileged
             })
-        return param_list
+        else:
+            raise JMSException(f'{_("Unsupported asset type")}: {execution.asset.type}')
+        return {
+            'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
+            'auth': auth, 'token': str(token), 'task_id': str(execution.id),
+            'encrypted_data': False, 'remote_commands_file': remote_cmds_file,
+            'local_commands_file': local_cmds_file, 'org_id': str(execution.org_id),
+            'envs': execution.worker.envs, 'cmd_file_real': cmd_file,
+            'cmd_file': os.path.join(remote_command_dir, os.path.basename(cmd_file)),
+        }
 
     def __run(self, execution: Execution) -> None:
-        run_params: list = self.__build_params(execution)
-        for param in run_params:
-            execution.worker.run(param)
+        run_param: dict | None = self.__build_params(execution)
+        if run_param:
+            execution.worker.run(run_param)
 
     def work(self, execution: Execution) -> None:
-        print(p.green('开始执行任务'))
-        try:
-            self.__pre_run(execution)
-            self.__run(execution)
-        except Exception as err:
-            err_msg = f'{execution.asset} 的任务执行失败: {err}'
-            execution.status = const.TaskStatus.failed
-            execution.reason = err_msg
-            execution.save(update_fields=['status', 'reason'])
-            print(p.red(err_msg))
+        print(p.cyan(_('Start the task')))
+        self.__pre_run(execution)
+        self.__run(execution)
 
     def work_plan(self, plan: Plan):
         pass

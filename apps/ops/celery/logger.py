@@ -204,7 +204,7 @@ class CeleryThreadTaskFileHandler(CeleryThreadingLoggerHandler):
         f.flush()
 
     def flush(self):
-        for f in self.thread_id_fd_mapper.values():
+        for f in list(self.thread_id_fd_mapper.values()):
             f.flush()
 
     @staticmethod

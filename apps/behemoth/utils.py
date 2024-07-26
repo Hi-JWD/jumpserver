@@ -46,6 +46,7 @@ def decrypt_json_file(file_path: str, secret: str) -> None:
 class ColoredPrinter(object):
     _red = 'light_red'
     _green = 'light_green'
+    _cyan = 'light_cyan'
     _yellow = 'light_yellow'
     _grey = 'light_grey'
     _white = 'white'
@@ -64,6 +65,9 @@ class ColoredPrinter(object):
 
     def green(self, text):
         return self.polish(text=text, color=self._green)
+
+    def cyan(self, text):
+        return self.polish(text=text, color=self._cyan)
 
     def yellow(self, text):
         return self.polish(text=text, color=self._yellow)

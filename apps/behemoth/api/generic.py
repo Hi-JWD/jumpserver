@@ -1,10 +1,7 @@
-import os
-
 from django.utils.translation import gettext as _
 from django.core.cache import cache
-from django.utils._os import safe_join
 from django.conf import settings
-from rest_framework.views import APIView
+from django.core.files.storage import default_storage
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -14,41 +11,48 @@ from behemoth import serializers
 from behemoth.tasks import run_task_sync
 from behemoth.const import (
     CommandStatus, TaskStatus, FILE_COMMAND_CACHE_KEY,
-    CommandCategory, PlanCategory, PLAN_TASK_ACTIVE_KEY
+    PLAN_TASK_ACTIVE_KEY, ExecutionCategory
 )
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
-    Environment, Playback, Plan, Iteration, SyncPlanCommandRelation,
-    Execution, Command
+    Environment, Playback, Plan, Iteration, Execution, Command
 )
-from common.management.commands import status
 from common.utils import is_uuid
-from common.exceptions import JMSException, JMSObjectDoesNotExist
+from common.serializers import FileSerializer
+from common.exceptions import JMSException
+from common.utils.timezone import local_now_display
 from orgs.mixins.api import OrgBulkModelViewSet
 from orgs.utils import get_current_org_id
 
 
 class ExecutionMixin:
     @staticmethod
-    def start_task(execution: Execution, response_data: dict | None = None):
-        if execution.status not in (TaskStatus.success, TaskStatus.executing):
-            params = {}
-            if execution.task_id:
-                params['task_id'] = execution.task_id
-            # task = run_task_sync.apply_async((execution,), **params)
-            task = run_task_sync(execution)
-            execution.task_id = task.id
-            execution.status = TaskStatus.executing
-            execution.save(update_fields=['task_id', 'status'])
-            data = {
-                'task_id': task.id, 'task_status': TaskStatus.executing
-            }
-            if response_data:
-                data.update(response_data)
-            return Response(status=http_status.HTTP_201_CREATED, data=data)
-        else:
-            error = _('Task status: %s') % execution.status
+    def start_task(
+            executions: list[Execution], users: list, response_data: dict | None = None
+    ):
+        valid_executions = [
+            e for e in executions if e.status not in (TaskStatus.success, TaskStatus.executing)
+        ]
+        if not valid_executions:
+            error = _('Task is running or finished')
             return Response({'error': error}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        task_params = {}
+        if executions[0].task_id:
+            task_params['task_id'] = executions[0].task_id
+
+        task = run_task_sync.apply_async((valid_executions, users), **task_params)
+        # task = run_task_sync(valid_executions, users)
+        for execution in valid_executions:
+            if not execution.task_id:
+                execution.task_id = task.id
+                execution.save(update_fields=['task_id'])
+        data = {
+            'task_id': task.id, 'task_status': valid_executions[0].status
+        }
+        if response_data:
+            data.update(response_data)
+        return Response(status=http_status.HTTP_201_CREATED, data=data)
 
 
 class EnvironmentViewSet(OrgBulkModelViewSet):
@@ -112,13 +116,19 @@ class CommandViewSet(OrgBulkModelViewSet):
     model = Command
     serializer_classes = (
         ('default', serializers.CommandSerializer),
-        ('upload_commands', serializers.UploadCommandSerializer),
         ('format_commands', serializers.FormatCommandSerializer),
     )
     rbac_perms = {
         'format_commands': 'behemoth.view_command',
         'upload_commands': 'behemoth.add_command',
     }
+
+    def allow_bulk_destroy(self, qs, filtered):
+        return False
+
+    def perform_destroy(self, instance):
+        instance.has_delete = True
+        instance.save(update_fields=['has_delete'])
 
     @staticmethod
     def cache_command(mark_id, item):
@@ -136,36 +146,10 @@ class CommandViewSet(OrgBulkModelViewSet):
         serializer.is_valid(raise_exception=True)
         return Response(data=serializer.data)
 
-    @action(['POST'], detail=False, url_path='upload')
-    def upload_commands(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        mark_id = serializer.data['mark_id']
-        action_ = serializer.data['action']
-        if action_ == 'cache_pause':
-            pause = request.data.get('pause', {})
-            self.cache_command(mark_id, {'category': CommandCategory.pause, **pause})
-        else:
-            files = request.FILES.getlist('files')
-            if len(files) < 1:
-                return Response(status=http_status.HTTP_400_BAD_REQUEST, data={'error': _('No file selected.')})
 
-            upload_file_dir = safe_join(settings.SHARE_DIR, 'command_upload_file', mark_id)
-            os.makedirs(upload_file_dir, exist_ok=True)
-            file = files[0]
-            saved_path = safe_join(upload_file_dir, f'{file.name}')
-            with open(saved_path, 'wb+') as destination:
-                for chunk in file.chunks():
-                    destination.write(chunk)
-            item = {
-                'index': serializer.data['index'],
-                'filepath': saved_path, 'category': CommandCategory.file
-            }
-            self.cache_command(mark_id, item)
-        return Response(status=http_status.HTTP_200_OK)
-
-
-class ExecutionViewSet(ExecutionMixin ,OrgBulkModelViewSet):
+class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Execution
+    ordering_fields = ('date_created',)
     search_fields = ['name']
     filterset_fields = ['name']
     serializer_classes = {
@@ -173,7 +157,6 @@ class ExecutionViewSet(ExecutionMixin ,OrgBulkModelViewSet):
         'update_command': serializers.ExecutionCommandSerializer,
         'get_commands': serializers.CommandSerializer,
         'deploy_command': serializers.CommandExecutionSerializer,
-        'deploy_file': serializers.FileExecutionSerializer,
     }
     rbac_perms = {
         'update_command': 'behemoth.change_command',
@@ -187,15 +170,6 @@ class ExecutionViewSet(ExecutionMixin ,OrgBulkModelViewSet):
         if is_uuid(plan_id):
             qs = qs.filter(plan_id=plan_id)
         return qs
-
-    def create(self, request, *args, **kwargs):
-        plan_id = request.query_params.get('plan_id', '')
-        serializer = self.get_serializer(
-            data={'plan': plan_id, **request.data}
-        )
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        return Response(serializer.data, status=http_status.HTTP_201_CREATED)
 
     @staticmethod
     def pause_execution(execution):
@@ -214,7 +188,7 @@ class ExecutionViewSet(ExecutionMixin ,OrgBulkModelViewSet):
     def operate_task(self, request, *args, **kwargs):
         action_ = request.data.get('action')
         if action_ == 'start':
-            response = self.start_task(self.get_object())
+            response = self.start_task([self.get_object()], [str(request.user)])
         elif action_ == 'pause':
             response = self.pause_execution(self.get_object())
         elif action_ == 'success':
@@ -244,25 +218,15 @@ class ExecutionViewSet(ExecutionMixin ,OrgBulkModelViewSet):
         cmd = self._get_cmd(data, execution)
         if not cmd:
             raise JMSException(_('%s object does not exist.') % data['command_id'])
-        fields = ['status', 'timestamp']
-        if cmd.category != CommandCategory.pause:
-            fields.append('output')
+        fields = ['status', 'timestamp', 'output']
         for field in fields:
             setattr(cmd, field, data[field])
         cmd.save(update_fields=fields)
         if cmd.status == CommandStatus.success:
-            worker_pool.record(execution, f'命令输入: {cmd.input}')
-            worker_pool.record(execution, f'命令输出: {cmd.output}\n')
+            worker_pool.record(execution, f'{_("Command input")}:\n{cmd.input}')
+            worker_pool.record(execution, f'{_("Command output")}:\n{cmd.output}\n')
         can_continue, detail = True, ''
-        # 任务被手动暂停或者命令类型为“暂停”并开启暂停才不能继续执行[任务为同步类型]
-        plan_category = execution.plan.category
-        if execution.status == TaskStatus.pause:
-            can_continue = False
-            detail = _('Manual paused')
-        elif plan_category == PlanCategory.sync and cmd.pause:
-            can_continue = False
-            detail = _('Command paused')
-        elif data['status'] == CommandStatus.failed:
+        if data['status'] == CommandStatus.failed:
             can_continue = False
             detail = _('Failed')
 
@@ -270,20 +234,25 @@ class ExecutionViewSet(ExecutionMixin ,OrgBulkModelViewSet):
             execution.status = TaskStatus.pause
             execution.reason = data['output']
             execution.save(update_fields=['status', 'reason'])
-            worker_pool.record(execution, f'任务因为[{detail}]暂停: {cmd.output}')
+            worker_pool.record(execution, f'任务暂停({detail}): {cmd.output}', 'yellow')
+            worker_pool.mark_task_status(execution.id, TaskStatus.failed)
         return Response(status=http_status.HTTP_200_OK, data={'status': can_continue, 'detail': detail})
 
     @action(methods=['GET'], detail=True, url_path='commands')
     def get_commands(self, request, *args, **kwargs):
-        relation_id = request.query_params.get('relation_id')
-        commands = self.get_object().get_commands()
-        if relation_id:
-            commands = commands.filter(relation_id=relation_id)
-        return self.get_paginated_response_from_queryset(commands)
+        execution = self.get_object()
+        commands = execution.get_commands()
+        if execution.category == ExecutionCategory.file and len(commands) == 1:
+            if not default_storage.exists(commands[0].input):
+                commands = []
+            else:
+                with open(default_storage.path(commands[0].input)) as f:
+                    commands[0].input = f.read()
+        serializer = self.get_serializer(commands, many=True)
+        return Response({'results': serializer.data, 'category': execution.category})
 
     @staticmethod
     def _get_cmd(data, execution):
-        # TODO 【命令缓存】在线执行的任务从缓存获取命令集合
         return cmd_storage.get_queryset().filter(
             id=data['command_id'], execution_id=str(execution.id),
             org_id=str(get_current_org_id())
@@ -303,9 +272,11 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         'default': serializers.DeployPlanSerializer,
         'deploy': serializers.DeployPlanSerializer,
         'sync': serializers.SyncPlanSerializer,
+        'upload_command_file': FileSerializer,
     }
     rbac_perms = {
         'start_sync_task': 'behemoth.change_execution',
+        'upload_command_file': ['behemoth.add_plan', 'behemoth.add_execution', 'behemoth.add_command']
     }
 
     def get_queryset(self):
@@ -314,23 +285,40 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
             qs = qs.filter(category=category)
         return qs
 
+    @action(['POST'], detail=True, url_path='upload')
+    def upload_command_file(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        file = serializer.validated_data['file']
+        file_name = f'{file.name}({local_now_display("%Y-%m-%d-%H:%M:%S")})'
+        to = f'behemoth/commands/{file_name}'
+        relative_path = default_storage.save(to, file)
+        execution = self.get_object().create_execution(
+            with_auth=True, name=file_name, category=ExecutionCategory.file,
+        )
+        Command.objects.create(
+            input=f'{relative_path}', index=0, execution_id=execution.id,
+        )
+        return Response(serializer.data, status=http_status.HTTP_201_CREATED)
+
     @action(methods=['POST'], detail=True, url_path='start-sync-task')
     def start_sync_task(self, request, *args, **kwargs):
         obj = self.get_object()
         users = cache.get(PLAN_TASK_ACTIVE_KEY.format(obj.id), [])
         users.append(f'{request.user.name}({request.user.username})')
-        result = list(set(users))
-        participants = settings.SYNC_PLAN_REQUIRED_PARTICIPANTS
-        wait_timeout = settings.SYNC_PLAN_WAIT_PARTICIPANT_IDLE
-        if len(result) >= participants:
-            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), [], timeout=wait_timeout)
+        user_set = list(set(users))
+        participants = getattr(settings, 'SYNC_PLAN_REQUIRED_PARTICIPANTS', 2)
+        wait_timeout = getattr(settings, 'SYNC_PLAN_WAIT_PARTICIPANT_IDLE', 3600)
+        if len(user_set) >= participants:
+            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), [], timeout=1)
             return self.start_task(
-                obj.executions.first(), response_data={'users': [str(request.user)]}
+                obj.executions.all(), user_set, response_data={'users': [str(request.user)]}
             )
         else:
-            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), result, timeout=wait_timeout)
+            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), user_set, timeout=wait_timeout)
         data = {
-            'ttl': wait_timeout, 'users': result,
+            'ttl': wait_timeout, 'users': user_set,
             'participants': participants, 'wait_timeout': wait_timeout
         }
         return Response(status=http_status.HTTP_200_OK, data=data)
@@ -340,24 +328,3 @@ class IterationViewSet(OrgBulkModelViewSet):
     model = Iteration
     search_fields = ['name']
     serializer_class = serializers.IterationSerializer
-
-
-class SyncPlanRelationTree(APIView):
-    rbac_perms = {
-        'GET': 'behemoth.view_syncplancommandrelation'
-    }
-
-    @staticmethod
-    def get(request, *args, **kwargs):
-        tree_data = []
-        plan_id = request.query_params.get('plan_id')
-        if not is_uuid(plan_id):
-            raise JMSObjectDoesNotExist(object_name=_('Plan'))
-
-        qs = SyncPlanCommandRelation.objects.filter(sync_plan_id=plan_id)
-        for i, obj in enumerate(qs, 1):
-            label = obj.plan_name or _('Special')
-            tree_data.append({
-                'id': f'1{i}', 'name': label, 'value': obj.id, 'pId': '0', 'open': False,
-            })
-        return Response(data=tree_data)

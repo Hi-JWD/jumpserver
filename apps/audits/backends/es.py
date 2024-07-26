@@ -1,17 +1,22 @@
 # -*- coding: utf-8 -*-
 #
 import uuid
+import json
 
+from django.utils.translation import gettext_lazy as _
+
+from common.db.encoder import ModelJSONFieldEncoder as JSONEncoder
 from common.utils.timezone import local_now_display
 from common.utils import get_logger
 from common.utils.encode import Singleton
 from common.plugins.es import ES
+from .base import BaseOperateStorage
 
 
 logger = get_logger(__file__)
 
 
-class OperateLogStore(ES, metaclass=Singleton):
+class OperateLogStore(BaseOperateStorage, ES, metaclass=Singleton):
     def __init__(self, config):
         properties = {
             "id": {
@@ -57,7 +62,23 @@ class OperateLogStore(ES, metaclass=Singleton):
             'remote_addr': data['remote_addr'], 'datetime': datetime_param,
             'before': data['before'], 'after': data['after'], 'org_id': data['org_id']
         }
-        return data
+        return json.loads(json.dumps(data, cls=JSONEncoder))
+
+    @classmethod
+    def convert_diff_friendly(cls, op_log):
+        diff_list = []
+        handler = cls._get_special_handler(op_log.get('resource_type'))
+        before = op_log.get('before') or {}
+        after = op_log.get('after') or {}
+        keys = set(before.keys()) | set(after.keys())
+        for key in keys:
+            before_v, after_v = before.get(key), after.get(key)
+            diff_list.append({
+                'field': _(key),
+                'before': handler(key, before_v) if before_v else _('empty'),
+                'after': handler(key, after_v) if after_v else _('empty'),
+            })
+        return diff_list
 
     def save(self, **kwargs):
         log_id = kwargs.get('id', '')
@@ -71,8 +92,8 @@ class OperateLogStore(ES, metaclass=Singleton):
             raw_before = op_log.get('before') or {}
             raw_before.update(before)
             raw_after.update(after)
-            data['doc']['before'] = raw_before
-            data['doc']['after'] = raw_after
+            data['doc']['before'] = json.loads(json.dumps(raw_before, cls=JSONEncoder))
+            data['doc']['after'] = json.loads(json.dumps(raw_after, cls=JSONEncoder))
             self.es.update(
                 index=self.index, doc_type=self.doc_type,
                 id=op_log.get('es_id'), body=data, refresh=True

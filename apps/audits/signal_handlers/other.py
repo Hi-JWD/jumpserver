@@ -65,5 +65,4 @@ def on_audits_log_create(sender, instance=None, **kwargs):
     serializer = serializer_cls(instance)
     data = data_to_json(serializer.data, indent=None)
     msg = "{} - {}".format(category, data)
-    print(msg)
-    # sys_logger.info(msg)
+    sys_logger.info(msg)

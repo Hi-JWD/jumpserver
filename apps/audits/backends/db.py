@@ -2,10 +2,10 @@
 from django.utils.translation import gettext_lazy as _
 
 from audits.models import OperateLog
-from perms.const import ActionChoices
+from .base import BaseOperateStorage
 
 
-class OperateLogStore(object):
+class OperateLogStore(BaseOperateStorage):
     # 用不可见字符分割前后数据，节省存储-> diff: {'key': 'before\0after'}
     SEP = '\0'
 
@@ -45,14 +45,6 @@ class OperateLogStore(object):
             before_value, after_value = v.split(cls.SEP, 1)
             before[k], after[k] = before_value, after_value
         return before, after
-
-    @staticmethod
-    def _get_special_handler(resource_type):
-        # 根据资源类型，处理特殊字段
-        resource_map = {
-            'Asset permission': lambda k, v: ActionChoices.display(int(v)) if k == 'Actions' else v
-        }
-        return resource_map.get(resource_type, lambda k, v: v)
 
     @classmethod
     def convert_diff_friendly(cls, op_log):

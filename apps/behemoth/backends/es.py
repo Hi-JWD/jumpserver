@@ -55,7 +55,6 @@ class CommandStore(ES):
 
     def filter(self, query: dict, from_=None, size=None, sort=None):
         data = super().filter(query, from_, size, sort)
-        # TODO 这里构造成可以接着first的对象
         return data
 
     def get_queryset(self):

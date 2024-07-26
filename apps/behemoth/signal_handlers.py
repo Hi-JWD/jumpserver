@@ -3,8 +3,8 @@ from django.db.models.signals import pre_delete, post_save, post_delete
 
 from common.signals import django_ready
 from .libs.pools.worker import worker_pool
-from .const import PlanCategory
-from .models import Worker, Plan, Command, Execution
+from .const import PlanCategory, ExecutionCategory
+from .models import Worker, Command, Execution
 
 
 @receiver(django_ready)
@@ -18,16 +18,13 @@ def init_worker_pool(sender, **kwargs):
         worker_pool.add_worker(w)
 
 
-@receiver(pre_delete, sender=Plan)
-def sync_plan_delete(sender, instance, **kwargs):
-    if instance.category == PlanCategory.sync:
-        relation_ids = instance.relations.values_list('id', flat=True)
-        Command.objects.filter(relation_id__in=list(relation_ids)).delete()
-
-
 @receiver(pre_delete, sender=Execution)
-def sync_plan_delete(sender, instance, **kwargs):
-    Command.objects.filter(execution_id=instance.id).delete()
+def handle_execution_delete(sender, instance, **kwargs):
+    if (instance.plan.category == PlanCategory.sync
+            or instance.category == ExecutionCategory.pause):
+        Command.objects.filter(execution_id=instance.id).delete()
+    else:
+        Command.objects.filter(execution_id=instance.id).update(has_delete=True)
 
 
 @receiver([post_delete, post_save], sender=Worker)
