@@ -11,18 +11,21 @@ from common.exceptions import JMSException
 
 @shared_task(verbose_name=_('Worker run command task'))
 def run_task_sync(executions: list[Execution], users: list[str]):
-    if len(executions) == 0:
-        print(p.yellow(_('No task to run')))
-        return
-
     worker_pool.refresh_task_status(executions)
-    print(p.cyan('本任务执行人为: %s' % ', '.join(users)))
     total, can_continue, pre_task_id = len(executions), True, ''
     for num, execution in enumerate(executions, 1):
         if worker_pool.is_task_failed(pre_task_id):
             break
 
-        print(p.info('共 %s 批任务，开始执行第 %s 个任务' % (total, num)))
+        if execution.category == ExecutionCategory.pause:
+            execution.status = TaskStatus.success
+            execution.save(update_fields=['status'])
+            total -= 1
+
+        print(p.info(
+            _('There are %s batches of tasks in total. The %sth task has started to execute.'
+              ) % (total, num))
+        )
         try:
             execution.status = TaskStatus.executing
             execution.save(update_fields=['status'])
@@ -44,8 +47,8 @@ def run_task_sync(executions: list[Execution], users: list[str]):
                     execution.asset = asset
                     execution.account = account
                     execution.save(update_fields=['asset', 'account'])
-                print(p.cyan('同步计划前置条件准备成功'))
-            worker_pool.work(execution)
+
+            worker_pool.work(execution, users)
             pre_task_id = execution.id
         except PauseException as e:
             can_continue = False
@@ -55,7 +58,7 @@ def run_task_sync(executions: list[Execution], users: list[str]):
             print(p.yellow(str(e)))
         except Exception as err:
             can_continue = False
-            err_msg = f'{execution.asset or _("Unknown")} 的任务执行失败: {err}'
+            err_msg = _('%s\'s task execution failed: %s') % (execution.asset or _("Unknown"), err)
             execution.status = TaskStatus.failed
             execution.reason = err_msg
             execution.save(update_fields=['status', 'reason'])

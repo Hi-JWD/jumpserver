@@ -1,4 +1,4 @@
-from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy as _
 from django.core.cache import cache
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -18,7 +18,6 @@ from behemoth.models import (
     Environment, Playback, Plan, Iteration, Execution, Command
 )
 from common.utils import is_uuid
-from common.serializers import FileSerializer
 from common.exceptions import JMSException
 from common.utils.timezone import local_now_display
 from orgs.mixins.api import OrgBulkModelViewSet
@@ -151,7 +150,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Execution
     ordering_fields = ('date_created',)
     search_fields = ['name']
-    filterset_fields = ['name']
+    filterset_fields = ['name', 'status']
     serializer_classes = {
         'default': serializers.ExecutionSerializer,
         'update_command': serializers.ExecutionCommandSerializer,
@@ -223,8 +222,8 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
             setattr(cmd, field, data[field])
         cmd.save(update_fields=fields)
         if cmd.status == CommandStatus.success:
-            worker_pool.record(execution, f'{_("Command input")}:\n{cmd.input}')
-            worker_pool.record(execution, f'{_("Command output")}:\n{cmd.output}\n')
+            worker_pool.record(execution, '%s:\n%s' % (_('Command input'), cmd.input))
+            worker_pool.record(execution, '%s:\n%s\n' % (_('Command output'), cmd.output))
         can_continue, detail = True, ''
         if data['status'] == CommandStatus.failed:
             can_continue = False
@@ -272,7 +271,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         'default': serializers.DeployPlanSerializer,
         'deploy': serializers.DeployPlanSerializer,
         'sync': serializers.SyncPlanSerializer,
-        'upload_command_file': FileSerializer,
+        'upload_command_file': serializers.SyncPlanUploadSerializer,
     }
     rbac_perms = {
         'start_sync_task': 'behemoth.change_execution',
@@ -296,6 +295,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         relative_path = default_storage.save(to, file)
         execution = self.get_object().create_execution(
             with_auth=True, name=file_name, category=ExecutionCategory.file,
+            version=serializer.validated_data['version']
         )
         Command.objects.create(
             input=f'{relative_path}', index=0, execution_id=execution.id,
@@ -311,7 +311,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         participants = getattr(settings, 'SYNC_PLAN_REQUIRED_PARTICIPANTS', 2)
         wait_timeout = getattr(settings, 'SYNC_PLAN_WAIT_PARTICIPANT_IDLE', 3600)
         if len(user_set) >= participants:
-            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), [], timeout=1)
+            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), [], timeout=3600 * 24 * 7)
             return self.start_task(
                 obj.executions.all(), user_set, response_data={'users': [str(request.user)]}
             )

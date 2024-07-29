@@ -3,7 +3,7 @@ from django.utils.translation import gettext as _
 
 from common.serializers.fields import ObjectRelatedField
 from common.serializers import CommonModelSerializer
-from ..models import Playback, Environment, PlaybackExecution
+from ..models import Playback, Environment, PlaybackExecution, Execution
 
 
 class PlaybackSerializer(serializers.ModelSerializer):
@@ -24,7 +24,10 @@ class PlaybackTaskSerializer(serializers.Serializer):
 
 
 class PlaybackExecutionSerializer(CommonModelSerializer):
-    plan_version = serializers.SerializerMethodField()
+    execution = ObjectRelatedField(
+        queryset=Execution.objects, allow_null=True, allow_empty=True,
+        attrs=('id', 'name', 'version'), label=_('Execution')
+    )
 
     class Meta:
         model = PlaybackExecution
@@ -32,11 +35,7 @@ class PlaybackExecutionSerializer(CommonModelSerializer):
         fields_small = fields_mini + [
             'date_created', 'created_by',
         ]
-        fields = fields_small + ['playback', 'execution', 'plan_version']
-
-    @staticmethod
-    def get_plan_version(obj):
-        return obj.meta.get('plan_version')
+        fields = fields_small + ['playback', 'execution']
 
 
 class InsertPauseSerializer(serializers.Serializer):

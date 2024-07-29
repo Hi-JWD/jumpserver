@@ -128,6 +128,8 @@ class Worker(Asset):
         return connectivity
 
     def _scp(self, local_path: str, remote_path: str, mode=0o544) -> None:
+        filename = os.path.basename(remote_path)
+        print(p.info(f'%s: %s【%s】' % (_("Upload file"), filename, _('Start'))))
         sftp = self.ssh_client.open_sftp()
         try:
             sftp.remove(remote_path)
@@ -136,9 +138,10 @@ class Worker(Asset):
         sftp.put(local_path, remote_path)
         sftp.chmod(remote_path, mode)
         sftp.close()
+        print(p.info(f'%s: %s【%s】' % (_("Upload file"), filename, _('End'))))
 
     def __ensure_script_exist(self) -> None:
-        print(p.info(_('Processing script file')))
+        print(p.info(f'%s【%s】' % (_("Processing script file"), _('Start'))))
         platform_named = {
             'mac': ('jms_cli_darwin', '/tmp/behemoth', 'md5', -1),
             'linux': ('jms_cli_linux', '/tmp/behemoth', 'md5sum', 0),
@@ -159,18 +162,18 @@ class Worker(Asset):
         if not local_exist:
             raise JMSException(_('Worker script(%s) does not exist') % filename)
 
-        if (local_exist and len(stdout) > 0
+        if not (local_exist and len(stdout) > 0
                 and get_file_md5(local_path) == stdout[md5_index].strip()):
-            return
+            self.ssh_client.exec_command(f'mkdir -p {os.path.dirname(self._remote_script_path)}')
+            self._scp(str(local_path), str(self._remote_script_path))
 
-        self.ssh_client.exec_command(f'mkdir -p {os.path.dirname(self._remote_script_path)}')
-        self._scp(str(local_path), str(self._remote_script_path))
+        print(p.info(f'%s【%s】' % (_("Processing script file"), _('End'))))
 
     def __process_commands_file(
             self, remote_commands_file: str, local_commands_file: str,
             token: str, **kwargs: dict
     ) -> None:
-        print(p.info('正在生成命令文件'))
+        print(p.info(f'%s【%s】' % (_("Processing command files"), _('Start'))))
         encrypted_data = kwargs.get('encrypted_data', False)
         if encrypted_data:
             local_commands_file = encrypt_json_file(local_commands_file, token[:32])
@@ -181,7 +184,7 @@ class Worker(Asset):
         if cmd_file := kwargs.pop('cmd_file_real', ''):
             cmd_filename = os.path.basename(cmd_file)
             self._scp(cmd_file, os.path.join(remote_command_dir, cmd_filename), mode=0o400)
-        print(p.cyan(_('Command file transfer successful')))
+        print(p.info(f'%s【%s】' % (_("Processing command files"), _('End'))))
 
     def __process_file(self, **kwargs: dict) -> None:
         self.__ensure_script_exist()
@@ -197,7 +200,7 @@ class Worker(Asset):
         os.remove(local_commands_file)
 
     def __execute_cmd(self, **kwargs: dict) -> None:
-        print(p.info(_('Start executing commands') + '\n'))
+        print(p.info(f'%s【%s】' % (_('Execute commands'), _('Start'))))
         revert_key = {'remote_commands_file': 'cmd_set_filepath'}
         exclude_params = ['local_commands_file', 'cmd_file_real']
         params = {revert_key.get(k, k): v for k, v in kwargs.items() if k not in exclude_params}
@@ -212,6 +215,7 @@ class Worker(Asset):
                 raise JMSException(error)
         except SSHException as e:
             raise JMSException(str(e))
+        print(p.info(f'%s【%s】' % (_('Execute commands'), _('End'))))
 
     def __execute(self, **kwargs: dict) -> None:
         self.__process_file(**kwargs)
@@ -295,7 +299,6 @@ class Plan(JMSOrgBaseModel):
         Playback, related_name='plans', null=True, on_delete=models.SET_NULL, verbose_name=_('Playback')
     )
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
-    version = models.CharField(max_length=32, default='', verbose_name=_('Version'))
 
     class Meta:
         verbose_name = _('Plan')
@@ -350,6 +353,7 @@ class Execution(JMSOrgBaseModel):
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
     task_id = models.CharField(max_length=36, default='', verbose_name=_('Task ID'))
+    version = models.CharField(max_length=32, default='', blank=True, verbose_name=_('Version'))
 
     class Meta:
         verbose_name = _('Task')
@@ -376,7 +380,7 @@ class PlaybackExecution(JMSOrgBaseModel):
     )
     execution = models.ForeignKey(Execution, on_delete=models.CASCADE, verbose_name=_('Execution'))
     plan_name = models.CharField(max_length=128, verbose_name=_('Plan name'))
-    # plan_version, asset_name, account_username
+    # asset_name, account_username
     meta = models.JSONField(default=dict, verbose_name=_('Meta'))
 
     class Meta:

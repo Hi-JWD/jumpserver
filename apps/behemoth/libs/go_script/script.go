@@ -186,7 +186,7 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 		database := fmt.Sprintf("-D%s", s.opts.Auth.DBName)
 		sqlPath := fmt.Sprintf("source %s", s.opts.CmdFile)
 		args = append(args, username, host, port, database, "-t", "-e", sqlPath)
-	} else if s.opts.Script == "oracle" {
+	} else if s.opts.Script == "sqlplus" {
 		connectionStr = fmt.Sprintf(
 			"%s/\"%s\"@%s:%d/%s", s.opts.Auth.Username, s.opts.Auth.Password, s.opts.Auth.Address, s.opts.Auth.Port, s.opts.Auth.DBName,
 		)

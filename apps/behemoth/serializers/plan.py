@@ -9,7 +9,8 @@ from django.core.cache import cache
 from django.conf import settings
 
 from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
-from common.utils import lazyproperty, random_string
+from common.utils import random_string
+from common.serializers import FileSerializer
 from assets.models import Database
 from accounts.models import Account
 from behemoth.models import (
@@ -171,7 +172,7 @@ class DeployPlanSerializer(BasePlanSerializer):
 
     class Meta(BasePlanSerializer.Meta):
         fields = BasePlanSerializer.Meta.fields + [
-            'version', 'asset', 'account', 'playback_strategy'
+            'asset', 'account', 'playback_strategy'
         ]
 
 
@@ -242,4 +243,8 @@ class BaseCreateExecutionSerializer(serializers.ModelSerializer):
 
 class CommandExecutionSerializer(BaseCreateExecutionSerializer):
     class Meta(BaseCreateExecutionSerializer.Meta):
-        fields = BaseCreateExecutionSerializer.Meta.fields
+        fields = BaseCreateExecutionSerializer.Meta.fields + ['version']
+
+
+class SyncPlanUploadSerializer(FileSerializer):
+    version = serializers.CharField(max_length=32, label=_('Version'))

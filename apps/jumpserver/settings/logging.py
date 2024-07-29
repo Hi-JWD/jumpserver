@@ -133,7 +133,7 @@ LOGGING = {
             'handlers': ['null'],
             'level': 'ERROR'
         },
-        'paramiko.sftp': {
+        'paramiko': {
             'handlers': ['null'],
             'level': 'ERROR'
         }

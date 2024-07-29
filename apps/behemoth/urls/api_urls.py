@@ -16,15 +16,8 @@ router.register(r'commands', api.CommandViewSet, 'command')
 router.register(r'executions', api.ExecutionViewSet, 'executions')
 
 
-def test(*args, **kwargs):
-    from django.http.response import HttpResponse
-    from behemoth.tasks import test
-    test.delay()
-    return HttpResponse(b'ok')
-
-
 urlpatterns = [
-    path('test/', test)
+    path('index/', api.IndexApi.as_view()),
 ]
 
 urlpatterns += router.urls

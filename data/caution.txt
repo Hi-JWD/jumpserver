@@ -1,1 +1,2 @@
 [1;31m What are you trying to peek at !!!
+2024-07-29 15:17:48: [0;91mTask execution failed: mysql 命令不存在，请在工作机上配置相应命令[0m

@@ -4,6 +4,7 @@ from django.dispatch import receiver
 from accounts.models import Account
 from assets.models import Asset, Domain
 from assets.models import Node
+from behemoth.models import Environment, Playback, Execution
 from common.decorators import merge_delay_run
 from common.utils import get_logger
 from orgs.caches import OrgResourceStatisticsCache
@@ -70,6 +71,9 @@ model_cache_field_mapper = {
     RoleBinding: ['users_amount', 'new_users_amount_this_week'],
     Asset: ['assets_amount', 'new_assets_amount_this_week'],
     AssetPermission: ['asset_perms_amount'],
+    Environment: ['environments_amount'],
+    Playback: ['playbacks_amount'],
+    Execution: ['executions_amount', 'this_month_executions_amount', 'failed_executions_amount'],
 }
 
 

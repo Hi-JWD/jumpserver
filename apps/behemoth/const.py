@@ -14,11 +14,11 @@ PLAN_TASK_ACTIVE_KEY = 'active_plan_user_info:{}'
 
 
 class TaskStatus(models.TextChoices):
-    not_start = 'not_start'
-    executing = 'executing'
-    pause = 'pause'
-    success = 'success'
-    failed = 'failed'
+    not_start = 'not_start', _('Not Started')
+    executing = 'executing', _('Executing')
+    pause = 'pause', _('Pause')
+    success = 'success', _('Success')
+    failed = 'failed', _('Failed')
 
 
 class CommandStatus(models.TextChoices):

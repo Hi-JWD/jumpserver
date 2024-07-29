@@ -19,6 +19,7 @@ from behemoth.exceptions import PauseException
 from behemoth.models import Worker, Execution, Plan
 from behemoth.serializers import SimpleCommandSerializer
 from behemoth.utils import colored_printer as p
+from common.utils.timezone import local_now_display
 from common.utils import get_logger, random_string
 from common.exceptions import JMSException
 from orgs.models import Organization
@@ -158,11 +159,12 @@ class WorkerPool(object):
         cache.set(self.execution_status_key.format(execution_id), status)
 
     def __pre_run(self, execution: Execution) -> None:
-        print(p.info(_('Looking for effective worker...')))
+        print(p.info('%s【%s】' % (_('Looking for effective worker'), _('Start'))))
         self.select_org(execution.org_id)
         self.refresh_all_workers()
         execution.worker_id = self.__get_valid_worker(execution)
         execution.save(update_fields=['worker_id'])
+        print(p.info('%s【%s】' % (_('Looking for effective worker'), _('End'))))
 
     @staticmethod
     def __generate_command_file(commands: list, execution: Execution) -> (str, str):
@@ -217,10 +219,9 @@ class WorkerPool(object):
                 command.status = TaskStatus.success
                 command.timestamp = int(time.time())
                 command.save(update_fields=['status', 'timestamp'])
-
-                execution.status = TaskStatus.success
-                execution.save(update_fields=['status'])
-                reason = f'{_("Task pause")}({_("Command paused")}):\n {command.input}: ({command.output})'
+                reason = '%s\n%s: %s' % (
+                    _('The task encountered a command pause'), command.input, command.output
+                )
                 raise PauseException(reason)
             else:
                 return None
@@ -228,7 +229,7 @@ class WorkerPool(object):
         if not execution.asset or not execution.account:
             raise JMSException(_('Task has no asset or account'))
 
-        print(p.info(_('Building the params required for command execution')))
+        print(p.info(f'%s【%s】' % (_("Building the params required for command execution"), _('Start'))))
         remote_command_dir = f'/tmp/behemoth/commands/{execution.id}'
         command_filepath: str = f'{execution.id}.bs'
         local_cmds_file, cmd_file = self.__generate_command_file(commands, execution)
@@ -259,6 +260,7 @@ class WorkerPool(object):
             })
         else:
             raise JMSException(f'{_("Unsupported asset type")}: {execution.asset.type}')
+        print(p.info(f'%s【%s】' % (_("Building the params required for command execution"), _('End'))))
         return {
             'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
             'auth': auth, 'token': str(token), 'task_id': str(execution.id),
@@ -273,10 +275,24 @@ class WorkerPool(object):
         if run_param:
             execution.worker.run(run_param)
 
-    def work(self, execution: Execution) -> None:
-        print(p.cyan(_('Start the task')))
+    @staticmethod
+    def _show_task_summary(execution: Execution, users: list[str]):
+        print(p.title(_('Basic info of the task')))
+        print(p.field(_('Task name'), execution.name))
+        print(p.field(_('Executor'), ', '.join(users)))
+        print(p.field(_('Start time'), local_now_display()))
+        print(p.field(_('Execution environment'), execution.plan.environment))
+        print(p.field(_('Job type'), execution.plan.get_category_display()))
+        print(p.field(_('Execution asset'), execution.asset))
+        print(p.field(_('Execution account'), execution.account))
+        print(p.title(_('Basic info of the task')))
+
+    def work(self, execution: Execution, users: list[str]) -> None:
+        self._show_task_summary(execution, users)
+        print(p.title(_('Execution log')))
         self.__pre_run(execution)
         self.__run(execution)
+        print(p.title(_('Execution log')))
 
     def work_plan(self, plan: Plan):
         pass

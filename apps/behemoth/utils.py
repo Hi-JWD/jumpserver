@@ -50,6 +50,7 @@ class ColoredPrinter(object):
     _yellow = 'light_yellow'
     _grey = 'light_grey'
     _white = 'white'
+    _light_blue = 'light_blue'
 
     @staticmethod
     def polish(text, color, has_time=True):
@@ -59,6 +60,14 @@ class ColoredPrinter(object):
         if has_time:
             content = f'{local_now_display()}: {content}'
         return f'{content}\n'
+
+    def title(self, msg, level=20):
+        msg = f'{"-" * level} {msg} {"-" * level}'
+        return self.polish(has_time=False, text=msg, color=self._light_blue)
+
+    def field(self, field, msg):
+        msg = f'\033[1m{field}\033[0m: {msg}'
+        return self.polish(has_time=False, text=msg, color=self._white)
 
     def red(self, text):
         return self.polish(text=text, color=self._red)

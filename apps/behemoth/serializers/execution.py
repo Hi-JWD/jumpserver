@@ -16,13 +16,15 @@ class SimpleExecutionSerializer(serializers.ModelSerializer):
 class ExecutionSerializer(serializers.ModelSerializer):
     asset = ObjectRelatedField(read_only=True, attrs=('id', 'name', 'address'), label=_('Asset'))
     account = ObjectRelatedField(read_only=True, attrs=('id', 'name', 'username'), label=_('Account'))
-    status = serializers.ChoiceField(choices=const.TaskStatus)
+    status = LabeledChoiceField(choices=const.TaskStatus.choices, read_only=True, label=_('Status'))
     category = LabeledChoiceField(choices=const.ExecutionCategory.choices, label=_("Category"))
 
     class Meta:
         model = Execution
         fields_mini = ['id', 'name', 'status']
-        fields_small = fields_mini + ['category', 'date_created', 'updated_by', 'created_by', 'reason']
+        fields_small = fields_mini + [
+            'category', 'date_created', 'updated_by', 'created_by', 'reason', 'version'
+        ]
         fields = fields_small + ['asset', 'account', 'task_id']
 
     def validate(self, attrs):
@@ -37,8 +39,7 @@ class ExecutionSerializer(serializers.ModelSerializer):
                     self.instance.plan.category == const.PlanCategory.deploy:
                 asset_name = self.instance.asset.name.split('-', 1)[-1]
                 meta = {
-                    'asset': asset_name, 'account': self.instance.account.username,
-                    'plan_version': self.instance.plan.version,
+                    'asset': asset_name, 'account': self.instance.account.username
                 }
                 PlaybackExecution.objects.create(
                     execution=self.instance, plan_name=self.instance.plan.name,

@@ -1,14 +1,17 @@
 from django.db.transaction import on_commit
+from django.utils import timezone
 
 from orgs.models import Organization
 from orgs.tasks import refresh_org_cache_task
 from orgs.utils import current_org, tmp_to_org
 from common.cache import Cache, IntegerField
 from common.utils import get_logger
-from common.utils.timezone import local_zero_hour, local_monday
+from common.utils.timezone import local_zero_hour, local_monday, local_now
 from users.models import UserGroup, User
 from assets.models import Node, Domain, Asset
 from accounts.models import Account
+from behemoth.const import TaskStatus
+from behemoth.models import Execution, Environment, Playback
 from terminal.models import Session
 from perms.models import AssetPermission
 
@@ -65,6 +68,12 @@ class OrgResourceStatisticsCache(OrgRelatedCache):
     total_count_online_sessions = IntegerField()
     total_count_today_active_assets = IntegerField()
     total_count_today_failed_sessions = IntegerField()
+    # custom define
+    environments_amount = IntegerField()
+    playbacks_amount = IntegerField()
+    executions_amount = IntegerField()
+    this_month_executions_amount = IntegerField()
+    failed_executions_amount = IntegerField()
 
     def __init__(self, org):
         super().__init__()
@@ -120,3 +129,25 @@ class OrgResourceStatisticsCache(OrgRelatedCache):
     def compute_total_count_today_failed_sessions():
         t = local_zero_hour()
         return Session.objects.filter(date_start__gte=t, is_success=False).count()
+
+    @staticmethod
+    def compute_environments_amount():
+        return Environment.objects.count()
+
+    @staticmethod
+    def compute_playbacks_amount():
+        return Playback.objects.count()
+
+    @staticmethod
+    def compute_executions_amount():
+        return Execution.objects.count()
+
+    @staticmethod
+    def compute_this_month_executions_amount():
+        start_date = local_now() - timezone.timedelta(days=30)
+        executions = Execution.objects.filter(date_created__gte=start_date)
+        return executions.count()
+
+    @staticmethod
+    def compute_failed_executions_amount():
+        return Execution.objects.filter(status=TaskStatus.failed).count()
