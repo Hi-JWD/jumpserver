@@ -247,4 +247,4 @@ class CommandExecutionSerializer(BaseCreateExecutionSerializer):
 
 
 class SyncPlanUploadSerializer(FileSerializer):
-    version = serializers.CharField(max_length=32, label=_('Version'))
+    version = serializers.CharField(allow_blank=True, max_length=32, label=_('Version'))

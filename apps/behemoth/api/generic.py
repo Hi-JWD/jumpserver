@@ -1,7 +1,10 @@
+import os
+
 from django.utils.translation import gettext_lazy as _
 from django.core.cache import cache
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status as http_status
@@ -203,6 +206,11 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
             response = Response(status=http_status.HTTP_400_BAD_REQUEST, data=data)
         return response
 
+    @staticmethod
+    def save_to_file(execution: Execution, data: dict):
+        to = f'behemoth/output/{execution.id}/{data["command_id"]}.output'
+        return default_storage.save(to, ContentFile(data['output']))
+
     @action(methods=['PATCH'], detail=True, url_path='command')
     def update_command(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -217,13 +225,19 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
         cmd = self._get_cmd(data, execution)
         if not cmd:
             raise JMSException(_('%s object does not exist.') % data['command_id'])
+
+        output = data['output']
+        if execution.category == ExecutionCategory.file:
+            data['output'] = self.save_to_file(execution, data)
+
         fields = ['status', 'timestamp', 'output']
         for field in fields:
             setattr(cmd, field, data[field])
         cmd.save(update_fields=fields)
         if cmd.status == CommandStatus.success:
-            worker_pool.record(execution, '%s:\n%s' % (_('Command input'), cmd.input))
-            worker_pool.record(execution, '%s:\n%s\n' % (_('Command output'), cmd.output))
+            input_msg = '%s:\n%s' % (_('Command input'), cmd.input.split(os.path.sep, 1)[0])
+            worker_pool.record(execution, input_msg, 'cyan')
+            worker_pool.record(execution, '%s:\n%s\n' % (_('Command output'), output), 'cyan')
         can_continue, detail = True, ''
         if data['status'] == CommandStatus.failed:
             can_continue = False
@@ -231,9 +245,9 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
 
         if not can_continue:
             execution.status = TaskStatus.pause
-            execution.reason = data['output']
+            execution.reason = '失败原因请查看命令结果'
             execution.save(update_fields=['status', 'reason'])
-            worker_pool.record(execution, f'任务暂停({detail}): {cmd.output}', 'yellow')
+            worker_pool.record(execution, f'任务因为{detail}暂停\n: {output}', 'yellow')
             worker_pool.mark_task_status(execution.id, TaskStatus.failed)
         return Response(status=http_status.HTTP_200_OK, data={'status': can_continue, 'detail': detail})
 
@@ -242,11 +256,16 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
         execution = self.get_object()
         commands = execution.get_commands()
         if execution.category == ExecutionCategory.file and len(commands) == 1:
-            if not default_storage.exists(commands[0].input):
-                commands = []
-            else:
-                with open(default_storage.path(commands[0].input)) as f:
-                    commands[0].input = f.read()
+            try:
+                if default_storage.exists(commands[0].input):
+                    with default_storage.open(commands[0].input, 'r') as f:
+                        commands[0].input = f.read()
+                if commands[0].output and default_storage.exists(commands[0].output):
+                    with default_storage.open(commands[0].output, 'r') as f:
+                        commands[0].output = f.read()
+            except Exception: # noqa
+                pass
+
         serializer = self.get_serializer(commands, many=True)
         return Response({'results': serializer.data, 'category': execution.category})
 
@@ -291,12 +310,12 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
 
         file = serializer.validated_data['file']
         file_name = f'{file.name}({local_now_display("%Y-%m-%d-%H:%M:%S")})'
-        to = f'behemoth/commands/{file_name}'
-        relative_path = default_storage.save(to, file)
         execution = self.get_object().create_execution(
             with_auth=True, name=file_name, category=ExecutionCategory.file,
             version=serializer.validated_data['version']
         )
+        to = f'behemoth/commands/{execution.id}/{file_name}'
+        relative_path = default_storage.save(to, file)
         Command.objects.create(
             input=f'{relative_path}', index=0, execution_id=execution.id,
         )

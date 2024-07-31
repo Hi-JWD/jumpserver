@@ -31,6 +31,7 @@ const (
 	TaskFailed     = "failed"
 	TaskSuccess    = "success"
 	OracleTemplate = `SET ECHO ON;
+SET TIMING OFF;
 SET SERVEROUTPUT ON;
 WHENEVER SQLERROR EXIT SQL.SQLCODE;
 @%s;
@@ -133,7 +134,7 @@ func (s *ScriptHandler) DoCommand(command string) (string, error) {
 	result := ""
 	_, err := s.lCmd.Write([]byte(command + "\n"))
 	if err != nil {
-		return "", err
+		return err.Error(), err
 	}
 	for {
 		r := make([]byte, 1024)
@@ -195,16 +196,17 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 		}
 		path, err := s.CreateTempFile()
 		if err != nil {
-			return "", err
+			return err.Error(), err
 		}
 		args = append(args, "-L", "-S", connectionStr, "@"+path)
 	}
 	cmd := exec.Command(s.opts.Script, args...)
 	output, err := cmd.CombinedOutput()
+	ret := strings.TrimSpace(string(output))
 	if err != nil {
-		return "", err
+		return ret, err
 	}
-	return strings.TrimSpace(string(output)), nil
+	return ret, nil
 }
 
 func (s *LocalScriptHandler) Close() {}
@@ -234,7 +236,7 @@ func (s *MySQLHandler) Connect() error {
 func (s *MySQLHandler) DoCommand(command string) (string, error) {
 	r, err := s.db.Exec(command)
 	if err != nil {
-		return "", err
+		return err.Error(), err
 	}
 	affected, _ := r.RowsAffected()
 	return fmt.Sprintf("Affected rows: %v", affected), nil
@@ -270,7 +272,7 @@ func (s *OracleHandler) Connect() error {
 func (s *OracleHandler) DoCommand(command string) (string, error) {
 	r, err := s.db.Exec(command)
 	if err != nil {
-		return "", err
+		return err.Error(), err
 	}
 	affected, _ := r.RowsAffected()
 	return fmt.Sprintf("Affected rows: %v", affected), nil
@@ -528,12 +530,11 @@ func (c *JumpServerClient) CommandCB(
 	data := make(map[string]interface{})
 	data["command_id"] = command.ID
 	data["timestamp"] = time.Now().Unix()
+	data["output"] = result
 	if err == nil {
 		data["status"] = "success"
-		data["output"] = result
 	} else {
 		data["status"] = "failed"
-		data["output"] = err.Error()
 	}
 	url := fmt.Sprintf("/api/v1/behemoth/executions/%s/command/", taskID)
 	resp, err := c.Patch(url, data)

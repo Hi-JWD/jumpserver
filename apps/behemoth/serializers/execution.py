@@ -16,7 +16,7 @@ class SimpleExecutionSerializer(serializers.ModelSerializer):
 class ExecutionSerializer(serializers.ModelSerializer):
     asset = ObjectRelatedField(read_only=True, attrs=('id', 'name', 'address'), label=_('Asset'))
     account = ObjectRelatedField(read_only=True, attrs=('id', 'name', 'username'), label=_('Account'))
-    status = LabeledChoiceField(choices=const.TaskStatus.choices, read_only=True, label=_('Status'))
+    status = LabeledChoiceField(choices=const.TaskStatus.choices, label=_('Status'))
     category = LabeledChoiceField(choices=const.ExecutionCategory.choices, label=_("Category"))
 
     class Meta:
