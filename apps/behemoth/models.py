@@ -129,7 +129,7 @@ class Worker(Asset):
 
     def _scp(self, local_path: str, remote_path: str, mode=0o544) -> None:
         filename = os.path.basename(remote_path)
-        print(p.info(f'%s: %s【%s】' % (_("Upload file"), filename, _('Start'))))
+        print(p.info(f'【%s】 %s: %s' % (_('Start'), _("Upload file"), filename)))
         sftp = self.ssh_client.open_sftp()
         try:
             sftp.remove(remote_path)
@@ -138,10 +138,10 @@ class Worker(Asset):
         sftp.put(local_path, remote_path)
         sftp.chmod(remote_path, mode)
         sftp.close()
-        print(p.info(f'%s: %s【%s】' % (_("Upload file"), filename, _('End'))))
+        print(p.info(f'【%s】 %s: %s' % (_('End'), _("Upload file"), filename)))
 
     def __ensure_script_exist(self) -> None:
-        print(p.info(f'%s【%s】' % (_("Processing script file"), _('Start'))))
+        print(p.info(f'【%s】%s' % (_('Start'), _("Processing script file"))))
         platform_named = {
             'mac': ('jms_cli_darwin', '/tmp/behemoth', 'md5', -1),
             'linux': ('jms_cli_linux', '/tmp/behemoth', 'md5sum', 0),
@@ -167,13 +167,13 @@ class Worker(Asset):
             self.ssh_client.exec_command(f'mkdir -p {os.path.dirname(self._remote_script_path)}')
             self._scp(str(local_path), str(self._remote_script_path))
 
-        print(p.info(f'%s【%s】' % (_("Processing script file"), _('End'))))
+        print(p.info(f'【%s】%s' % (_('End'), _("Processing script file"))))
 
     def __process_commands_file(
             self, remote_commands_file: str, local_commands_file: str,
             token: str, **kwargs: dict
     ) -> None:
-        print(p.info(f'%s【%s】' % (_("Processing command files"), _('Start'))))
+        print(p.info(f'【%s】%s' % (_('Start'), _("Processing command files"))))
         encrypted_data = kwargs.get('encrypted_data', False)
         if encrypted_data:
             local_commands_file = encrypt_json_file(local_commands_file, token[:32])
@@ -184,7 +184,7 @@ class Worker(Asset):
         if cmd_file := kwargs.pop('cmd_file_real', ''):
             cmd_filename = os.path.basename(cmd_file)
             self._scp(cmd_file, os.path.join(remote_command_dir, cmd_filename), mode=0o400)
-        print(p.info(f'%s【%s】' % (_("Processing command files"), _('End'))))
+        print(p.info(f'【%s】%s' % (_('End'), _("Processing command files"))))
 
     def __process_file(self, **kwargs: dict) -> None:
         self.__ensure_script_exist()
@@ -200,7 +200,7 @@ class Worker(Asset):
         os.remove(local_commands_file)
 
     def __execute_cmd(self, **kwargs: dict) -> None:
-        print(p.info(f'%s【%s】' % (_('Execute commands'), _('Start'))))
+        print(p.info(f'【%s】%s' % (_('Start'), _('Execute commands'))))
         revert_key = {'remote_commands_file': 'cmd_set_filepath'}
         exclude_params = ['local_commands_file', 'cmd_file_real']
         params = {revert_key.get(k, k): v for k, v in kwargs.items() if k not in exclude_params}
@@ -215,7 +215,7 @@ class Worker(Asset):
                 raise JMSException(error)
         except SSHException as e:
             raise JMSException(str(e))
-        print(p.info(f'%s【%s】' % (_('Execute commands'), _('End'))))
+        print(p.info(f'【%s】%s' % (_('End'), _('Execute commands'))))
 
     def __execute(self, **kwargs: dict) -> None:
         self.__process_file(**kwargs)

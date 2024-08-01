@@ -159,12 +159,12 @@ class WorkerPool(object):
         cache.set(self.execution_status_key.format(execution_id), status)
 
     def __pre_run(self, execution: Execution) -> None:
-        print(p.info('%s【%s】' % (_('Looking for effective worker'), _('Start'))))
+        print(p.info('【%s】%s' % (_('Start'), _('Looking for effective worker'))))
         self.select_org(execution.org_id)
         self.refresh_all_workers()
         execution.worker_id = self.__get_valid_worker(execution)
         execution.save(update_fields=['worker_id'])
-        print(p.info('%s【%s】' % (_('Looking for effective worker'), _('End'))))
+        print(p.info('【%s】%s' % (_('Start'), _('Looking for effective worker'))))
 
     @staticmethod
     def __generate_command_file(commands: list, execution: Execution) -> (str, str):
@@ -229,7 +229,7 @@ class WorkerPool(object):
         if not execution.asset or not execution.account:
             raise JMSException(_('Task has no asset or account'))
 
-        print(p.info(f'%s【%s】' % (_("Building the params required for command execution"), _('Start'))))
+        print(p.info(f'【%s】%s' % (_('Start'), _("Building the params required for command execution"))))
         remote_command_dir = f'/tmp/behemoth/commands/{execution.id}'
         command_filepath: str = f'{execution.id}.bs'
         local_cmds_file, cmd_file = self.__generate_command_file(commands, execution)
@@ -260,7 +260,7 @@ class WorkerPool(object):
             })
         else:
             raise JMSException(f'{_("Unsupported asset type")}: {execution.asset.type}')
-        print(p.info(f'%s【%s】' % (_("Building the params required for command execution"), _('End'))))
+        print(p.info(f'【%s】%s' % (_('Start'), _("Building the params required for command execution"))))
         return {
             'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
             'auth': auth, 'token': str(token), 'task_id': str(execution.id),
