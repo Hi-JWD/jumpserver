@@ -1,4 +1,6 @@
+import io
 import os
+import zipfile
 
 from django.utils.translation import gettext_lazy as _
 from django.core.cache import cache
@@ -7,6 +9,7 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework import serializers as drf_serializer
 from rest_framework import status as http_status
 
 from behemoth.backends import cmd_storage
@@ -18,7 +21,8 @@ from behemoth.const import (
 )
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
-    Environment, Playback, Plan, Iteration, Execution, Command
+    Environment, Playback, Plan, Iteration, Execution, Command,
+    PlaybackExecution, MonthlyVersion
 )
 from common.utils import is_uuid
 from common.exceptions import JMSException
@@ -50,7 +54,7 @@ class ExecutionMixin:
                 execution.task_id = task.id
                 execution.save(update_fields=['task_id'])
         data = {
-            'task_id': task.id, 'task_status': valid_executions[0].status
+            'task_id': task.id, 'task_status': TaskStatus.executing
         }
         if response_data:
             data.update(response_data)
@@ -88,16 +92,61 @@ class EnvironmentViewSet(OrgBulkModelViewSet):
                 return Response(status=http_status.HTTP_400_BAD_REQUEST, data=serializer.errors)
 
 
+class MonthlyVersionViewSet(OrgBulkModelViewSet):
+    model = MonthlyVersion
+    search_fields = ['name']
+    serializer_classes = {
+        'default': serializers.MonthlyVersionSerializer,
+        'get_playbacks': serializers.SimplePlaybackSerializer,
+    }
+    rbac_perms = {
+        'get_playbacks': ['behemoth.view_playbacks']
+    }
+
+    @action(methods=['GET', 'PATCH', 'DELETE'], detail=True, url_path='playbacks')
+    def get_playbacks(self, request, *args, **kwargs):
+        obj = self.get_object()
+        if request.method == 'GET':
+            qs = obj.playbacks.all()
+            return self.get_paginated_response_from_queryset(qs)
+        else:
+            serializer = serializers.PlaybackMonthlyVersionSerializer(data=request.data)
+            if serializer.is_valid():
+                assets = serializer.validated_data.get('playbacks')
+                action_ = serializer.validated_data['action']
+                if action_ == 'remove':
+                    obj.playbacks.remove(*tuple(assets))
+                else:
+                    obj.playbacks.add(*tuple(assets))
+                return Response(status=http_status.HTTP_200_OK)
+            else:
+                return Response(status=http_status.HTTP_400_BAD_REQUEST, data=serializer.errors)
+
+
+class PlaybackExecutionViewSet(OrgBulkModelViewSet):
+    model = PlaybackExecution
+    search_fields = ['plan_name', 'execution__version', 'execution__name']
+    http_method_names = ('get', 'delete', 'head', 'options',)
+    serializer_class = serializers.PlaybackExecutionSerializer
+
+    def get_queryset(self):
+        if self.request.method == 'DELETE':
+            return self.model.objects.all()
+
+        playback_id = self.request.query_params.get('playback_id')
+        if not playback_id or not is_uuid(playback_id):
+            raise JMSException('Query params playback_id is not uuid')
+        return self.model.objects.filter(playback_id=playback_id)
+
+
 class PlaybackViewSet(OrgBulkModelViewSet):
     model = Playback
     search_fields = ['name']
     serializer_classes = {
         'default': serializers.PlaybackSerializer,
-        'get_playbacks_tasks': serializers.PlaybackExecutionSerializer,
         'insert_pause': serializers.InsertPauseSerializer,
     }
     rbac_perms = {
-        'get_playbacks_tasks': 'behemoth.view_execution',
         'insert_pause': 'behemoth.add_execution',
     }
 
@@ -121,8 +170,7 @@ class CommandViewSet(OrgBulkModelViewSet):
         ('format_commands', serializers.FormatCommandSerializer),
     )
     rbac_perms = {
-        'format_commands': 'behemoth.view_command',
-        'upload_commands': 'behemoth.add_command',
+        'format_commands': 'behemoth.view_command'
     }
 
     def allow_bulk_destroy(self, qs, filtered):
@@ -151,7 +199,7 @@ class CommandViewSet(OrgBulkModelViewSet):
 
 class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Execution
-    ordering_fields = ('date_created',)
+    ordering_fields = ('-date_created',)
     search_fields = ['name']
     filterset_fields = ['name', 'status']
     serializer_classes = {
@@ -171,7 +219,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
         qs = self.model.objects.all()
         if is_uuid(plan_id):
             qs = qs.filter(plan_id=plan_id)
-        return qs
+        return qs.order_by(*self.ordering_fields)
 
     @staticmethod
     def pause_execution(execution):
@@ -235,7 +283,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
             setattr(cmd, field, data[field])
         cmd.save(update_fields=fields)
         if cmd.status == CommandStatus.success:
-            input_msg = '%s:\n%s' % (_('Command input'), cmd.input.split(os.path.sep, 1)[0])
+            input_msg = '%s:\n%s' % (_('Command input'), os.path.basename(cmd.input))
             worker_pool.record(execution, input_msg, 'cyan')
             worker_pool.record(execution, '%s:\n%s\n' % (_('Command output'), output), 'cyan')
         can_continue, detail = True, ''
@@ -247,7 +295,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
             execution.status = TaskStatus.pause
             execution.reason = '失败原因请查看命令结果'
             execution.save(update_fields=['status', 'reason'])
-            worker_pool.record(execution, f'任务因为{detail}暂停\n: {output}', 'yellow')
+            worker_pool.record(execution, f'任务因为{detail}暂停:\n{output}', 'yellow')
             worker_pool.mark_task_status(execution.id, TaskStatus.failed)
         return Response(status=http_status.HTTP_200_OK, data={'status': can_continue, 'detail': detail})
 
@@ -257,12 +305,17 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
         commands = execution.get_commands()
         if execution.category == ExecutionCategory.file and len(commands) == 1:
             try:
-                if default_storage.exists(commands[0].input):
+                if (default_storage.exists(commands[0].input)
+                        and not zipfile.is_zipfile(default_storage.path(commands[0].input))):
                     with default_storage.open(commands[0].input, 'r') as f:
                         commands[0].input = f.read()
+                else:
+                    commands[0].input = os.path.basename(commands[0].input)
                 if commands[0].output and default_storage.exists(commands[0].output):
                     with default_storage.open(commands[0].output, 'r') as f:
                         commands[0].output = f.read()
+                else:
+                    commands[0].output = os.path.basename(commands[0].output)
             except Exception: # noqa
                 pass
 
@@ -303,13 +356,34 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
             qs = qs.filter(category=category)
         return qs
 
+    @staticmethod
+    def _handle_zip_file(file, entry):
+        with zipfile.ZipFile(file, 'r') as zip_file:
+            new_zip_data = io.BytesIO()
+            with zipfile.ZipFile(new_zip_data, 'w') as new_zip_file:
+                for zip_info in zip_file.infolist():
+                    with zip_file.open(zip_info.filename) as source_file:
+                        new_zip_file.writestr(zip_info, source_file.read())
+                new_zip_file.writestr('entry.bs', entry)
+        new_zip_data.seek(0)
+        return ContentFile(new_zip_data.read(), name=file.name)
+
     @action(['POST'], detail=True, url_path='upload')
     def upload_command_file(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         file = serializer.validated_data['file']
-        file_name = f'{file.name}({local_now_display("%Y-%m-%d-%H:%M:%S")})'
+        if zipfile.is_zipfile(file):
+            entry = serializer.validated_data['zip_entry_file']
+            if not entry:
+                raise drf_serializer.ValidationError(
+                    _('The {} cannot be empty').format('zip_entry_file')
+                )
+            file = self._handle_zip_file(file, entry)
+
+        name, ext = os.path.splitext(file.name)
+        file_name = f'{name}-({local_now_display("%Y_%m_%d_%H_%M_%S")}){ext}'
         execution = self.get_object().create_execution(
             with_auth=True, name=file_name, category=ExecutionCategory.file,
             version=serializer.validated_data['version']

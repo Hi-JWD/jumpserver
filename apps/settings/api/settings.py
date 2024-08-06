@@ -33,7 +33,6 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'security_auth': serializers.SecurityAuthSerializer,
         'security_basic': serializers.SecurityBasicSerializer,
         'security_session': serializers.SecuritySessionSerializer,
-        'security_behemoth': serializers.SecurityBehemothSerializer,
         'security_password': serializers.SecurityPasswordRuleSerializer,
         'security_login_limit': serializers.SecurityLoginLimitSerializer,
         'ldap': serializers.LDAPSettingSerializer,
@@ -66,6 +65,8 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'ticket': serializers.TicketSettingSerializer,
         'ops': serializers.OpsSettingSerializer,
         'virtualapp': serializers.VirtualAppSerializer,
+        'sync_plan': serializers.SyncPlanSerializer,
+        'deploy_plan': serializers.DeployPlanSerializer,
     }
 
     rbac_category_permissions = {
@@ -79,7 +80,6 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'security_basic': 'settings.change_security',
         'security_auth': 'settings.change_security',
         'security_session': 'settings.change_security',
-        'security_behemoth': 'settings.change_security',
         'security_password': 'settings.change_security',
         'security_login_limit': 'settings.change_security',
         'ldap': 'settings.change_auth',
@@ -102,6 +102,8 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'alibaba': 'settings.change_sms',
         'tencent': 'settings.change_sms',
         'vault': 'settings.change_vault',
+        'sync_plan': 'settings.view_setting',
+        'deploy_plan': 'settings.view_setting',
     }
 
     def get_queryset(self):

@@ -4,7 +4,7 @@ from typing import AnyStr, Dict
 
 from rest_framework import serializers
 from django.utils.translation import gettext as _
-from django.db import transaction
+from django.db import transaction, models
 from django.core.cache import cache
 from django.conf import settings
 
@@ -15,12 +15,12 @@ from assets.models import Database
 from accounts.models import Account
 from behemoth.models import (
     Plan, Playback, Environment, Command, PlaybackExecution,
-    Execution, ObjectExtend
+    Execution, ObjectExtend, MonthlyVersion
 )
 from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, PlaybackStrategy,
-    FormatType, PlanCategory, PLAN_TASK_ACTIVE_KEY, TaskStatus
+    FormatType, PlanCategory, PLAN_TASK_ACTIVE_KEY, TaskStatus,
 )
 
 
@@ -64,7 +64,7 @@ class FormatCommandSerializer(serializers.Serializer):
         return attrs
 
 
-class CommandSerializer(serializers.ModelSerializer):
+class CommandSerializer(SimpleCommandSerializer):
     status = serializers.ChoiceField(choices=TaskStatus.choices, label=_('Status'))
 
     class Meta(SimpleCommandSerializer.Meta):
@@ -74,7 +74,9 @@ class CommandSerializer(serializers.ModelSerializer):
 
 
 class BasePlanSerializer(serializers.ModelSerializer):
-    playback = ObjectRelatedField(queryset=Playback.objects, label=_('Playback'))
+    playback = ObjectRelatedField(queryset=Playback.objects, attrs=(
+        'id', 'name', 'monthly_version_id'
+    ), label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
 
@@ -169,11 +171,21 @@ class DeployPlanSerializer(BasePlanSerializer):
     playback_strategy = LabeledChoiceField(
         choices=PlaybackStrategy.choices, label=_('Playback strategy')
     )
+    c_type = LabeledChoiceField(choices=[], label=_('type'))
 
     class Meta(BasePlanSerializer.Meta):
         fields = BasePlanSerializer.Meta.fields + [
-            'asset', 'account', 'playback_strategy'
+            'asset', 'account', 'playback_strategy', 'c_type'
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        choice_data = getattr(settings, 'DEPLOY_PLAN_CUSTOM_TYPE', [])
+        has_default = bool(list(filter(lambda x: x['id'] == 'default', choice_data)))
+        if not has_default:
+            choice_data = [{'id': 'default', 'label': _('Default')}]
+        choices = [(c['id'], c['label']) for c in choice_data]
+        self.fields['c_type'].choices = choices
 
 
 class BaseCreateExecutionSerializer(serializers.ModelSerializer):
@@ -247,4 +259,5 @@ class CommandExecutionSerializer(BaseCreateExecutionSerializer):
 
 
 class SyncPlanUploadSerializer(FileSerializer):
-    version = serializers.CharField(allow_blank=True, max_length=32, label=_('Version'))
+    version = serializers.CharField(default='', max_length=32, label=_('Version'))
+    zip_entry_file = serializers.CharField(default='', max_length=128, label=_('Zip entry file'))

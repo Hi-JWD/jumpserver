@@ -62,8 +62,9 @@ class ColoredPrinter(object):
             content = f'{local_now_display()}: {content}'
         return f'{content}\n'
 
-    def title(self, msg, level=20):
-        msg = f'{"-" * level} {msg} {"-" * level}'
+    def title(self, msg, level=20, end=False):
+        suffix = '\n' if end else ''
+        msg = f'{"-" * level} {msg} {"-" * level}{suffix}'
         return self.polish(has_time=False, text=msg, color=self._light_blue)
 
     def field(self, field, msg):

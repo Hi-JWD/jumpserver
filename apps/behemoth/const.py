@@ -58,4 +58,3 @@ class ExecutionCategory(models.TextChoices):
     file = 'file', _('File')
     cmd = 'cmd', _('Command')
     pause = 'pause', _('Pause')
-

@@ -9,8 +9,10 @@ app_name = 'behemoth'
 router = BulkRouter()
 
 router.register(r'environments', api.EnvironmentViewSet, 'environment')
+router.register(r'monthly-versions', api.MonthlyVersionViewSet, 'monthly-version')
 router.register(r'playbacks', api.PlaybackViewSet, 'playback')
 router.register(r'plans', api.PlanViewSet, 'plan')
+router.register(r'playback-executions', api.PlaybackExecutionViewSet, 'playback-execution')
 router.register(r'iterations', api.IterationViewSet, 'iteration')
 router.register(r'commands', api.CommandViewSet, 'command')
 router.register(r'executions', api.ExecutionViewSet, 'executions')

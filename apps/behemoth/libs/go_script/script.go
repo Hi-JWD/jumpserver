@@ -1,12 +1,14 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -34,6 +36,7 @@ const (
 SET TIMING OFF;
 SET SERVEROUTPUT ON;
 WHENEVER SQLERROR EXIT SQL.SQLCODE;
+WHENEVER OSERROR EXIT FAILURE;
 @%s;
 EXIT;`
 )
@@ -154,6 +157,106 @@ func (s *ScriptHandler) Close() {
 
 type LocalScriptHandler struct {
 	opts CmdOptions
+
+	errCodeList []string
+	cmdDir      string
+}
+
+func (s *LocalScriptHandler) LoadErrorCodeFromFile() {
+	errorCodePath := "/opt/behemoth/data/error_code.json"
+	file, err := os.Open(errorCodePath)
+	defer func(file *os.File) {
+		err = file.Close()
+	}(file)
+	if err != nil {
+		return
+	}
+
+	fileContent, err := io.ReadAll(file)
+	if err != nil {
+		return
+	}
+
+	var errCodeList []string
+	err = json.Unmarshal(fileContent, &errCodeList)
+	if err != nil {
+		return
+	}
+	s.errCodeList = errCodeList
+}
+
+func (s *LocalScriptHandler) CheckHasErrorCode(result string) bool {
+	for _, code := range s.errCodeList {
+		if strings.HasPrefix(result, code) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *LocalScriptHandler) IsZipFile() bool {
+	f, err := os.Open(s.opts.CmdFile)
+	if err != nil {
+		return false
+	}
+	defer func(f *os.File) {
+		err = f.Close()
+	}(f)
+
+	buf := make([]byte, 4)
+	n, err := f.Read(buf)
+	if err != nil {
+		return false
+	}
+	if n < 4 {
+		return false
+	}
+	return bytes.Equal(buf, []byte("PK\x03\x04"))
+}
+
+func (s *LocalScriptHandler) unzipFile() (string, error) {
+	r, err := zip.OpenReader(s.opts.CmdFile)
+	if err != nil {
+		return "", err
+	}
+	defer func(r *zip.ReadCloser) {
+		err = r.Close()
+	}(r)
+
+	destDir := filepath.Dir(s.opts.CmdFile)
+	for _, f := range r.File {
+		fPath := filepath.Join(destDir, f.Name)
+		if f.FileInfo().IsDir() {
+			err = os.MkdirAll(fPath, f.Mode())
+			if err != nil {
+				return "", err
+			}
+		} else {
+			err = func() error {
+				rc, err := f.Open()
+				if err != nil {
+					return err
+				}
+				defer func(rc io.ReadCloser) {
+					err = rc.Close()
+				}(rc)
+
+				outFile, err := os.Create(fPath)
+				if err != nil {
+					return err
+				}
+				defer func(outFile *os.File) {
+					err = outFile.Close()
+				}(outFile)
+				_, err = io.Copy(outFile, rc)
+				return err
+			}()
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	return destDir, nil
 }
 
 func (s *LocalScriptHandler) Connect() error {
@@ -161,6 +264,7 @@ func (s *LocalScriptHandler) Connect() error {
 	if err != nil {
 		return fmt.Errorf("%s 命令不存在，请在工作机上配置相应命令", s.opts.Script)
 	}
+	s.LoadErrorCodeFromFile()
 	return nil
 }
 
@@ -169,7 +273,28 @@ func (s *LocalScriptHandler) CreateTempFile() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	content := fmt.Sprintf(OracleTemplate, s.opts.CmdFile)
+
+	realEntryFile := s.opts.CmdFile
+	if s.IsZipFile() {
+		destDir, err := s.unzipFile()
+		if err != nil {
+			return "", err
+		}
+		entryFile := filepath.Join(destDir, "entry.bs")
+		data, err := os.ReadFile(entryFile)
+		if err != nil {
+			return "", err
+		}
+		entryFile = strings.TrimSpace(string(data))
+		parts := strings.Split(entryFile, string(filepath.Separator))
+		if len(parts) > 1 {
+			s.cmdDir = filepath.Join(destDir, parts[0])
+			realEntryFile = strings.Join(parts[1:], string(filepath.Separator))
+		} else {
+			realEntryFile = entryFile
+		}
+	}
+	content := fmt.Sprintf(OracleTemplate, realEntryFile)
 	if _, err := file.Write([]byte(content)); err != nil {
 		return "", err
 	}
@@ -201,10 +326,17 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 		args = append(args, "-L", "-S", connectionStr, "@"+path)
 	}
 	cmd := exec.Command(s.opts.Script, args...)
+	if s.cmdDir != "" {
+		cmd.Dir = s.cmdDir
+	}
 	output, err := cmd.CombinedOutput()
 	ret := strings.TrimSpace(string(output))
 	if err != nil {
 		return ret, err
+	}
+	hasErr := s.CheckHasErrorCode(string(output))
+	if hasErr {
+		return ret, errors.New(ret)
 	}
 	return ret, nil
 }
@@ -449,7 +581,7 @@ func (c *JumpServerClient) Get(url string) ([]byte, error) {
 
 func (c *JumpServerClient) Post(url string, data map[string]interface{}) (*http.Response, error) {
 	byteData, _ := json.Marshal(data)
-	request, err := c.NewRequest("GET", url, bytes.NewBuffer(byteData))
+	request, err := c.NewRequest("POST", url, bytes.NewBuffer(byteData))
 	if err != nil {
 		return nil, err
 	}

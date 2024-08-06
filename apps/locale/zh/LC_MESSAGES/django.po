@@ -3693,7 +3693,7 @@ msgstr "请使用密码登录，然后绑定企业微信"
 
 #: behemoth/api/generic.py:36
 msgid "Task is running or finished"
-msgstr "任务正在执行或者已经结束"
+msgstr "任务正在执行或者已经结束，请刷新任务列表"
 
 #: behemoth/api/generic.py:176
 #, python-format

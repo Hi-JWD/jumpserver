@@ -232,7 +232,7 @@ class Command(JMSOrgBaseModel):
     index = models.IntegerField(db_index=True, verbose_name=_('Index'))
     status = models.CharField(max_length=32, default=CommandStatus.not_start, verbose_name=_('Status'))
     execution_id = models.CharField(max_length=36, verbose_name=_('Execution'))
-    timestamp = models.IntegerField(default=0, db_index=True)
+    timestamp = models.IntegerField(default=0, db_index=True, verbose_name=_('Timestamp'))
     pause = models.BooleanField(default=False, verbose_name=_('Pause'))
     has_delete = models.BooleanField(default=False, verbose_name=_('Delete'))
 
@@ -259,16 +259,16 @@ class Environment(JMSOrgBaseModel):
 
 class Playback(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
-    environment = models.ForeignKey(
-        Environment, on_delete=models.CASCADE, related_name='playbacks',
-        null=True, verbose_name=_('Environment')
+    monthly_version = models.ForeignKey(
+        'MonthlyVersion', on_delete=models.CASCADE, related_name='playbacks',
+        null=True, verbose_name=_('Monthly version')
     )
 
     def create_pause(self, pause_data):
         execution = Execution.objects.create(name=_('Pause'), category=ExecutionCategory.pause)
         Command.objects.create(
             input=pause_data['input'], output=pause_data['output'], index=0,
-            execution_id=execution.id, pause=pause_data['pause'],
+            execution_id=execution.id, pause=True,
         )
 
         PlaybackExecution.objects.create(
@@ -299,6 +299,7 @@ class Plan(JMSOrgBaseModel):
         Playback, related_name='plans', null=True, on_delete=models.SET_NULL, verbose_name=_('Playback')
     )
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
+    c_type = models.CharField(max_length=32, default='default', verbose_name=_('Custom type'))
 
     class Meta:
         verbose_name = _('Plan')
@@ -315,7 +316,7 @@ class Plan(JMSOrgBaseModel):
 
     @property
     def playback_executions(self):
-        obj = ObjectExtend.objects.filter(
+        obj = ObjectExtend.objects.filter(  # noqa
             obj_id=self.id
         ).values('meta').first() or {'meta': {}}
         return obj['meta'].get('playback_executions', [])
@@ -385,6 +386,10 @@ class PlaybackExecution(JMSOrgBaseModel):
 
     class Meta:
         ordering = ('date_created',)
+
+
+class MonthlyVersion(JMSOrgBaseModel):
+    name = models.CharField(max_length=128, verbose_name=_('Name'))
 
 
 class Instruction(JMSOrgBaseModel):

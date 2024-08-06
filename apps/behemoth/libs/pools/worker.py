@@ -164,7 +164,7 @@ class WorkerPool(object):
         self.refresh_all_workers()
         execution.worker_id = self.__get_valid_worker(execution)
         execution.save(update_fields=['worker_id'])
-        print(p.info('【%s】%s' % (_('Start'), _('Looking for effective worker'))))
+        print(p.info('【%s】%s' % (_('End'), _('Looking for effective worker'))))
 
     @staticmethod
     def __generate_command_file(commands: list, execution: Execution) -> (str, str):
@@ -260,7 +260,7 @@ class WorkerPool(object):
             })
         else:
             raise JMSException(f'{_("Unsupported asset type")}: {execution.asset.type}')
-        print(p.info(f'【%s】%s' % (_('Start'), _("Building the params required for command execution"))))
+        print(p.info(f'【%s】%s' % (_('End'), _("Building the params required for command execution"))))
         return {
             'host': settings.SITE_URL, 'cmd_type': cmd_type, 'script': script,
             'auth': auth, 'token': str(token), 'task_id': str(execution.id),
@@ -285,14 +285,14 @@ class WorkerPool(object):
         print(p.field(_('Job type'), execution.plan.get_category_display()))
         print(p.field(_('Execution asset'), execution.asset))
         print(p.field(_('Execution account'), execution.account))
-        print(p.title(_('Basic info of the task')))
+        print(p.title(_('Basic info of the task'), end=True))
 
     def work(self, execution: Execution, users: list[str]) -> None:
         self._show_task_summary(execution, users)
         print(p.title(_('Execution log')))
         self.__pre_run(execution)
         self.__run(execution)
-        print(p.title(_('Execution log')))
+        print(p.title(_('Execution log'), end=True))
 
     def work_plan(self, plan: Plan):
         pass
