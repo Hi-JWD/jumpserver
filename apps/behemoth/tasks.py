@@ -17,18 +17,19 @@ def run_task_sync(executions: list[Execution], users: list[str]):
         if worker_pool.is_task_failed(pre_task_id):
             break
 
-        if execution.category == ExecutionCategory.pause:
+        if num == 1 and execution.category == ExecutionCategory.pause:
             execution.status = TaskStatus.success
             execution.save(update_fields=['status'])
-            total -= 1
+            print(p.info('检测到第一条命令类型为暂停，认为已经执行过，跳过处理'))
 
         print(p.info(
             _('There are %s batches of tasks in total. The %sth task has started to execute.'
               ) % (total, num))
         )
         try:
-            execution.status = TaskStatus.executing
-            execution.save(update_fields=['status'])
+            if execution.status != TaskStatus.success:
+                execution.status = TaskStatus.executing
+                execution.save(update_fields=['status'])
 
             if execution.plan.category == PlanCategory.sync:
                 environment = execution.plan.environment

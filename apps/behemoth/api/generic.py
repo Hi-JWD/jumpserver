@@ -24,11 +24,14 @@ from behemoth.models import (
     Environment, Playback, Plan, Iteration, Execution, Command,
     PlaybackExecution, MonthlyVersion
 )
-from common.utils import is_uuid
+from common.utils import is_uuid, get_logger
 from common.exceptions import JMSException
 from common.utils.timezone import local_now_display
 from orgs.mixins.api import OrgBulkModelViewSet
 from orgs.utils import get_current_org_id
+
+
+logger = get_logger(__file__)
 
 
 class ExecutionMixin:
@@ -103,24 +106,20 @@ class MonthlyVersionViewSet(OrgBulkModelViewSet):
         'get_playbacks': ['behemoth.view_playbacks']
     }
 
-    @action(methods=['GET', 'PATCH', 'DELETE'], detail=True, url_path='playbacks')
+    @action(methods=['PATCH', 'DELETE'], detail=True, url_path='playbacks')
     def get_playbacks(self, request, *args, **kwargs):
         obj = self.get_object()
-        if request.method == 'GET':
-            qs = obj.playbacks.all()
-            return self.get_paginated_response_from_queryset(qs)
-        else:
-            serializer = serializers.PlaybackMonthlyVersionSerializer(data=request.data)
-            if serializer.is_valid():
-                assets = serializer.validated_data.get('playbacks')
-                action_ = serializer.validated_data['action']
-                if action_ == 'remove':
-                    obj.playbacks.remove(*tuple(assets))
-                else:
-                    obj.playbacks.add(*tuple(assets))
-                return Response(status=http_status.HTTP_200_OK)
+        serializer = serializers.PlaybackMonthlyVersionSerializer(data=request.data)
+        if serializer.is_valid():
+            assets = serializer.validated_data.get('playbacks')
+            action_ = serializer.validated_data['action']
+            if action_ == 'remove':
+                obj.playbacks.remove(*tuple(assets))
             else:
-                return Response(status=http_status.HTTP_400_BAD_REQUEST, data=serializer.errors)
+                obj.playbacks.add(*tuple(assets))
+            return Response(status=http_status.HTTP_200_OK)
+        else:
+            return Response(status=http_status.HTTP_400_BAD_REQUEST, data=serializer.errors)
 
 
 class PlaybackExecutionViewSet(OrgBulkModelViewSet):
@@ -142,6 +141,7 @@ class PlaybackExecutionViewSet(OrgBulkModelViewSet):
 class PlaybackViewSet(OrgBulkModelViewSet):
     model = Playback
     search_fields = ['name']
+    filterset_fields = ['monthly_version']
     serializer_classes = {
         'default': serializers.PlaybackSerializer,
         'insert_pause': serializers.InsertPauseSerializer,
@@ -316,8 +316,8 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
                         commands[0].output = f.read()
                 else:
                     commands[0].output = os.path.basename(commands[0].output)
-            except Exception: # noqa
-                pass
+            except Exception as e: # noqa
+                logger.warning('Convert command error: %s', e)
 
         serializer = self.get_serializer(commands, many=True)
         return Response({'results': serializer.data, 'category': execution.category})
@@ -383,7 +383,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
             file = self._handle_zip_file(file, entry)
 
         name, ext = os.path.splitext(file.name)
-        file_name = f'{name}-({local_now_display("%Y_%m_%d_%H_%M_%S")}){ext}'
+        file_name = f'{name}-{local_now_display("%Y_%m_%d_%H_%M_%S")}{ext}'
         execution = self.get_object().create_execution(
             with_auth=True, name=file_name, category=ExecutionCategory.file,
             version=serializer.validated_data['version']
@@ -404,7 +404,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         participants = getattr(settings, 'SYNC_PLAN_REQUIRED_PARTICIPANTS', 2)
         wait_timeout = getattr(settings, 'SYNC_PLAN_WAIT_PARTICIPANT_IDLE', 3600)
         if len(user_set) >= participants:
-            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), [], timeout=3600 * 24 * 7)
+            cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), user_set, timeout=wait_timeout * 24 * 7)
             return self.start_task(
                 obj.executions.all(), user_set, response_data={'users': [str(request.user)]}
             )

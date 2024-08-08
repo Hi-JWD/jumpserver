@@ -316,9 +316,7 @@ class Plan(JMSOrgBaseModel):
 
     @property
     def playback_executions(self):
-        obj = ObjectExtend.objects.filter(  # noqa
-            obj_id=self.id
-        ).values('meta').first() or {'meta': {}}
+        obj = ObjectExtend.objects.filter(obj_id=self.id).values('meta').first() or {'meta': {}} # noqa
         return obj['meta'].get('playback_executions', [])
 
 

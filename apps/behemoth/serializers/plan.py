@@ -21,6 +21,7 @@ from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
     PlanStrategy, FORMAT_COMMAND_CACHE_KEY, PAUSE_RE, PlaybackStrategy,
     FormatType, PlanCategory, PLAN_TASK_ACTIVE_KEY, TaskStatus,
+    ExecutionCategory,
 )
 
 
@@ -130,36 +131,44 @@ class SyncPlanSerializer(BasePlanSerializer):
         attrs['category'] = PlanCategory.sync
         return attrs
 
-    def update(self, instance, validated_data):
-        validated_data.pop('playback_executions', None)
-        return super().update(instance, validated_data)
-
-    def create(self, validated_data):
-        execution_ids = validated_data.pop('playback_executions', [])
-        executions = PlaybackExecution.objects.filter(
-            id__in=execution_ids
-        ).values('execution_id', 'plan_name', 'meta', 'execution__category')
-        plan = super().create(validated_data)
-        ObjectExtend.objects.create(
-            obj_id=plan.id, category=Plan._meta.db_table,
+    @staticmethod
+    def do_plan_other_action(plan, execution_ids):
+        executions = PlaybackExecution.objects.filter(id__in=execution_ids)
+        ObjectExtend.objects.create( # noqa
+            obj_id=plan.id, category=Plan._meta.db_table, # noqa
             meta={'playback_executions': execution_ids}
         )
         # 遍历循环走SQL了吗？So crazy!
         for serial, item in enumerate(executions):
-            asset_name = item['meta'].get('asset', '')
-            account_username = item['meta'].get('account', '')
+            asset_name = item.meta.get('asset', '')
+            account_username = item.meta.get('account', '')
             execution = plan.create_execution(
-                asset_name=asset_name, account_username=account_username,
-                category=item['execution__category']
+                name=item.execution.name, asset_name=asset_name,
+                account_username=account_username, category=item.execution.category,
+                version=item.execution.version
             )
-            command_objs = []
-            commands = Command.objects.filter(execution_id=item['execution_id']).order_by('index')
+            command_objs, command_extra = [], []
+            if execution.category == ExecutionCategory.pause:
+                command_extra.append('output')
+            commands = Command.objects.filter(execution_id=item.execution_id).order_by('index')
             for idx, command in enumerate(commands):
                 command_objs.append(
-                    Command(**command.to_dict(), index=idx, execution_id=execution.id)
+                    Command(**command.to_dict(command_extra), index=idx, execution_id=execution.id)
                 )
             Command.objects.bulk_create(command_objs)
             commands.filter(has_delete=True).delete()
+
+    def update(self, instance, validated_data):
+        execution_ids = validated_data.pop('playback_executions', None)
+        plan = super().update(instance, validated_data)
+        plan.executions.all().delete()
+        self.do_plan_other_action(plan, execution_ids)
+        return plan
+
+    def create(self, validated_data):
+        execution_ids = validated_data.pop('playback_executions', [])
+        plan = super().create(validated_data)
+        self.do_plan_other_action(plan, execution_ids)
         return plan
 
 

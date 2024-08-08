@@ -283,8 +283,8 @@ class WorkerPool(object):
         print(p.field(_('Start time'), local_now_display()))
         print(p.field(_('Execution environment'), execution.plan.environment))
         print(p.field(_('Job type'), execution.plan.get_category_display()))
-        print(p.field(_('Execution asset'), execution.asset))
-        print(p.field(_('Execution account'), execution.account))
+        print(p.field(_('Execution asset'), execution.asset or _('empty')))
+        print(p.field(_('Execution account'), execution.account or _('empty')))
         print(p.title(_('Basic info of the task'), end=True))
 
     def work(self, execution: Execution, users: list[str]) -> None:

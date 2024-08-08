@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -311,7 +312,7 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 		port := fmt.Sprintf("-P%v", s.opts.Auth.Port)
 		database := fmt.Sprintf("-D%s", s.opts.Auth.DBName)
 		sqlPath := fmt.Sprintf("source %s", s.opts.CmdFile)
-		args = append(args, username, host, port, database, "-t", "-e", sqlPath)
+		args = append(args, username, host, port, database, "-t", "-vvv", "-e", sqlPath)
 	} else if s.opts.Script == "sqlplus" {
 		connectionStr = fmt.Sprintf(
 			"%s/\"%s\"@%s:%d/%s", s.opts.Auth.Username, s.opts.Auth.Password, s.opts.Auth.Address, s.opts.Auth.Port, s.opts.Auth.DBName,
@@ -330,7 +331,15 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 		cmd.Dir = s.cmdDir
 	}
 	output, err := cmd.CombinedOutput()
-	ret := strings.TrimSpace(string(output))
+	ret := string(output)
+	if s.opts.Script == "mysql" {
+		re := regexp.MustCompile(`(?s)--------------\n(.*?)\n--------------\n(.*)Bye?$`)
+		matches := re.FindStringSubmatch(ret)
+		if len(matches) > 2 {
+			ret = matches[2]
+		}
+	}
+	ret = strings.TrimSpace(string(output))
 	if err != nil {
 		return ret, err
 	}
