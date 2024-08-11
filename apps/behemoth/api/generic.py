@@ -200,7 +200,7 @@ class CommandViewSet(OrgBulkModelViewSet):
 class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Execution
     ordering_fields = ('-date_created',)
-    search_fields = ['name']
+    search_fields = ['name', 'version']
     filterset_fields = ['name', 'status']
     serializer_classes = {
         'default': serializers.ExecutionSerializer,
@@ -338,7 +338,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
 class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Plan
     search_fields = ['name']
-    filterset_fields = ['name']
+    filterset_fields = ['name', 'category']
     serializer_classes = {
         'default': serializers.DeployPlanSerializer,
         'deploy': serializers.DeployPlanSerializer,

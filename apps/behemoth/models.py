@@ -352,7 +352,7 @@ class Execution(JMSOrgBaseModel):
     reason = models.CharField(max_length=512, default='-', verbose_name=_('Reason'))
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
     task_id = models.CharField(max_length=36, default='', verbose_name=_('Task ID'))
-    version = models.CharField(max_length=32, default='', blank=True, verbose_name=_('Version'))
+    version = models.CharField(max_length=256, verbose_name=_('Version'))
 
     class Meta:
         verbose_name = _('Task')

@@ -80,6 +80,7 @@ class BasePlanSerializer(serializers.ModelSerializer):
     ), label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
+    category = LabeledChoiceField(choices=PlanCategory.choices, label=_('Category'))
 
     class Meta:
         model = Plan
@@ -268,5 +269,5 @@ class CommandExecutionSerializer(BaseCreateExecutionSerializer):
 
 
 class SyncPlanUploadSerializer(FileSerializer):
-    version = serializers.CharField(default='', max_length=32, label=_('Version'))
-    zip_entry_file = serializers.CharField(default='', max_length=128, label=_('Zip entry file'))
+    version = serializers.CharField(max_length=256, label=_('Version'))
+    zip_entry_file = serializers.CharField(default='', max_length=256, label=_('Zip entry file'))
