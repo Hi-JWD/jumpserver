@@ -13,7 +13,7 @@ from django.db.transaction import atomic
 from django.utils.translation import gettext_lazy as _, gettext
 
 from common.db.models import output_as_string
-from common.utils import get_logger
+from common.utils import get_logger, timeit
 from common.utils.lock import DistributedLock
 from orgs.mixins.models import OrgManager, JMSOrgBaseModel
 from orgs.models import Organization
@@ -73,6 +73,10 @@ class FamilyMixin:
     @classmethod
     def get_nodes_all_children(cls, nodes, with_self=True):
         pattern = cls.get_nodes_children_key_pattern(nodes, with_self=with_self)
+        if not pattern:
+            # 如果 pattern = ''
+            # key__iregex 报错 (1139, "Got error 'empty (sub)expression' from regexp")
+            return cls.objects.none()
         return Node.objects.filter(key__iregex=pattern)
 
     @classmethod
@@ -194,11 +198,6 @@ class FamilyMixin:
     def get_ancestors(self, with_self=False):
         ancestor_keys = self.get_ancestor_keys(with_self=with_self)
         return self.__class__.objects.filter(key__in=ancestor_keys)
-
-    # @property
-    # def parent_key(self):
-    #     parent_key = ":".join(self.key.split(":")[:-1])
-    #     return parent_key
 
     def compute_parent_key(self):
         return compute_parent_key(self.key)
@@ -349,28 +348,25 @@ class NodeAllAssetsMappingMixin:
         return 'ASSETS_ORG_NODE_ALL_ASSET_ids_MAPPING_{}'.format(org_id)
 
     @classmethod
+    @timeit
     def generate_node_all_asset_ids_mapping(cls, org_id):
-        from .asset import Asset
-
-        logger.info(f'Generate node asset mapping: '
-                    f'thread={threading.get_ident()} '
-                    f'org_id={org_id}')
+        logger.info(f'Generate node asset mapping: org_id={org_id}')
         t1 = time.time()
         with tmp_to_org(org_id):
             node_ids_key = Node.objects.annotate(
                 char_id=output_as_string('id')
             ).values_list('char_id', 'key')
 
-            # * 直接取出全部. filter(node__org_id=org_id)(大规模下会更慢)
-            nodes_asset_ids = Asset.nodes.through.objects.all() \
-                .annotate(char_node_id=output_as_string('node_id')) \
-                .annotate(char_asset_id=output_as_string('asset_id')) \
-                .values_list('char_node_id', 'char_asset_id')
-
             node_id_ancestor_keys_mapping = {
                 node_id: cls.get_node_ancestor_keys(node_key, with_self=True)
                 for node_id, node_key in node_ids_key
             }
+
+            # * 直接取出全部. filter(node__org_id=org_id)(大规模下会更慢)
+            nodes_asset_ids = cls.assets.through.objects.all() \
+                .annotate(char_node_id=output_as_string('node_id')) \
+                .annotate(char_asset_id=output_as_string('asset_id')) \
+                .values_list('char_node_id', 'char_asset_id')
 
             nodeid_assetsid_mapping = defaultdict(set)
             for node_id, asset_id in nodes_asset_ids:
@@ -386,7 +382,7 @@ class NodeAllAssetsMappingMixin:
                 mapping[ancestor_key].update(asset_ids)
 
         t3 = time.time()
-        logger.info('t1-t2(DB Query): {} s, t3-t2(Generate mapping): {} s'.format(t2 - t1, t3 - t2))
+        logger.info('Generate asset nodes mapping, DB query: {:.2f}s, mapping: {:.2f}s'.format(t2 - t1, t3 - t2))
         return mapping
 
 
@@ -436,7 +432,8 @@ class NodeAssetsMixin(NodeAllAssetsMappingMixin):
         return asset_ids
 
     @classmethod
-    def get_nodes_all_assets(cls, *nodes):
+    @timeit
+    def get_nodes_all_assets(cls, *nodes, distinct=True):
         from .asset import Asset
         node_ids = set()
         descendant_node_query = Q()
@@ -446,7 +443,10 @@ class NodeAssetsMixin(NodeAllAssetsMappingMixin):
         if descendant_node_query:
             _ids = Node.objects.order_by().filter(descendant_node_query).values_list('id', flat=True)
             node_ids.update(_ids)
-        return Asset.objects.order_by().filter(nodes__id__in=node_ids).distinct()
+        assets = Asset.objects.order_by().filter(nodes__id__in=node_ids)
+        if distinct:
+            assets = assets.distinct()
+        return assets
 
     def get_all_asset_ids(self):
         asset_ids = self.get_all_asset_ids_by_node_key(org_id=self.org_id, node_key=self.key)
@@ -559,11 +559,6 @@ class Node(JMSOrgBaseModel, SomeNodesMixin, FamilyMixin, NodeAssetsMixin):
     def __str__(self):
         return self.full_value
 
-    # def __eq__(self, other):
-    #     if not other:
-    #         return False
-    #     return self.id == other.id
-    #
     def __gt__(self, other):
         self_key = [int(k) for k in self.key.split(':')]
         other_key = [int(k) for k in other.key.split(':')]

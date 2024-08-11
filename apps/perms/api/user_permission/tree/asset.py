@@ -1,15 +1,13 @@
 from django.conf import settings
 from rest_framework.response import Response
 
-from assets.models import Asset
 from assets.api import SerializeToTreeNodeMixin
+from assets.models import Asset
 from common.utils import get_logger
-
-from ..assets import UserAllPermedAssetsApi
 from .mixin import RebuildTreeMixin
+from ..assets import UserAllPermedAssetsApi
 
 logger = get_logger(__name__)
-
 
 __all__ = [
     'UserAllPermedAssetsAsTreeApi',
@@ -22,7 +20,6 @@ class AssetTreeMixin(RebuildTreeMixin, SerializeToTreeNodeMixin):
     filter_queryset: callable
     get_queryset: callable
 
-    ordering = ('name',)
     filterset_fields = ('id', 'name', 'address', 'comment')
     search_fields = ('name', 'address', 'comment')
 
@@ -31,7 +28,7 @@ class AssetTreeMixin(RebuildTreeMixin, SerializeToTreeNodeMixin):
         if request.query_params.get('search'):
             """ 限制返回数量, 搜索的条件不精准时，会返回大量的无意义数据 """
             assets = assets[:999]
-        data = self.serialize_assets(assets, None)
+        data = self.serialize_assets(assets, 'root')
         return Response(data=data)
 
 
@@ -42,6 +39,7 @@ class UserAllPermedAssetsAsTreeApi(AssetTreeMixin, UserAllPermedAssetsApi):
 
 class UserUngroupAssetsAsTreeApi(UserAllPermedAssetsAsTreeApi):
     """ 用户 '未分组节点的资产(直接授权的资产)' 作为树 """
+
     def get_assets(self):
         if settings.PERM_SINGLE_ASSET_TO_UNGROUP_NODE:
             return super().get_assets()

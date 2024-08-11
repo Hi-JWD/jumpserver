@@ -38,7 +38,7 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
+        'common.drf.filters.RewriteOrderingFilter',
     ),
     'DEFAULT_METADATA_CLASS': 'common.drf.metadata.SimpleMetadataWithFilters',
     'ORDERING_PARAM': "order",
@@ -46,6 +46,7 @@ REST_FRAMEWORK = {
     'DATETIME_FORMAT': '%Y/%m/%d %H:%M:%S %z',
     'DATETIME_INPUT_FORMATS': ['%Y/%m/%d %H:%M:%S %z', 'iso-8601', '%Y-%m-%d %H:%M:%S %z'],
     'DEFAULT_PAGINATION_CLASS': 'jumpserver.rewriting.pagination.MaxLimitOffsetPagination',
+    'PAGE_SIZE': CONFIG.DEFAULT_PAGE_SIZE,
     'EXCEPTION_HANDLER': 'common.drf.exc_handlers.common_exception_handler',
 }
 
@@ -81,7 +82,6 @@ BOOTSTRAP3 = {
 # Django channels support websocket
 REDIS_LAYERS_HOST = {
     'db': CONFIG.REDIS_DB_WS,
-    'password': CONFIG.REDIS_PASSWORD or None,
 }
 
 REDIS_LAYERS_SSL_PARAMS = {}
@@ -96,6 +96,7 @@ if REDIS_USE_SSL:
 
 if REDIS_SENTINEL_SERVICE_NAME and REDIS_SENTINELS:
     REDIS_LAYERS_HOST['sentinels'] = REDIS_SENTINELS
+    REDIS_LAYERS_HOST['password'] = CONFIG.REDIS_PASSWORD or None
     REDIS_LAYERS_HOST['master_name'] = REDIS_SENTINEL_SERVICE_NAME
     REDIS_LAYERS_HOST['sentinel_kwargs'] = {
         'password': REDIS_SENTINEL_PASSWORD,
@@ -110,10 +111,9 @@ else:
     # More info see: https://github.com/django/channels_redis/issues/334
     # REDIS_LAYERS_HOST['address'] = (CONFIG.REDIS_HOST, CONFIG.REDIS_PORT)
     REDIS_LAYERS_ADDRESS = '{protocol}://:{password}@{host}:{port}/{db}'.format(
-        protocol=REDIS_PROTOCOL, password=CONFIG.REDIS_PASSWORD,
+        protocol=REDIS_PROTOCOL, password=CONFIG.REDIS_PASSWORD_QUOTE,
         host=CONFIG.REDIS_HOST, port=CONFIG.REDIS_PORT, db=CONFIG.REDIS_DB_WS
     )
-    REDIS_LAYERS_SSL_PARAMS.pop('ssl', None)
     REDIS_LAYERS_HOST['address'] = REDIS_LAYERS_ADDRESS
 
 CHANNEL_LAYERS = {
@@ -153,7 +153,7 @@ if REDIS_SENTINEL_SERVICE_NAME and REDIS_SENTINELS:
 else:
     CELERY_BROKER_URL = CELERY_BROKER_URL_FORMAT % {
         'protocol': REDIS_PROTOCOL,
-        'password': CONFIG.REDIS_PASSWORD,
+        'password': CONFIG.REDIS_PASSWORD_QUOTE,
         'host': CONFIG.REDIS_HOST,
         'port': CONFIG.REDIS_PORT,
         'db': CONFIG.REDIS_DB_CELERY,
@@ -187,6 +187,7 @@ ANSIBLE_LOG_DIR = os.path.join(PROJECT_DIR, 'data', 'ansible')
 REDIS_HOST = CONFIG.REDIS_HOST
 REDIS_PORT = CONFIG.REDIS_PORT
 REDIS_PASSWORD = CONFIG.REDIS_PASSWORD
+REDIS_PASSWORD_QUOTE = CONFIG.REDIS_PASSWORD_QUOTE
 
 DJANGO_REDIS_SCAN_ITERSIZE = 1000
 

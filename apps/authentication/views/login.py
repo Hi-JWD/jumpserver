@@ -24,7 +24,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.generic.base import TemplateView, RedirectView
 from django.views.generic.edit import FormView
 
-from common.utils import FlashMessageUtil, static_or_direct
+from common.utils import FlashMessageUtil, static_or_direct, safe_next_url
 from users.utils import (
     redirect_user_first_login_or_index
 )
@@ -92,6 +92,18 @@ class UserLoginContextMixin:
                 'logo': static('img/login_feishu_logo.png')
             },
             {
+                'name': 'Lark',
+                'enabled': settings.AUTH_LARK,
+                'url': reverse('authentication:lark-qr-login'),
+                'logo': static('img/login_lark_logo.png')
+            },
+            {
+                'name': _('Slack'),
+                'enabled': settings.AUTH_SLACK,
+                'url': reverse('authentication:slack-qr-login'),
+                'logo': static('img/login_slack_logo.png')
+            },
+            {
                 'name': _("Passkey"),
                 'enabled': settings.AUTH_PASSKEY,
                 'url': reverse('api-auth:passkey-login'),
@@ -106,6 +118,10 @@ class UserLoginContextMixin:
             {
                 'title': '中文(简体)',
                 'code': 'zh-hans'
+            },
+            {
+                'title': '中文(繁體)',
+                'code': 'zh-hant'
             },
             {
                 'title': 'English',
@@ -202,6 +218,7 @@ class UserLoginView(mixins.AuthMixin, UserLoginContextMixin, FormView):
 
         auth_name, redirect_url = auth_method['name'], auth_method['url']
         next_url = request.GET.get('next') or '/'
+        next_url = safe_next_url(next_url, request=request)
         query_string = request.GET.urlencode()
         redirect_url = '{}?next={}&{}'.format(redirect_url, next_url, query_string)
 
@@ -232,6 +249,8 @@ class UserLoginView(mixins.AuthMixin, UserLoginContextMixin, FormView):
     def form_valid(self, form):
         if not self.request.session.test_cookie_worked():
             form.add_error(None, _("Login timeout, please try again."))
+            # 当 session 过期后，刷新浏览器重新提交依旧会报错，所以需要重新设置 test_cookie
+            self.request.session.set_test_cookie()
             return self.form_invalid(form)
 
         # https://docs.djangoproject.com/en/3.1/topics/http/sessions/#setting-test-cookies

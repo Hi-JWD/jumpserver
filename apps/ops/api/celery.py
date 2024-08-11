@@ -2,19 +2,21 @@
 #
 import os
 import re
+from collections import defaultdict
 
 from celery.result import AsyncResult
 from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 from django_celery_beat.models import PeriodicTask
+from django_filters import rest_framework as drf_filters
 from rest_framework import generics, viewsets, mixins, status
 from rest_framework.response import Response
-from django_filters import rest_framework as drf_filters
 
 from common.api import LogTailApi, CommonApiMixin
+from common.drf.filters import BaseFilterSet
 from common.exceptions import JMSException
 from common.permissions import IsValidUser
-from common.drf.filters import BaseFilterSet
+from common.utils.timezone import local_now
 from ops.celery import app
 from ..ansible.utils import get_ansible_task_log_path
 from ..celery.utils import get_celery_task_log_path
@@ -92,11 +94,13 @@ class CeleryPeriodTaskViewSet(CommonApiMixin, viewsets.ModelViewSet):
     queryset = PeriodicTask.objects.all()
     serializer_class = CeleryPeriodTaskSerializer
     http_method_names = ('get', 'head', 'options', 'patch')
+    lookup_field = 'name'
+    lookup_value_regex = '[\w.@]+'
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        queryset = queryset.exclude(description='')
-        return queryset
+    def get_object(self):
+        name = self.kwargs.get('name')
+        obj = get_object_or_404(PeriodicTask, name=name)
+        return obj
 
 
 class CelerySummaryAPIView(generics.RetrieveAPIView):
@@ -138,6 +142,100 @@ class CeleryTaskViewSet(
     def get_queryset(self):
         return CeleryTask.objects.exclude(name__startswith='celery')
 
+    @staticmethod
+    def extract_schedule(input_string):
+        pattern = r'(\S+ \S+ \S+ \S+ \S+).*'
+        match = re.match(pattern, input_string)
+        if match:
+            return match.group(1)
+        else:
+            return input_string
+
+    def generate_execute_time(self, queryset):
+        now = local_now()
+        for i in queryset:
+            task = getattr(i, 'periodic_obj', None)
+            if not task:
+                continue
+            i.exec_cycle = self.extract_schedule(str(task.scheduler))
+            last_run_at = task.last_run_at or now
+            next_run_at = task.schedule.remaining_estimate(last_run_at)
+            if next_run_at.total_seconds() < 0:
+                next_run_at = task.schedule.remaining_estimate(now)
+            i.next_exec_time = now + next_run_at
+            i.enabled = task.enabled
+        return queryset
+
+    def generate_summary_state(self, execution_qs):
+        model = self.get_queryset().model
+        executions = execution_qs.order_by('-date_published').values('name', 'state')
+        summary_state_dict = defaultdict(
+            lambda: {
+                'states': [], 'state': 'green',
+                'summary': {'total': 0, 'success': 0}
+            }
+        )
+        for execution in executions:
+            name = execution['name']
+            state = execution['state']
+
+            summary = summary_state_dict[name]['summary']
+
+            summary['total'] += 1
+            summary['success'] += 1 if state == 'SUCCESS' else 0
+
+            states = summary_state_dict[name].get('states')
+            if states is not None and len(states) >= 5:
+                color = model.compute_state_color(states)
+                summary_state_dict[name]['state'] = color
+                summary_state_dict[name].pop('states', None)
+            elif isinstance(states, list):
+                states.append(state)
+
+        return summary_state_dict
+
+    def loading_summary_state(self, queryset):
+        if isinstance(queryset, list):
+            names = [i.name for i in queryset]
+            execution_qs = CeleryTaskExecution.objects.filter(name__in=names)
+        else:
+            execution_qs = CeleryTaskExecution.objects.all()
+        summary_state_dict = self.generate_summary_state(execution_qs)
+        for i in queryset:
+            i.summary = summary_state_dict.get(i.name, {}).get('summary', {})
+            i.state = summary_state_dict.get(i.name, {}).get('state', 'green')
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        queryset = self.mark_periodic_and_sorted(queryset)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            page = self.generate_execute_time(page)
+            page = self.loading_summary_state(page)
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        queryset = self.generate_execute_time(queryset)
+        queryset = self.loading_summary_state(queryset)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @staticmethod
+    def mark_periodic_and_sorted(queryset):
+        names = queryset.values_list('name', flat=True)
+        periodic_tasks = PeriodicTask.objects.filter(name__in=names)
+        periodic_task_dict = {task.task: task for task in periodic_tasks}
+        for q in queryset:
+            if q.name in periodic_task_dict:
+                q.periodic_obj = periodic_task_dict[q.name]
+                q.is_periodic = True
+            else:
+                q.is_periodic = False
+        queryset = sorted(queryset, key=lambda x: x.is_periodic, reverse=True)
+        return queryset
+
 
 class CeleryTaskExecutionViewSet(CommonApiMixin, viewsets.ModelViewSet):
     serializer_class = CeleryTaskExecutionSerializer
@@ -150,6 +248,8 @@ class CeleryTaskExecutionViewSet(CommonApiMixin, viewsets.ModelViewSet):
         if task_id:
             task = get_object_or_404(CeleryTask, id=task_id)
             self.queryset = self.queryset.filter(name=task.name)
+        if not self.request.user.is_superuser:
+            self.queryset = self.queryset.filter(creator=self.request.user)
         return self.queryset
 
     def create(self, request, *args, **kwargs):
@@ -162,6 +262,8 @@ class CeleryTaskExecutionViewSet(CommonApiMixin, viewsets.ModelViewSet):
             msg = _("Task {} not found").format(execution.name)
             raise JMSException(code='task_not_found_error', detail=msg)
         try:
+            execution.kwargs.pop('__current_lang', None)
+            execution.kwargs.pop('__current_org_id', None)
             t = task.delay(*execution.args, **execution.kwargs)
         except TypeError:
             msg = _("Task {} args or kwargs error").format(execution.name)

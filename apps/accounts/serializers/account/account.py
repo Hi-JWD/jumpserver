@@ -10,7 +10,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.validators import UniqueTogetherValidator
 
 from accounts.const import SecretType, Source, AccountInvalidPolicy
-from accounts.models import Account, AccountTemplate
+from accounts.models import Account, AccountTemplate, GatheredAccount
 from accounts.tasks import push_accounts_to_assets_task
 from assets.const import Category, AllTypes
 from assets.models import Asset
@@ -58,13 +58,16 @@ class AccountCreateUpdateSerializerMixin(serializers.Serializer):
         for data in initial_data:
             if not data.get('asset') and not self.instance:
                 raise serializers.ValidationError({'asset': UniqueTogetherValidator.missing_message})
-            asset = data.get('asset') or self.instance.asset
+            asset = data.get('asset') or getattr(self.instance, 'asset', None)
             self.from_template_if_need(data)
             self.set_uniq_name_if_need(data, asset)
 
     def set_uniq_name_if_need(self, initial_data, asset):
         name = initial_data.get('name')
         if name is not None:
+            return
+        request = self.context.get('request')
+        if request and request.method == 'PATCH':
             return
         if not name:
             name = initial_data.get('username')
@@ -78,7 +81,7 @@ class AccountCreateUpdateSerializerMixin(serializers.Serializer):
     def get_template_attr_for_account(template):
         # Set initial data from template
         field_names = [
-            'name', 'username', 'secret',
+            'name', 'username', 'secret', 'push_params',
             'secret_type', 'privileged', 'is_active'
         ]
 
@@ -87,7 +90,10 @@ class AccountCreateUpdateSerializerMixin(serializers.Serializer):
             value = getattr(template, name, None)
             if value is None:
                 continue
-            attrs[name] = value
+            if name == 'push_params':
+                attrs['params'] = value
+            else:
+                attrs[name] = value
         attrs['secret'] = template.get_secret()
         return attrs
 
@@ -238,7 +244,7 @@ class AccountSerializer(AccountCreateUpdateSerializerMixin, BaseAccountSerialize
         queryset = queryset.prefetch_related(
             'asset', 'asset__platform',
             'asset__platform__automation'
-        )
+        ).prefetch_related('labels', 'labels__label')
         return queryset
 
 
@@ -428,8 +434,11 @@ class AssetAccountBulkSerializer(
 
 class AccountSecretSerializer(SecretReadableMixin, AccountSerializer):
     class Meta(AccountSerializer.Meta):
+        fields = AccountSerializer.Meta.fields + ['spec_info']
         extra_kwargs = {
+            **AccountSerializer.Meta.extra_kwargs,
             'secret': {'write_only': False},
+            'spec_info': {'label': _('Spec info')},
         }
 
 
@@ -452,13 +461,19 @@ class AccountHistorySerializer(serializers.ModelSerializer):
 
 class AccountTaskSerializer(serializers.Serializer):
     ACTION_CHOICES = (
-        ('test', 'test'),
         ('verify', 'verify'),
         ('push', 'push'),
+        ('remove', 'remove'),
     )
     action = serializers.ChoiceField(choices=ACTION_CHOICES, write_only=True)
+    assets = serializers.PrimaryKeyRelatedField(
+        queryset=Asset.objects, required=False, allow_empty=True, many=True
+    )
     accounts = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects, required=False, allow_empty=True, many=True
+    )
+    gather_accounts = serializers.PrimaryKeyRelatedField(
+        queryset=GatheredAccount.objects, required=False, allow_empty=True, many=True
     )
     task = serializers.CharField(read_only=True)
     params = serializers.JSONField(

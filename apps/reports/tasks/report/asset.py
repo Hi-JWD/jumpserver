@@ -101,9 +101,9 @@ class AssetReport(BaseReport):
         relation_map = {}
         permissions = AssetPermission.objects.valid().all()
         for p in permissions:
-            user_ids = p.get_all_users(flat=True)
+            user_ids = [u.id for u in p.get_all_users()]
             for a in p.get_all_assets():
-                if user_set:= relation_map.get(a):
+                if user_set := relation_map.get(a):
                     user_set.update(user_ids)
                 else:
                     user_set = set(user_ids)

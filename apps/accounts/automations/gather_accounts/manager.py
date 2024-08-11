@@ -51,14 +51,22 @@ class GatherAccountsManager(AccountBasePlaybookManager):
         data = self.generate_data(asset, result)
         self.asset_account_info[asset] = data
 
+    @staticmethod
+    def get_nested_info(data, *keys):
+        for key in keys:
+            data = data.get(key, {})
+            if not data:
+                break
+        return data
+
     def on_host_success(self, host, result):
-        info = result.get('debug', {}).get('res', {}).get('info', {})
+        info = self.get_nested_info(result, 'debug', 'res', 'info')
         asset = self.host_asset_mapper.get(host)
         if asset and info:
             result = self.filter_success_result(asset.type, info)
             self.collect_asset_account_info(asset, result)
         else:
-            logger.error(f'Not found {host} info')
+            print(f'\033[31m Not found {host} info \033[0m\n')
 
     def update_or_create_accounts(self):
         for asset, data in self.asset_account_info.items():
@@ -72,7 +80,7 @@ class GatherAccountsManager(AccountBasePlaybookManager):
                     )
                     gathered_accounts.append(gathered_account)
                 if not self.is_sync_account:
-                    return
+                    continue
                 GatheredAccount.sync_accounts(gathered_accounts)
 
     def run(self, *args, **kwargs):

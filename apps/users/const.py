@@ -33,9 +33,19 @@ class RDPClientOption(TextChoices):
     DRIVES_REDIRECT = 'drives_redirect', _('Drives redirect')
 
 
+class ConnectDefaultOpenMethod(TextChoices):
+    CURRENT = 'current', _('Current window')
+    NEW = 'new', _('New window')
+
+
 class RDPSmartSize(TextChoices):
     DISABLE = '0', _('Disable')
     ENABLE = '1', _('Enable')
+
+
+class RDPColorQuality(TextChoices):
+    HIGH = '32', _('High（32 bit）')
+    MEDIUM = '16', _('Medium（16 bit）')
 
 
 class KeyboardLayout(TextChoices):
@@ -46,6 +56,8 @@ class KeyboardLayout(TextChoices):
     FR_CH_QWERTZ = 'fr-ch-qwertz', 'Swiss French (Qwertz)'
     FR_BE_AZERTY = 'fr-be-azerty', 'Belgian French (Azerty)'
     TR_TR_QWERTY = 'tr-tr-qwerty', 'Turkish-Q (Qwerty)'
+    ES_ES_QWERTY = 'es-es-qwerty', 'Spanish'
+    ES_LATAM_QWERTY = 'es-latam-qwerty', 'Spanish (Latin American)'
 
 
 class AppletConnectionMethod(TextChoices):

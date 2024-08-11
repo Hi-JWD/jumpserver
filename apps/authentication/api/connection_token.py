@@ -27,13 +27,13 @@ from perms.models import ActionChoices
 from terminal.connect_methods import NativeClient, ConnectMethodUtil
 from terminal.models import EndpointRule, Endpoint
 from users.const import FileNameConflictResolution
-from users.const import RDPSmartSize
+from users.const import RDPSmartSize, RDPColorQuality
 from users.models import Preference
 from ..models import ConnectionToken, date_expired_default
 from ..serializers import (
     ConnectionTokenSerializer, ConnectionTokenSecretSerializer,
     SuperConnectionTokenSerializer, ConnectTokenAppletOptionSerializer,
-    ConnectionTokenReusableSerializer,
+    ConnectionTokenReusableSerializer, ConnectTokenVirtualAppOptionSerializer
 )
 
 __all__ = ['ConnectionTokenViewSet', 'SuperConnectionTokenViewSet']
@@ -49,7 +49,6 @@ class RDPFileClientProtocolURLMixin:
             'full address:s': '',
             'username:s': '',
             'use multimon:i': '0',
-            'session bpp:i': '32',
             'audiomode:i': '0',
             'disable wallpaper:i': '0',
             'disable full window drag:i': '0',
@@ -100,10 +99,13 @@ class RDPFileClientProtocolURLMixin:
             rdp_options['winposstr:s'] = f'0,1,0,0,{width},{height}'
             rdp_options['dynamic resolution:i'] = '0'
 
+        color_quality = self.request.query_params.get('rdp_color_quality')
+        color_quality = color_quality if color_quality else os.getenv('JUMPSERVER_COLOR_DEPTH', RDPColorQuality.HIGH)
+
         # 设置其他选项
-        rdp_options['smart sizing:i'] = self.request.query_params.get('rdp_smart_size', RDPSmartSize.DISABLE)
-        rdp_options['session bpp:i'] = os.getenv('JUMPSERVER_COLOR_DEPTH', '32')
+        rdp_options['session bpp:i'] = color_quality
         rdp_options['audiomode:i'] = self.parse_env_bool('JUMPSERVER_DISABLE_AUDIO', 'false', '2', '0')
+        rdp_options['smart sizing:i'] = self.request.query_params.get('rdp_smart_size', RDPSmartSize.DISABLE)
 
         # 设置远程应用, 不是 Mstsc
         if token.connect_method != NativeClient.mstsc:
@@ -203,7 +205,7 @@ class RDPFileClientProtocolURLMixin:
         return data
 
     def get_smart_endpoint(self, protocol, asset=None):
-        endpoint = Endpoint.match_by_instance_label(asset, protocol)
+        endpoint = Endpoint.match_by_instance_label(asset, protocol, self.request)
         if not endpoint:
             target_ip = asset.get_target_ip() if asset else ''
             endpoint = EndpointRule.match_endpoint(
@@ -221,12 +223,17 @@ class ExtraActionApiMixin(RDPFileClientProtocolURLMixin):
     validate_exchange_token: callable
 
     @action(methods=['POST', 'GET'], detail=True, url_path='rdp-file')
-    def get_rdp_file(self, *args, **kwargs):
+    def get_rdp_file(self, request, *args, **kwargs):
         token = self.get_object()
         token.is_valid()
         filename, content = self.get_rdp_file_info(token)
-        filename = '{}.rdp'.format(filename)
         response = HttpResponse(content, content_type='application/octet-stream')
+
+        if is_true(request.query_params.get('reusable')):
+            token.set_reusable(True)
+            filename = '{}-{}'.format(filename, token.date_expired.strftime('%Y%m%d_%H%M%S'))
+
+        filename += '.rdp'
         response['Content-Disposition'] = 'attachment; filename*=UTF-8\'\'%s' % filename
         return response
 
@@ -377,6 +384,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
 
         if account.username != AliasAccount.INPUT:
             data['input_username'] = ''
+
         ticket = self._validate_acl(user, asset, account)
         if ticket:
             data['from_ticket'] = ticket
@@ -411,7 +419,10 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
 
     def _validate_acl(self, user, asset, account):
         from acls.models import LoginAssetACL
-        acls = LoginAssetACL.filter_queryset(user=user, asset=asset, account=account)
+        kwargs = {'user': user, 'asset': asset, 'account': account}
+        if account.username == AliasAccount.INPUT:
+            kwargs['account_username'] = self.input_username
+        acls = LoginAssetACL.filter_queryset(**kwargs)
         ip = get_request_ip_or_data(self.request)
         acl = LoginAssetACL.get_match_rule_acls(user, ip, acls)
         if not acl:
@@ -441,7 +452,7 @@ class ConnectionTokenViewSet(ExtraActionApiMixin, RootOrgViewMixin, JMSModelView
             self._record_operate_log(acl, asset)
             for reviewer in reviewers:
                 AssetLoginReminderMsg(
-                    reviewer, asset, user, self.input_username
+                    reviewer, asset, user, account, self.input_username
                 ).publish_async()
 
     def create(self, request, *args, **kwargs):
@@ -464,6 +475,7 @@ class SuperConnectionTokenViewSet(ConnectionTokenViewSet):
         'get_secret_detail': 'authentication.view_superconnectiontokensecret',
         'get_applet_info': 'authentication.view_superconnectiontoken',
         'release_applet_account': 'authentication.view_superconnectiontoken',
+        'get_virtual_app_info': 'authentication.view_superconnectiontoken',
     }
 
     def get_queryset(self):
@@ -500,20 +512,16 @@ class SuperConnectionTokenViewSet(ConnectionTokenViewSet):
         token.is_valid()
         serializer = self.get_serializer(instance=token)
 
-        expire_now = request.data.get('expire_now', None)
+        expire_now = request.data.get('expire_now', True)
         asset_type = token.asset.type
         # 设置默认值
-        if expire_now is None:
-            # TODO 暂时特殊处理 k8s 不过期
-            if asset_type in ['k8s', 'kubernetes']:
-                expire_now = False
-            else:
-                expire_now = not settings.CONNECTION_TOKEN_REUSABLE
+        if asset_type in ['k8s', 'kubernetes']:
+            expire_now = False
 
-        if is_false(expire_now):
-            logger.debug('Api specified, now expire now')
-        elif token.is_reusable and settings.CONNECTION_TOKEN_REUSABLE:
+        if token.is_reusable and settings.CONNECTION_TOKEN_REUSABLE:
             logger.debug('Token is reusable, not expire now')
+        elif is_false(expire_now):
+            logger.debug('Api specified, now expire now')
         else:
             token.expire()
 
@@ -529,14 +537,24 @@ class SuperConnectionTokenViewSet(ConnectionTokenViewSet):
         serializer = ConnectTokenAppletOptionSerializer(data)
         return Response(serializer.data)
 
+    @action(methods=['POST'], detail=False, url_path='virtual-app-option')
+    def get_virtual_app_info(self, *args, **kwargs):
+        token_id = self.request.data.get('id')
+        token = get_object_or_404(ConnectionToken, pk=token_id)
+        if token.is_expired:
+            return Response({'error': 'Token expired'}, status=status.HTTP_400_BAD_REQUEST)
+        data = token.get_virtual_app_option()
+        serializer = ConnectTokenVirtualAppOptionSerializer(data)
+        return Response(serializer.data)
+
     @action(methods=['DELETE', 'POST'], detail=False, url_path='applet-account/release')
     def release_applet_account(self, *args, **kwargs):
-        account_id = self.request.data.get('id')
-        released = ConnectionToken.release_applet_account(account_id)
+        lock_key = self.request.data.get('id')
+        released = ConnectionToken.release_applet_account(lock_key)
 
         if released:
-            logger.debug('Release applet account success: {}'.format(account_id))
+            logger.debug('Release applet account success: {}'.format(lock_key))
             return Response({'msg': 'released'})
         else:
-            logger.error('Release applet account error: {}'.format(account_id))
+            logger.error('Release applet account error: {}'.format(lock_key))
             return Response({'error': 'not found or expired'}, status=400)

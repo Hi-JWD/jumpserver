@@ -55,9 +55,29 @@ class FeiShuAuthentication(JMSModelBackend):
         pass
 
 
+class LarkAuthentication(FeiShuAuthentication):
+    @staticmethod
+    def is_enabled():
+        return settings.AUTH_LARK
+
+
+class SlackAuthentication(JMSModelBackend):
+    """
+    什么也不做呀😺
+    """
+
+    @staticmethod
+    def is_enabled():
+        return settings.AUTH_SLACK
+
+    def authenticate(self, request, **kwargs):
+        pass
+
+
 class AuthorizationTokenAuthentication(JMSModelBackend):
     """
     什么也不做呀😺
     """
+
     def authenticate(self, request, **kwargs):
         pass

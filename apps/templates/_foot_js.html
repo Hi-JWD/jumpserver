@@ -9,14 +9,46 @@
 <script src="{% static "js/jumpserver.js" %}?v=9"></script>
 <script src="{% static 'js/plugins/select2/select2.full.min.js' %}"></script>
 <script src="{% static 'js/plugins/select2/i18n/zh-CN.js' %}"></script>
+<script src="{% static 'js/plugins/markdown-it.min.js' %}"></script>
+
+{% if INTERFACE.footer_content %}
+    <style>
+        .markdown-footer a {
+            color: inherit;
+        }
+
+        .markdown-footer {
+            position: absolute;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            @media (min-width: 768px) {
+                top: 97%;
+            }
+        }
+    </style>
+    <div id="markdown-output" class="markdown-footer"></div>
+{% endif %}
+
+
+<script type="text/markdown"> {{ INTERFACE.footer_content }} </script>
 <script>
-activeNav("{{ FORCE_SCRIPT_NAME }}");
-$(document).ready(function(){
-    setAjaxCSRFToken();
-    $('textarea').attr('rows', 5);
-    if ($('.tooltip')[0]) {
-        $('.tooltip').tooltip();
-    }
-    $.fn.select2.defaults.set('language', getUserLang())
-});
+    activeNav("{{ FORCE_SCRIPT_NAME }}");
+    $(document).ready(function () {
+        setAjaxCSRFToken();
+        $('textarea').attr('rows', 5);
+        if ($('.tooltip')[0]) {
+            $('.tooltip').tooltip();
+        }
+        $.fn.select2.defaults.set('language', getUserLang())
+        const md = window.markdownit();
+        const markdownContent = document.querySelector('script[type="text/markdown"]').textContent;
+        const markdownRef = document.getElementById('markdown-output')
+        if (markdownRef) {
+            markdownRef.innerHTML = md.render(markdownContent);
+        }
+    });
 </script>
+
+
+
+

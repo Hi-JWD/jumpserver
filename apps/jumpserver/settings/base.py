@@ -38,7 +38,8 @@ BASE_DIR = const.BASE_DIR
 PROJECT_DIR = const.PROJECT_DIR
 APPS_DIR = os.path.join(PROJECT_DIR, 'apps')
 DATA_DIR = os.path.join(PROJECT_DIR, 'data')
-ANSIBLE_DIR = os.path.join(DATA_DIR, 'ansible')
+SHARE_DIR = os.path.join(DATA_DIR, 'share')
+ANSIBLE_DIR = os.path.join(SHARE_DIR, 'ansible')
 CERTS_DIR = os.path.join(DATA_DIR, 'certs')
 
 # Quick-start development settings - unsuitable for production
@@ -109,6 +110,7 @@ for host_port in ALLOWED_DOMAINS:
             continue
         CSRF_TRUSTED_ORIGINS.append('{}://*.{}'.format(schema, origin))
 
+CORS_ALLOWED_ORIGINS = [o.replace('*.', '') for o in CSRF_TRUSTED_ORIGINS]
 CSRF_FAILURE_VIEW = 'jumpserver.views.other.csrf_failure'
 # print("CSRF_TRUSTED_ORIGINS: ")
 # for origin in CSRF_TRUSTED_ORIGINS:
@@ -134,15 +136,16 @@ INSTALLED_APPS = [
     'acls.apps.AclsConfig',
     'notifications.apps.NotificationsConfig',
     'rbac.apps.RBACConfig',
+    'labels.apps.LabelsConfig',
     'reports.apps.ReportsConfig',
     'rest_framework',
-    'rest_framework_swagger',
     'drf_yasg',
     'django_cas_ng',
     'channels',
     'django_filters',
     'bootstrap3',
     'captcha',
+    'corsheaders',
     'private_storage',
     'django_celery_beat',
     'django.contrib.auth',
@@ -161,6 +164,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -231,11 +235,9 @@ CSRF_COOKIE_NAME = '{}csrftoken'.format(SESSION_COOKIE_NAME_PREFIX)
 SESSION_COOKIE_NAME = '{}sessionid'.format(SESSION_COOKIE_NAME_PREFIX)
 
 SESSION_COOKIE_AGE = CONFIG.SESSION_COOKIE_AGE
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-# 自定义的配置，SESSION_EXPIRE_AT_BROWSER_CLOSE 始终为 True, 下面这个来控制是否强制关闭后过期 cookie
-SESSION_EXPIRE_AT_BROWSER_CLOSE_FORCE = CONFIG.SESSION_EXPIRE_AT_BROWSER_CLOSE_FORCE
 SESSION_SAVE_EVERY_REQUEST = CONFIG.SESSION_SAVE_EVERY_REQUEST
-SESSION_ENGINE = "django.contrib.sessions.backends.{}".format(CONFIG.SESSION_ENGINE)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = CONFIG.SESSION_EXPIRE_AT_BROWSER_CLOSE
+SESSION_ENGINE = "common.sessions.{}".format(CONFIG.SESSION_ENGINE)
 
 MESSAGE_STORAGE = 'django.contrib.messages.storage.cookie.CookieStorage'
 # Database
@@ -309,12 +311,16 @@ STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "static"),
 )
 
-# Media files (File, ImageField) will be save these
+# Media files (File, ImageField) will be safe these
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(PROJECT_DIR, 'data', 'media').replace('\\', '/') + '/'
 
 PRIVATE_STORAGE_ROOT = MEDIA_ROOT
 PRIVATE_STORAGE_AUTH_FUNCTION = 'jumpserver.rewriting.storage.permissions.allow_access'
+PRIVATE_STORAGE_INTERNAL_URL = '/private-media/'
+PRIVATE_STORAGE_SERVER = 'jumpserver.rewriting.storage.servers.StaticFileServer'
+
+FILE_UPLOAD_TEMP_DIR = CONFIG.FILE_UPLOAD_TEMP_DIR
 
 # Use django-bootstrap-form to format template, input max width arg
 # BOOTSTRAP_COLUMN_COUNT = 11
@@ -323,6 +329,7 @@ PRIVATE_STORAGE_AUTH_FUNCTION = 'jumpserver.rewriting.storage.permissions.allow_
 FIXTURE_DIRS = [os.path.join(BASE_DIR, 'fixtures'), ]
 
 # Email config
+EMAIL_PROTOCOL = CONFIG.EMAIL_PROTOCOL
 EMAIL_HOST = CONFIG.EMAIL_HOST
 EMAIL_PORT = CONFIG.EMAIL_PORT
 EMAIL_HOST_USER = CONFIG.EMAIL_HOST_USER
@@ -401,7 +408,7 @@ if REDIS_SENTINEL_SERVICE_NAME and REDIS_SENTINELS:
 else:
     REDIS_LOCATION_NO_DB = '%(protocol)s://:%(password)s@%(host)s:%(port)s/{}' % {
         'protocol': REDIS_PROTOCOL,
-        'password': CONFIG.REDIS_PASSWORD,
+        'password': CONFIG.REDIS_PASSWORD_QUOTE,
         'host': CONFIG.REDIS_HOST,
         'port': CONFIG.REDIS_PORT,
     }

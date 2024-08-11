@@ -31,7 +31,7 @@ def generate_serializer(data):
     return create_serializer_class(serializer_name, params)
 
 
-def get_platform_automation_methods(path):
+def get_platform_automation_methods(path, lang=None):
     methods = []
     for root, dirs, files in os.walk(path, topdown=False):
         for name in files:
@@ -40,7 +40,7 @@ def get_platform_automation_methods(path):
                 continue
 
             with open(path, 'r', encoding='utf8') as f:
-                manifest = yaml_load_with_i18n(f)
+                manifest = yaml_load_with_i18n(f, lang=lang)
                 check_platform_method(manifest, path)
                 manifest['dir'] = os.path.dirname(path)
                 manifest['params_serializer'] = generate_serializer(manifest)
@@ -66,6 +66,10 @@ def filter_platform_methods(category, tp_name, method=None, methods=None):
     if method:
         methods = filter(lambda x: x['method'] == method, methods)
     return methods
+
+
+def sorted_methods(methods):
+    return sorted(methods, key=lambda x: x.get('priority', 10))
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -15,7 +15,8 @@ from users.models import User
 from ..models import ConnectionToken
 
 __all__ = [
-    'ConnectionTokenSecretSerializer', 'ConnectTokenAppletOptionSerializer'
+    'ConnectionTokenSecretSerializer', 'ConnectTokenAppletOptionSerializer',
+    'ConnectTokenVirtualAppOptionSerializer',
 ]
 
 
@@ -160,4 +161,12 @@ class ConnectTokenAppletOptionSerializer(serializers.Serializer):
     host = _ConnectionTokenAssetSerializer(read_only=True)
     account = _ConnectionTokenAccountSerializer(read_only=True)
     gateway = _ConnectionTokenGatewaySerializer(read_only=True)
+    platform = _ConnectionTokenPlatformSerializer(read_only=True)
     remote_app_option = serializers.JSONField(read_only=True)
+
+
+class ConnectTokenVirtualAppOptionSerializer(serializers.Serializer):
+    name = serializers.CharField(label=_('Name'))
+    image_name = serializers.CharField(label=_('Image name'))
+    image_port = serializers.IntegerField(label=_('Image port'))
+    image_protocol = serializers.CharField(label=_('Image protocol'))

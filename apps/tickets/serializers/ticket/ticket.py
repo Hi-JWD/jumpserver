@@ -18,7 +18,7 @@ __all__ = [
 class TicketSerializer(OrgResourceModelSerializerMixin):
     type = LabeledChoiceField(choices=TicketType.choices, read_only=True, label=_('Type'))
     status = LabeledChoiceField(choices=TicketStatus.choices, read_only=True, label=_('Status'))
-    state = LabeledChoiceField(choices=TicketState.choices, read_only=True, label=_("State"))
+    state = LabeledChoiceField(choices=TicketState.choices, read_only=True, label=_("Action"))
 
     class Meta:
         model = Ticket
@@ -41,7 +41,7 @@ class TicketSerializer(OrgResourceModelSerializerMixin):
             return
         choices = tp.choices
         choices.pop(TicketType.general, None)
-        tp.choices = choices
+        tp.choices = choices.items()
 
     @classmethod
     def setup_eager_loading(cls, queryset):

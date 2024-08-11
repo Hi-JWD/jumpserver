@@ -36,6 +36,8 @@ class AuthBackendLabelMapping(LazyObject):
         backend_label_mapping[settings.AUTH_BACKEND_AUTH_TOKEN] = _("Auth Token")
         backend_label_mapping[settings.AUTH_BACKEND_WECOM] = _("WeCom")
         backend_label_mapping[settings.AUTH_BACKEND_FEISHU] = _("FeiShu")
+        backend_label_mapping[settings.AUTH_BACKEND_LARK] = 'Lark'
+        backend_label_mapping[settings.AUTH_BACKEND_SLACK] = _("Slack")
         backend_label_mapping[settings.AUTH_BACKEND_DINGTALK] = _("DingTalk")
         backend_label_mapping[settings.AUTH_BACKEND_TEMP_TOKEN] = _("Temporary token")
         backend_label_mapping[settings.AUTH_BACKEND_PASSKEY] = _("Passkey")
@@ -121,7 +123,8 @@ def send_login_info_to_reviewers(instance: UserLoginLog | str, auth_acl_id):
 def on_user_auth_success(sender, user, request, login_type=None, **kwargs):
     logger.debug('User login success: {}'.format(user.username))
     check_different_city_login_if_need(user, request)
-    data = generate_data(user.username, request, login_type=login_type)
+    username = f"{user.name}({user.username})"
+    data = generate_data(username, request, login_type=login_type)
     request.session['login_time'] = data['datetime'].strftime('%Y-%m-%d %H:%M:%S')
     data.update({'mfa': int(user.mfa_enabled), 'status': True})
     instance = write_login_log(**data)

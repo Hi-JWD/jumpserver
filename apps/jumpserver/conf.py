@@ -17,7 +17,7 @@ import re
 import sys
 import types
 from importlib import import_module
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, quote
 
 import yaml
 from django.urls import reverse_lazy
@@ -261,6 +261,8 @@ class Config(dict):
         'VAULT_HCP_TOKEN': '',
         'VAULT_HCP_MOUNT_POINT': 'jumpserver',
 
+        'HISTORY_ACCOUNT_CLEAN_LIMIT': 999,
+
         # Cache login password
         'CACHE_LOGIN_PASSWORD_ENABLED': False,
         'CACHE_LOGIN_PASSWORD_TTL': 60 * 60 * 24,
@@ -275,11 +277,13 @@ class Config(dict):
         'AUTH_LDAP_START_TLS': False,
         'AUTH_LDAP_USER_ATTR_MAP': {"username": "cn", "name": "sn", "email": "mail"},
         'AUTH_LDAP_CONNECT_TIMEOUT': 10,
+        'AUTH_LDAP_CACHE_TIMEOUT': 3600 * 24 * 30,
         'AUTH_LDAP_SEARCH_PAGED_SIZE': 1000,
         'AUTH_LDAP_SYNC_IS_PERIODIC': False,
         'AUTH_LDAP_SYNC_INTERVAL': None,
         'AUTH_LDAP_SYNC_CRONTAB': None,
         'AUTH_LDAP_SYNC_ORG_IDS': ['00000000-0000-0000-0000-000000000002'],
+        'AUTH_LDAP_SYNC_RECEIVERS': [],
         'AUTH_LDAP_USER_LOGIN_ONLY_IN_USERS': False,
         'AUTH_LDAP_OPTIONS_OPT_REFERRALS': -1,
 
@@ -325,6 +329,7 @@ class Config(dict):
         'RADIUS_SERVER': 'localhost',
         'RADIUS_PORT': 1812,
         'RADIUS_SECRET': '',
+        'RADIUS_ATTRIBUTES': {},
         'RADIUS_ENCRYPT_PASSWORD': True,
         'OTP_IN_RADIUS': False,
 
@@ -403,7 +408,17 @@ class Config(dict):
         'AUTH_FEISHU': False,
         'FEISHU_APP_ID': '',
         'FEISHU_APP_SECRET': '',
-        'FEISHU_VERSION': 'feishu',
+
+        # Lark
+        'AUTH_LARK': False,
+        'LARK_APP_ID': '',
+        'LARK_APP_SECRET': '',
+
+        # Slack
+        'AUTH_SLACK': False,
+        'SLACK_CLIENT_ID': '',
+        'SLACK_CLIENT_SECRET': '',
+        'SLACK_BOT_TOKEN': '',
 
         'LOGIN_REDIRECT_TO_BACKEND': '',  # 'OPENID / CAS / SAML2
         'LOGIN_REDIRECT_MSG_ENABLED': True,
@@ -445,6 +460,7 @@ class Config(dict):
         'CUSTOM_SMS_REQUEST_METHOD': 'get',
 
         # Email
+        'EMAIL_PROTOCOL': 'smtp',
         'EMAIL_CUSTOM_USER_CREATED_SUBJECT': _('Create account successfully'),
         'EMAIL_CUSTOM_USER_CREATED_HONORIFIC': _('Hello'),
         'EMAIL_CUSTOM_USER_CREATED_BODY': _('Your account has been created successfully'),
@@ -473,7 +489,7 @@ class Config(dict):
         # 安全配置
         'SECURITY_MFA_AUTH': 0,  # 0 不开启 1 全局开启 2 管理员开启
         'SECURITY_MFA_AUTH_ENABLED_FOR_THIRD_PARTY': True,
-        'SECURITY_COMMAND_EXECUTION': True,
+        'SECURITY_COMMAND_EXECUTION': False,
         'SECURITY_COMMAND_BLACKLIST': [
             'reboot', 'shutdown', 'poweroff', 'halt', 'dd', 'half', 'top'
         ],
@@ -497,7 +513,7 @@ class Config(dict):
         'SECURITY_LUNA_REMEMBER_AUTH': True,
         'SECURITY_WATERMARK_ENABLED': True,
         'SECURITY_MFA_VERIFY_TTL': 3600,
-        'SECURITY_UNCOMMON_USERS_TTL': 90,
+        'SECURITY_UNCOMMON_USERS_TTL': 999,
         'VERIFY_CODE_TTL': 60,
         'SECURITY_SESSION_SHARE': True,
         'SECURITY_CHECK_DIFFERENT_CITY_LOGIN': True,
@@ -525,6 +541,7 @@ class Config(dict):
         'SYSLOG_SOCKTYPE': 2,
 
         'PERM_EXPIRED_CHECK_PERIODIC': 60 * 60,
+        'PERM_TREE_REGEN_INTERVAL': 1,
         'FLOWER_URL': "127.0.0.1:5555",
         'LANGUAGE_CODE': 'zh',
         'TIME_ZONE': 'Asia/Shanghai',
@@ -535,7 +552,6 @@ class Config(dict):
         'REFERER_CHECK_ENABLED': False,
         'SESSION_ENGINE': 'cache',
         'SESSION_SAVE_EVERY_REQUEST': True,
-        'SESSION_EXPIRE_AT_BROWSER_CLOSE_FORCE': False,
         'SERVER_REPLAY_STORAGE': {},
         'SECURITY_DATA_CRYPTO_ALGO': None,
         'GMSSL_ENABLED': False,
@@ -552,8 +568,10 @@ class Config(dict):
         'FTP_LOG_KEEP_DAYS': 180,
         'CLOUD_SYNC_TASK_EXECUTION_KEEP_DAYS': 180,
         'JOB_EXECUTION_KEEP_DAYS': 180,
+        'PASSWORD_CHANGE_LOG_KEEP_DAYS': 999,
 
         'TICKETS_ENABLED': True,
+        'TICKETS_DIRECT_APPROVE': False,
 
         # 废弃的
         'DEFAULT_ORG_SHOW_ALL_USERS': True,
@@ -578,12 +596,33 @@ class Config(dict):
         'APPLET_DOWNLOAD_HOST': '',
 
         # FTP 文件上传下载备份阈值，单位(M)，当值小于等于0时，不备份
-        'FTP_FILE_MAX_STORE': 100,
+        'FTP_FILE_MAX_STORE': 0,
 
-        # API 请求次数限制
-        'MAX_LIMIT_PER_PAGE': 100,
+        # API 分页
+        'MAX_LIMIT_PER_PAGE': 10000,
+        'DEFAULT_PAGE_SIZE': None,
 
         'LIMIT_SUPER_PRIV': False,
+
+        # Chat AI
+        'CHAT_AI_ENABLED': False,
+        'GPT_API_KEY': '',
+        'GPT_BASE_URL': '',
+        'GPT_PROXY': '',
+        'GPT_MODEL': 'gpt-3.5-turbo',
+        'VIRTUAL_APP_ENABLED': False,
+
+        'FILE_UPLOAD_SIZE_LIMIT_MB': 200,
+
+        'TICKET_APPLY_ASSET_SCOPE': 'all',
+
+        # Ansible Receptor
+        'RECEPTOR_ENABLED': False,
+        'ANSIBLE_RECEPTOR_GATEWAY_PROXY_HOST': 'jms_celery',
+        'ANSIBLE_RECEPTOR_TCP_LISTEN_ADDRESS': 'receptor:7521',
+
+        'FILE_UPLOAD_TEMP_DIR': None
+
     }
 
     old_config_map = {
@@ -676,6 +715,14 @@ class Config(dict):
         if openid_config:
             self.set_openid_config(openid_config)
 
+    def compatible_redis(self):
+        redis_config = {
+            'REDIS_PASSWORD': str(self.REDIS_PASSWORD),
+            'REDIS_PASSWORD_QUOTE': quote(str(self.REDIS_PASSWORD)),
+        }
+        for key, value in redis_config.items():
+            self[key] = value
+
     def compatible(self):
         """
         对配置做兼容处理
@@ -687,6 +734,8 @@ class Config(dict):
         """
         # 兼容 OpenID 配置
         self.compatible_auth_openid()
+        # 兼容 Redis 配置
+        self.compatible_redis()
 
     def convert_type(self, k, v):
         default_value = self.defaults.get(k)

@@ -16,18 +16,14 @@ router.register('super-connection-token', api.SuperConnectionTokenViewSet, 'supe
 router.register('confirm', api.UserConfirmationViewSet, 'confirm')
 
 urlpatterns = [
-    path('wecom/qr/unbind/', api.WeComQRUnBindForUserApi.as_view(), name='wecom-qr-unbind'),
-    path('wecom/qr/unbind/<uuid:user_id>/', api.WeComQRUnBindForAdminApi.as_view(), name='wecom-qr-unbind-for-admin'),
+    path('<str:backend>/qr/unbind/', api.QRUnBindForUserApi.as_view(), name='qr-unbind'),
+    path('<str:backend>/qr/unbind/<uuid:user_id>/', api.QRUnBindForAdminApi.as_view(), name='qr-unbind-for-admin'),
 
-    path('dingtalk/qr/unbind/', api.DingTalkQRUnBindForUserApi.as_view(), name='dingtalk-qr-unbind'),
-    path('dingtalk/qr/unbind/<uuid:user_id>/', api.DingTalkQRUnBindForAdminApi.as_view(),
-         name='dingtalk-qr-unbind-for-admin'),
-
-    path('feishu/qr/unbind/', api.FeiShuQRUnBindForUserApi.as_view(), name='feishu-qr-unbind'),
-    path('feishu/qr/unbind/<uuid:user_id>/', api.FeiShuQRUnBindForAdminApi.as_view(),
-         name='feishu-qr-unbind-for-admin'),
     path('feishu/event/subscription/callback/', api.FeiShuEventSubscriptionCallback.as_view(),
          name='feishu-event-subscription-callback'),
+
+    path('lark/event/subscription/callback/', api.LarkEventSubscriptionCallback.as_view(),
+         name='lark-event-subscription-callback'),
 
     path('auth/', api.TokenCreateApi.as_view(), name='user-auth'),
     path('confirm-oauth/', api.ConfirmBindORUNBindOAuth.as_view(), name='confirm-oauth'),
@@ -39,6 +35,7 @@ urlpatterns = [
     path('password/reset-code/', api.UserResetPasswordSendCodeApi.as_view(), name='reset-password-code'),
     path('password/verify/', api.UserPasswordVerifyApi.as_view(), name='user-password-verify'),
     path('login-confirm-ticket/status/', api.TicketStatusApi.as_view(), name='login-confirm-ticket-status'),
+    path('user-session/', api.UserSessionApi.as_view(), name='user-session'),
 ]
 
 urlpatterns += router.urls + passkey_urlpatterns

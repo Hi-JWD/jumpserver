@@ -5,8 +5,10 @@ if sys.version_info.major >= 3 and sys.version_info.minor >= 10:
     from collections.abc import Iterable
 else:
     from collections import Iterable
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import NOT_PROVIDED
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.fields import SkipField, empty
@@ -14,14 +16,13 @@ from rest_framework.settings import api_settings
 from rest_framework.utils import html
 
 from common.db.fields import EncryptMixin
-from common.serializers.fields import EncryptedField, LabeledChoiceField, ObjectRelatedField
+from common.serializers.fields import EncryptedField, LabeledChoiceField, ObjectRelatedField, LabelRelatedField
 
 __all__ = [
     'BulkSerializerMixin', 'BulkListSerializerMixin',
     'CommonSerializerMixin', 'CommonBulkSerializerMixin',
     'SecretReadableMixin', 'CommonModelSerializer',
-    'CommonBulkModelSerializer',
-
+    'CommonBulkModelSerializer', 'ResourceLabelsMixin',
 ]
 
 
@@ -42,6 +43,17 @@ class SecretReadableMixin(serializers.Serializer):
             if 'write_only' not in field_extra_kwargs:
                 continue
             serializer_field.write_only = field_extra_kwargs['write_only']
+        self.remove_spec_info_field()
+
+    def remove_spec_info_field(self):
+        request = self.context.get('request')
+        if not request:
+            return
+
+        _format = request.query_params.get('format')
+        if _format not in ['csv', 'xlsx']:
+            return
+        self.fields.pop('spec_info', None)
 
 
 class BulkSerializerMixin(object):
@@ -264,6 +276,14 @@ class SizedModelFieldsMixin(BaseDynamicFieldsPlugin):
         return fields_to_drop
 
 
+class XPACKModelFieldsMixin(BaseDynamicFieldsPlugin):
+    def get_exclude_field_names(self):
+        if settings.XPACK_LICENSE_IS_VALID:
+            return set()
+        fields_xpack = set(getattr(self.serializer.Meta, 'fields_xpack', set()))
+        return fields_xpack
+
+
 class DefaultValueFieldsMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -302,7 +322,7 @@ class DynamicFieldsMixin:
     """
     可以控制显示不同的字段，mini 最少，small 不包含关系
     """
-    dynamic_fields_plugins = [QueryFieldsMixin, SizedModelFieldsMixin]
+    dynamic_fields_plugins = [QueryFieldsMixin, SizedModelFieldsMixin, XPACKModelFieldsMixin]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -391,3 +411,25 @@ class CommonBulkSerializerMixin(BulkSerializerMixin, CommonSerializerMixin):
 
 class CommonBulkModelSerializer(CommonBulkSerializerMixin, serializers.ModelSerializer):
     pass
+
+
+class ResourceLabelsMixin(serializers.Serializer):
+    labels = LabelRelatedField(many=True, label=_('Labels'), required=False, allow_null=True, source='res_labels')
+
+    def update(self, instance, validated_data):
+        labels = validated_data.pop('res_labels', None)
+        res = super().update(instance, validated_data)
+        if labels is not None:
+            instance.res_labels.set(labels, bulk=False)
+        return res
+
+    def create(self, validated_data):
+        labels = validated_data.pop('res_labels', None)
+        instance = super().create(validated_data)
+        if labels is not None:
+            instance.res_labels.set(labels, bulk=False)
+        return instance
+
+    @classmethod
+    def setup_eager_loading(cls, queryset):
+        return queryset.prefetch_related('labels')

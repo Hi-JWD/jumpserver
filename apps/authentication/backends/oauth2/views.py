@@ -6,8 +6,10 @@ from django.urls import reverse
 from django.utils.http import urlencode
 
 from authentication.utils import build_absolute_uri
-from common.utils import get_logger
+from authentication.views.mixins import FlashMessageMixin
 from authentication.mixins import authenticate
+from common.utils import get_logger
+
 
 logger = get_logger(__file__)
 
@@ -39,7 +41,7 @@ class OAuth2AuthRequestView(View):
         return HttpResponseRedirect(redirect_url)
 
 
-class OAuth2AuthCallbackView(View):
+class OAuth2AuthCallbackView(View, FlashMessageMixin):
     http_method_names = ['get', ]
 
     def get(self, request):
@@ -51,7 +53,8 @@ class OAuth2AuthCallbackView(View):
         if 'code' in callback_params:
             logger.debug(log_prompt.format('Process authenticate'))
             user = authenticate(code=callback_params['code'], request=request)
-            if user and user.is_valid:
+
+            if user:
                 logger.debug(log_prompt.format('Login: {}'.format(user)))
                 auth.login(self.request, user)
                 logger.debug(log_prompt.format('Redirect'))
@@ -60,8 +63,7 @@ class OAuth2AuthCallbackView(View):
                 )
 
         logger.debug(log_prompt.format('Redirect'))
-        # OAuth2 服务端认证成功, 但是用户被禁用了, 这时候需要调用服务端的logout
-        redirect_url = settings.AUTH_OAUTH2_PROVIDER_END_SESSION_ENDPOINT
+        redirect_url = settings.AUTH_OAUTH2_PROVIDER_END_SESSION_ENDPOINT or '/'
         return HttpResponseRedirect(redirect_url)
 
 

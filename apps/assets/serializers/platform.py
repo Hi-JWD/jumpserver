@@ -5,7 +5,7 @@ from rest_framework.validators import UniqueValidator
 
 from common.serializers import (
     WritableNestedModelSerializer, type_field_map, MethodSerializer,
-    DictSerializer, create_serializer_class
+    DictSerializer, create_serializer_class, ResourceLabelsMixin
 )
 from common.serializers.fields import LabeledChoiceField
 from common.utils import lazyproperty
@@ -123,7 +123,7 @@ class PlatformCustomField(serializers.Serializer):
     choices = serializers.ListField(default=list, label=_("Choices"), required=False)
 
 
-class PlatformSerializer(WritableNestedModelSerializer):
+class PlatformSerializer(ResourceLabelsMixin, WritableNestedModelSerializer):
     SU_METHOD_CHOICES = [
         ("sudo", "sudo su -"),
         ("su", "su - "),
@@ -160,6 +160,7 @@ class PlatformSerializer(WritableNestedModelSerializer):
         fields = fields_small + [
             "protocols", "domain_enabled", "su_enabled",
             "su_method", "automation", "comment", "custom_fields",
+            "labels"
         ] + read_only_fields
         extra_kwargs = {
             "su_enabled": {"label": _('Su enabled')},
@@ -190,7 +191,6 @@ class PlatformSerializer(WritableNestedModelSerializer):
     def add_type_choices(self, name, label):
         tp = self.fields['type']
         tp.choices[name] = label
-        tp.choice_mapper[name] = label
         tp.choice_strings_to_values[name] = label
 
     @lazyproperty
@@ -198,13 +198,6 @@ class PlatformSerializer(WritableNestedModelSerializer):
         category, tp = self.platform_category_type
         constraints = AllTypes.get_constraints(category, tp)
         return constraints
-
-    @classmethod
-    def setup_eager_loading(cls, queryset):
-        queryset = queryset.prefetch_related(
-            'protocols', 'automation'
-        )
-        return queryset
 
     def validate_protocols(self, protocols):
         if not protocols:

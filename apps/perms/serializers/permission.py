@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 #
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from accounts.const import Source
 from accounts.models import AccountTemplate, Account
 from accounts.tasks import push_accounts_to_assets_task
 from assets.models import Asset, Node
+from common.serializers import ResourceLabelsMixin
 from common.serializers.fields import BitChoicesField, ObjectRelatedField
 from orgs.mixins.serializers import BulkOrgResourceModelSerializer
 from perms.models import ActionChoices, AssetPermission
 from users.models import User, UserGroup
 
-__all__ = ["AssetPermissionSerializer", "ActionChoicesField"]
+__all__ = ["AssetPermissionSerializer", "ActionChoicesField", "AssetPermissionListSerializer"]
 
 
 class ActionChoicesField(BitChoicesField):
@@ -26,7 +28,7 @@ class ActionChoicesField(BitChoicesField):
         return data
 
 
-class AssetPermissionSerializer(BulkOrgResourceModelSerializer):
+class AssetPermissionSerializer(ResourceLabelsMixin, BulkOrgResourceModelSerializer):
     users = ObjectRelatedField(queryset=User.objects, many=True, required=False, label=_('User'))
     user_groups = ObjectRelatedField(
         queryset=UserGroup.objects, many=True, required=False, label=_('User group')
@@ -50,7 +52,7 @@ class AssetPermissionSerializer(BulkOrgResourceModelSerializer):
             "is_valid", "comment", "from_ticket",
         ]
         fields_small = fields_mini + fields_generic
-        fields_m2m = ["users", "user_groups", "assets", "nodes"]
+        fields_m2m = ["users", "user_groups", "assets", "nodes", "labels"]
         fields = fields_mini + fields_m2m + fields_generic
         read_only_fields = ["created_by", "date_created", "from_ticket"]
         extra_kwargs = {
@@ -84,6 +86,7 @@ class AssetPermissionSerializer(BulkOrgResourceModelSerializer):
         ]
         for asset in assets:
             asset_exist_accounts = Account.objects.none()
+            asset_exist_account_names = asset.accounts.values_list('name', flat=True)
             for template in self.template_accounts:
                 asset_exist_accounts |= asset.accounts.filter(
                     username=template.username,
@@ -95,11 +98,13 @@ class AssetPermissionSerializer(BulkOrgResourceModelSerializer):
                     'username': template.username,
                     'secret_type': template.secret_type
                 }
-                if condition in username_secret_type_dict:
+                if condition in username_secret_type_dict or \
+                        template.name in asset_exist_account_names:
                     continue
                 account_data = {key: getattr(template, key) for key in account_attribute}
                 account_data['su_from'] = template.get_su_from_account(asset)
-                account_data['name'] = f"{account_data['name']}-{_('Account template')}"
+                account_data['source'] = Source.TEMPLATE
+                account_data['source_id'] = str(template.id)
                 need_create_accounts.append(Account(**{'asset_id': asset.id, **account_data}))
         return Account.objects.bulk_create(need_create_accounts)
 
@@ -130,15 +135,15 @@ class AssetPermissionSerializer(BulkOrgResourceModelSerializer):
         """Perform necessary eager loading of data."""
         queryset = queryset.prefetch_related(
             "users", "user_groups", "assets", "nodes",
-        )
+        ).prefetch_related('labels', 'labels__label')
         return queryset
 
     @staticmethod
     def perform_display_create(instance, **kwargs):
         # 用户
         users_to_set = User.objects.filter(
-            Q(name__in=kwargs.get("users_display"))
-            | Q(username__in=kwargs.get("users_display"))
+            Q(name__in=kwargs.get("users_display")) |
+            Q(username__in=kwargs.get("users_display"))
         ).distinct()
         instance.users.add(*users_to_set)
         # 用户组
@@ -148,8 +153,8 @@ class AssetPermissionSerializer(BulkOrgResourceModelSerializer):
         instance.user_groups.add(*user_groups_to_set)
         # 资产
         assets_to_set = Asset.objects.filter(
-            Q(address__in=kwargs.get("assets_display"))
-            | Q(name__in=kwargs.get("assets_display"))
+            Q(address__in=kwargs.get("assets_display")) |
+            Q(name__in=kwargs.get("assets_display"))
         ).distinct()
         instance.assets.add(*assets_to_set)
         # 节点
@@ -175,3 +180,27 @@ class AssetPermissionSerializer(BulkOrgResourceModelSerializer):
         instance = super().create(validated_data)
         self.perform_display_create(instance, **display)
         return instance
+
+
+class AssetPermissionListSerializer(AssetPermissionSerializer):
+    users_amount = serializers.IntegerField(read_only=True, label=_("Users amount"))
+    user_groups_amount = serializers.IntegerField(read_only=True, label=_("User groups amount"))
+    assets_amount = serializers.IntegerField(read_only=True, label=_("Assets amount"))
+    nodes_amount = serializers.IntegerField(read_only=True, label=_("Nodes amount"))
+
+    class Meta(AssetPermissionSerializer.Meta):
+        amount_fields = ["users_amount", "user_groups_amount", "assets_amount", "nodes_amount"]
+        fields = [item for item in (AssetPermissionSerializer.Meta.fields + amount_fields) if
+                  item not in ["users", "assets", "nodes", "user_groups"]]
+
+    @classmethod
+    def setup_eager_loading(cls, queryset):
+        """Perform necessary eager loading of data."""
+        queryset = queryset \
+            .prefetch_related('labels', 'labels__label') \
+            .annotate(users_amount=Count("users", distinct=True),
+                      user_groups_amount=Count("user_groups", distinct=True),
+                      assets_amount=Count("assets", distinct=True),
+                      nodes_amount=Count("nodes", distinct=True),
+                      )
+        return queryset

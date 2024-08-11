@@ -75,12 +75,14 @@ def create_or_update_celery_periodic_tasks(tasks):
             crontab=crontab,
             name=name,
             task=detail['task'],
-            enabled=detail.get('enabled', True),
             args=json.dumps(detail.get('args', [])),
             kwargs=json.dumps(detail.get('kwargs', {})),
             description=detail.get('description') or '',
             last_run_at=last_run_at,
         )
+        enabled = detail.get('enabled')
+        if enabled is not None:
+            defaults["enabled"] = enabled
         task = PeriodicTask.objects.update_or_create(
             defaults=defaults, name=name,
         )

@@ -18,7 +18,7 @@ from authentication.permissions import UserConfirmation
 from common.sdk.im.dingtalk import URL, DingTalk
 from common.utils import get_logger
 from common.utils.common import get_request_ip
-from common.utils.django import get_object_or_none, reverse
+from common.utils.django import get_object_or_none, reverse, safe_next_url
 from common.utils.random import random_string
 from common.views.mixins import PermissionsMixin, UserConfirmRequiredExceptionMixin
 from users.models import User
@@ -70,11 +70,12 @@ class DingTalkQRMixin(DingTalkBaseMixin, View):
         self.request.session[DINGTALK_STATE_SESSION_KEY] = state
 
         params = {
-            'appid': settings.DINGTALK_APPKEY,
+            'client_id': settings.DINGTALK_APPKEY,
             'response_type': 'code',
-            'scope': 'snsapi_login',
+            'scope': 'openid',
             'state': state,
             'redirect_uri': redirect_uri,
+            'prompt': 'consent'
         }
         url = URL.QR_CONNECT + '?' + urlencode(params)
         return url
@@ -185,6 +186,7 @@ class DingTalkQRLoginView(DingTalkQRMixin, METAMixin, View):
     def get(self, request: HttpRequest):
         redirect_url = request.GET.get('redirect_url') or reverse('index')
         next_url = self.get_next_url_from_meta() or reverse('index')
+        next_url = safe_next_url(next_url, request=request)
 
         redirect_uri = reverse('authentication:dingtalk-qr-login-callback', external=True)
         redirect_uri += '?' + urlencode({

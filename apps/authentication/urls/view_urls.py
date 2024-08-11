@@ -27,7 +27,7 @@ urlpatterns = [
     path('wecom/bind/start/', views.WeComEnableStartView.as_view(), name='wecom-bind-start'),
     path('wecom/qr/bind/', views.WeComQRBindView.as_view(), name='wecom-qr-bind'),
     path('wecom/qr/login/', views.WeComQRLoginView.as_view(), name='wecom-qr-login'),
-    path('wecom/qr/bind/<uuid:user_id>/callback/', views.WeComQRBindCallbackView.as_view(),
+    path('wecom/qr/bind/callback/', views.WeComQRBindCallbackView.as_view(),
          name='wecom-qr-bind-callback'),
     path('wecom/qr/login/callback/', views.WeComQRLoginCallbackView.as_view(), name='wecom-qr-login-callback'),
     path('wecom/oauth/login/', views.WeComOAuthLoginView.as_view(), name='wecom-oauth-login'),
@@ -48,6 +48,18 @@ urlpatterns = [
     path('feishu/qr/login/', views.FeiShuQRLoginView.as_view(), name='feishu-qr-login'),
     path('feishu/qr/bind/callback/', views.FeiShuQRBindCallbackView.as_view(), name='feishu-qr-bind-callback'),
     path('feishu/qr/login/callback/', views.FeiShuQRLoginCallbackView.as_view(), name='feishu-qr-login-callback'),
+
+    path('lark/bind/start/', views.LarkEnableStartView.as_view(), name='lark-bind-start'),
+    path('lark/qr/bind/', views.LarkQRBindView.as_view(), name='lark-qr-bind'),
+    path('lark/qr/login/', views.LarkQRLoginView.as_view(), name='lark-qr-login'),
+    path('lark/qr/bind/callback/', views.LarkQRBindCallbackView.as_view(), name='lark-qr-bind-callback'),
+    path('lark/qr/login/callback/', views.LarkQRLoginCallbackView.as_view(), name='lark-qr-login-callback'),
+
+    path('slack/bind/start/', views.SlackEnableStartView.as_view(), name='slack-bind-start'),
+    path('slack/qr/bind/', views.SlackQRBindView.as_view(), name='slack-qr-bind'),
+    path('slack/qr/login/', views.SlackQRLoginView.as_view(), name='slack-qr-login'),
+    path('slack/qr/bind/callback/', views.SlackQRBindCallbackView.as_view(), name='slack-qr-bind-callback'),
+    path('slack/qr/login/callback/', views.SlackQRLoginCallbackView.as_view(), name='slack-qr-login-callback'),
 
     # Profile
     path('profile/pubkey/generate/', users_view.UserPublicKeyGenerateView.as_view(), name='user-pubkey-generate'),

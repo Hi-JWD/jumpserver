@@ -20,8 +20,12 @@ from simple_history.models import HistoricalRecords
 from accounts.models import Account
 from acls.models import CommandFilterACL
 from assets.models import Asset
+from assets.automations.base.manager import SSHTunnelManager
 from common.db.encoder import ModelJSONFieldEncoder
-from ops.ansible import JMSInventory, AdHocRunner, PlaybookRunner, CommandInBlackListException
+from ops.ansible import JMSInventory, AdHocRunner, PlaybookRunner, UploadFileRunner
+
+"""stop all ssh child processes of the given ansible process pid."""
+from ops.ansible.exception import CommandInBlackListException
 from ops.mixin import PeriodTaskModelMixin
 from ops.variables import *
 from ops.const import Types, RunasPolicies, JobStatus, JobModules
@@ -56,35 +60,45 @@ class JMSPermedInventory(JMSInventory):
         self.module = module
         self.assets_accounts_mapper = self.get_assets_accounts_mapper()
 
-    def make_account_vars(self, host, asset, account, automation, protocol, platform, gateway):
+    def make_account_vars(self, host, asset, account, automation, protocol, platform, gateway, path_dir):
         if not account:
             host['error'] = _("No account available")
             return host
 
         protocol_supported_modules_mapping = {
             'mysql': ['mysql'],
+            'mariadb': ['mysql'],
             'postgresql': ['postgresql'],
             'sqlserver': ['sqlserver'],
-            'ssh': ['shell', 'python', 'win_shell', 'raw'],
+            'ssh': ['shell', 'python', 'win_shell', 'raw', 'huawei'],
+            'winrm': ['win_shell', 'shell'],
         }
 
         if self.module not in protocol_supported_modules_mapping.get(protocol.name, []):
             host['error'] = "Module {} is not suitable for this asset".format(self.module)
             return host
 
-        if protocol.name in ('mysql', 'postgresql', 'sqlserver'):
+        if protocol.name in ('mariadb', 'mysql', 'postgresql', 'sqlserver'):
             host['login_host'] = asset.address
             host['login_port'] = protocol.port
             host['login_user'] = account.username
             host['login_password'] = account.secret
             host['login_db'] = asset.spec_info.get('db_name', '')
             host['ansible_python_interpreter'] = sys.executable
+            if gateway:
+                host['gateway'] = {
+                    'address': gateway.address, 'port': gateway.port,
+                    'username': gateway.username, 'secret': gateway.password,
+                    'private_key_path': gateway.private_key_path
+                }
+                host['jms_asset']['port'] = protocol.port
             return host
-        return super().make_account_vars(host, asset, account, automation, protocol, platform, gateway)
+        return super().make_account_vars(host, asset, account, automation, protocol, platform, gateway, path_dir)
 
     def get_asset_sorted_accounts(self, asset):
         accounts = self.assets_accounts_mapper.get(asset.id, [])
-        return list(accounts)
+        accounts_sorted = self.sorted_accounts(accounts)
+        return list(accounts_sorted)
 
     def get_assets_accounts_mapper(self):
         mapper = defaultdict(set)
@@ -126,17 +140,13 @@ class JMSPermedInventory(JMSInventory):
 
 class Job(JMSOrgBaseModel, PeriodTaskModelMixin):
     name = models.CharField(max_length=128, null=True, verbose_name=_('Name'))
-
     instant = models.BooleanField(default=False)
     args = models.CharField(max_length=8192, default='', verbose_name=_('Args'), null=True, blank=True)
     module = models.CharField(max_length=128, choices=JobModules.choices, default=JobModules.shell,
-                              verbose_name=_('Module'),
-                              null=True)
+                              verbose_name=_('Module'), null=True)
     chdir = models.CharField(default="", max_length=1024, verbose_name=_('Chdir'), null=True, blank=True)
     timeout = models.IntegerField(default=-1, verbose_name=_('Timeout (Seconds)'))
-
     playbook = models.ForeignKey('ops.Playbook', verbose_name=_("Playbook"), null=True, on_delete=models.SET_NULL)
-
     type = models.CharField(max_length=128, choices=Types.choices, default=Types.adhoc, verbose_name=_("Type"))
     creator = models.ForeignKey('users.User', verbose_name=_("Creator"), on_delete=models.SET_NULL, null=True)
     assets = models.ManyToManyField('assets.Asset', verbose_name=_("Assets"))
@@ -205,7 +215,8 @@ class Job(JMSOrgBaseModel, PeriodTaskModelMixin):
             return "{}:{}:{}".format(self.org.name, self.creator.name, self.playbook.name)
 
     def create_execution(self):
-        return self.executions.create(job_version=self.version, material=self.material, job_type=Types[self.type].value)
+        return self.executions.create(job_version=self.version, material=self.material, job_type=Types[self.type].value,
+                                      creator=self.creator)
 
     class Meta:
         verbose_name = _("Job")
@@ -248,45 +259,6 @@ class JobExecution(JMSOrgBaseModel):
         if self.job.version != self.job_version:
             return self.job.get_history(self.job_version)
         return self.job
-
-    @property
-    def assent_result_detail(self):
-        if not self.is_finished or self.summary.get('error'):
-            return None
-        result = {
-            "summary": self.summary,
-            "detail": [],
-        }
-        for asset in self.current_job.assets.all():
-            asset_detail = {
-                "name": asset.name,
-                "status": "ok",
-                "tasks": [],
-            }
-            if self.summary.get("excludes", None) and self.summary["excludes"].get(asset.name, None):
-                asset_detail.update({"status": "excludes"})
-                result["detail"].append(asset_detail)
-                break
-            if self.result["dark"].get(asset.name, None):
-                asset_detail.update({"status": "failed"})
-                for key, task in self.result["dark"][asset.name].items():
-                    task_detail = {"name": key,
-                                   "output": "{}{}".format(task.get("stdout", ""), task.get("stderr", ""))}
-                    asset_detail["tasks"].append(task_detail)
-            if self.result["failures"].get(asset.name, None):
-                asset_detail.update({"status": "failed"})
-                for key, task in self.result["failures"][asset.name].items():
-                    task_detail = {"name": key,
-                                   "output": "{}{}".format(task.get("stdout", ""), task.get("stderr", ""))}
-                    asset_detail["tasks"].append(task_detail)
-
-            if self.result["ok"].get(asset.name, None):
-                for key, task in self.result["ok"][asset.name].items():
-                    task_detail = {"name": key,
-                                   "output": "{}{}".format(task.get("stdout", ""), task.get("stderr", ""))}
-                    asset_detail["tasks"].append(task_detail)
-            result["detail"].append(asset_detail)
-        return result
 
     def compile_shell(self):
         if self.current_job.type != 'adhoc':
@@ -335,6 +307,11 @@ class JobExecution(JMSOrgBaseModel):
                 shell += " chdir={}".format(self.current_job.chdir)
         if self.current_job.module in ['python']:
             shell += " executable={}".format(self.current_job.module)
+
+        if module == JobModules.huawei.value:
+            module = 'ce_command'
+            shell = "commands=\"{}\" ".format(self.current_job.args)
+
         return module, shell
 
     def get_runner(self):
@@ -353,11 +330,12 @@ class JobExecution(JMSOrgBaseModel):
         static_variables = self.gather_static_variables()
         extra_vars.update(static_variables)
 
-        if self.current_job.type == 'adhoc':
+        if self.current_job.type == Types.adhoc:
             module, args = self.compile_shell()
 
             runner = AdHocRunner(
                 self.inventory_path,
+                self.job.module,
                 module,
                 timeout=self.current_job.timeout,
                 module_args=args,
@@ -365,10 +343,17 @@ class JobExecution(JMSOrgBaseModel):
                 project_dir=self.private_dir,
                 extra_vars=extra_vars,
             )
-        elif self.current_job.type == 'playbook':
+        elif self.current_job.type == Types.playbook:
             runner = PlaybookRunner(
-                self.inventory_path, self.current_job.playbook.entry
+                self.inventory_path,
+                self.current_job.playbook.entry,
+                self.private_dir
             )
+        elif self.current_job.type == Types.upload_file:
+            job_id = self.current_job.id
+            args = json.loads(self.current_job.args)
+            dst_path = args.get('dst_path', '/')
+            runner = UploadFileRunner(self.inventory_path, self.private_dir, job_id, dst_path)
         else:
             raise Exception("unsupported job type")
         return runner
@@ -529,6 +514,8 @@ class JobExecution(JMSOrgBaseModel):
         self.before_start()
 
         runner = self.get_runner()
+        ssh_tunnel = SSHTunnelManager()
+        ssh_tunnel.local_gateway_prepare(runner)
         try:
             cb = runner.run(**kwargs)
             self.set_result(cb)
@@ -539,6 +526,20 @@ class JobExecution(JMSOrgBaseModel):
         except Exception as e:
             logging.error(e, exc_info=True)
             self.set_error(e)
+        finally:
+            ssh_tunnel.local_gateway_clean(runner)
+
+    def stop(self):
+        from ops.signal_handlers import job_execution_stop_pub_sub
+        pid_path = os.path.join(self.private_dir, "local.pid")
+        if os.path.exists(pid_path):
+            with open(pid_path) as f:
+                try:
+                    pid = f.read()
+                    job_execution_stop_pub_sub.publish(int(pid))
+                except Exception as e:
+                    print(e)
+        self.set_error('Job stop by "user cancel"')
 
     class Meta:
         verbose_name = _("Job Execution")

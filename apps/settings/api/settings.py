@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 #
+import re
 
 from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.views.static import serve
 from rest_framework import generics
@@ -39,6 +41,8 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'wecom': serializers.WeComSettingSerializer,
         'dingtalk': serializers.DingTalkSettingSerializer,
         'feishu': serializers.FeiShuSettingSerializer,
+        'lark': serializers.LarkSettingSerializer,
+        'slack': serializers.SlackSettingSerializer,
         'auth': serializers.AuthSettingSerializer,
         'oidc': serializers.OIDCSettingSerializer,
         'keycloak': serializers.KeycloakSettingSerializer,
@@ -56,9 +60,11 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'cmpp2': serializers.CMPP2SMSSettingSerializer,
         'custom': serializers.CustomSMSSettingSerializer,
         'vault': serializers.VaultSettingSerializer,
+        'chat': serializers.ChatAISettingSerializer,
         'announcement': serializers.AnnouncementSettingSerializer,
         'ticket': serializers.TicketSettingSerializer,
         'ops': serializers.OpsSettingSerializer,
+        'virtualapp': serializers.VirtualAppSerializer,
     }
 
     rbac_category_permissions = {
@@ -66,6 +72,7 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'terminal': 'settings.change_terminal',
         'ops': 'settings.change_ops',
         'ticket': 'settings.change_ticket',
+        'virtualapp': 'settings.change_virtualapp',
         'announcement': 'settings.change_announcement',
         'security': 'settings.change_security',
         'security_basic': 'settings.change_security',
@@ -163,6 +170,13 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         if hasattr(serializer, 'post_save'):
             serializer.post_save()
         self.send_signal(serializer)
+        if self.request.query_params.get('category') == 'ldap':
+            self.clean_ldap_user_dn_cache()
+
+    @staticmethod
+    def clean_ldap_user_dn_cache():
+        del_count = cache.delete_pattern('django_auth_ldap.user_dn.*')
+        logger.debug(f'clear LDAP user_dn_cache count={del_count}')
 
 
 class SettingsLogoApi(APIView):

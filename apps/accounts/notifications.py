@@ -1,10 +1,11 @@
 from django.template.loader import render_to_string
 from django.utils.translation import gettext_lazy as _
 
-from common.tasks import send_mail_attachment, upload_backup_to_obj_storage
+from accounts.models import ChangeSecretRecord
+from common.tasks import send_mail_attachment_async, upload_backup_to_obj_storage
 from notifications.notifications import UserMessage
-from users.models import User
 from terminal.models.component.storage import ReplayStorage
+from users.models import User
 
 
 class AccountBackupExecutionTaskMsg(object):
@@ -23,11 +24,11 @@ class AccountBackupExecutionTaskMsg(object):
         else:
             return _("{} - The account backup passage task has been completed: "
                      "the encryption password has not been set - "
-                     "please go to personal information -> file encryption password "
-                     "to set the encryption password").format(name)
+                     "please go to personal information -> Basic file encryption password for preference settings"
+                     ).format(name)
 
     def publish(self, attachment_list=None):
-        send_mail_attachment(
+        send_mail_attachment_async(
             self.subject, self.message, [self.user.email], attachment_list
         )
 
@@ -54,23 +55,26 @@ class AccountBackupByObjStorageExecutionTaskMsg(object):
 class ChangeSecretExecutionTaskMsg(object):
     subject = _('Notification of implementation result of encryption change plan')
 
-    def __init__(self, name: str, user: User):
+    def __init__(self, name: str, user: User, summary):
         self.name = name
         self.user = user
+        self.summary = summary
 
     @property
     def message(self):
         name = self.name
         if self.user.secret_key:
-            return _('{} - The encryption change task has been completed. '
-                     'See the attachment for details').format(name)
+            default_message = _('{} - The encryption change task has been completed. '
+                                'See the attachment for details').format(name)
+
         else:
-            return _("{} - The encryption change task has been completed: the encryption "
-                     "password has not been set - please go to personal information -> "
-                     "file encryption password to set the encryption password").format(name)
+            default_message = _("{} - The encryption change task has been completed: the encryption "
+                                "password has not been set - please go to personal information -> "
+                                "set encryption password in preferences").format(name)
+        return self.summary + '\n' + default_message
 
     def publish(self, attachments=None):
-        send_mail_attachment(
+        send_mail_attachment_async(
             self.subject, self.message, [self.user.email], attachments
         )
 
@@ -95,3 +99,35 @@ class GatherAccountChangeMsg(UserMessage):
     def gen_test_msg(cls):
         user = User.objects.first()
         return cls(user, {})
+
+
+class ChangeSecretFailedMsg(UserMessage):
+    subject = _('Change secret or push account failed information')
+
+    def __init__(self, name, execution_id, user, asset_account_errors: list):
+        self.name = name
+        self.execution_id = execution_id
+        self.asset_account_errors = asset_account_errors
+        super().__init__(user)
+
+    def get_html_msg(self) -> dict:
+        context = {
+            'name': self.name,
+            'recipient': self.user,
+            'execution_id': self.execution_id,
+            'asset_account_errors': self.asset_account_errors
+        }
+        message = render_to_string('accounts/change_secret_failed_info.html', context)
+
+        return {
+            'subject': str(self.subject),
+            'message': message
+        }
+
+    @classmethod
+    def gen_test_msg(cls):
+        name = 'test'
+        user = User.objects.first()
+        record = ChangeSecretRecord.objects.first()
+        execution_id = str(record.execution_id)
+        return cls(name, execution_id, user, [])

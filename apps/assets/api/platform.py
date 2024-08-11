@@ -21,6 +21,7 @@ class AssetPlatformViewSet(JMSModelViewSet):
     }
     filterset_fields = ['name', 'category', 'type']
     search_fields = ['name']
+    ordering = ['-internal', 'name']
     rbac_perms = {
         'categories': 'assets.view_platform',
         'type_constraints': 'assets.view_platform',
@@ -29,7 +30,10 @@ class AssetPlatformViewSet(JMSModelViewSet):
     }
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        # 因为没有走分页逻辑，所以需要这里 prefetch
+        queryset = super().get_queryset().prefetch_related(
+            'protocols', 'automation', 'labels', 'labels__label',
+        )
         queryset = queryset.filter(type__in=AllTypes.get_types_values())
         return queryset
 

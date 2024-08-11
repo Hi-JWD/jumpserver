@@ -12,9 +12,68 @@ from sshtunnel import SSHTunnelForwarder
 
 from assets.automations.methods import platform_automation_methods
 from common.utils import get_logger, lazyproperty, is_openssh_format_key, ssh_pubkey_gen
-from ops.ansible import JMSInventory, PlaybookRunner, DefaultCallback
+from ops.ansible import JMSInventory, DefaultCallback, SuperPlaybookRunner
+from ops.ansible.interface import interface
 
 logger = get_logger(__name__)
+
+
+class SSHTunnelManager:
+    def __init__(self, *args, **kwargs):
+        self.gateway_servers = dict()
+
+    @staticmethod
+    def file_to_json(path):
+        with open(path, 'r') as f:
+            d = json.load(f)
+        return d
+
+    @staticmethod
+    def json_to_file(path, data):
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=4, sort_keys=True)
+
+    def local_gateway_prepare(self, runner):
+        info = self.file_to_json(runner.inventory)
+        servers, not_valid = [], []
+        for k, host in info['all']['hosts'].items():
+            jms_asset, jms_gateway = host.get('jms_asset'), host.get('jms_gateway')
+            if not jms_gateway:
+                continue
+            try:
+                server = SSHTunnelForwarder(
+                    (jms_gateway['address'], jms_gateway['port']),
+                    ssh_username=jms_gateway['username'],
+                    ssh_password=jms_gateway['secret'],
+                    ssh_pkey=jms_gateway['private_key_path'],
+                    remote_bind_address=(jms_asset['address'], jms_asset['port'])
+                )
+                server.start()
+            except Exception as e:
+                err_msg = 'Gateway is not active: %s' % jms_asset.get('name', '')
+                print(f'\033[31m {err_msg} 原因: {e} \033[0m\n')
+                not_valid.append(k)
+            else:
+                local_bind_port = server.local_bind_port
+
+                host['ansible_host'] = jms_asset['address'] = host[
+                    'login_host'] = interface.get_gateway_proxy_host()
+                host['ansible_port'] = jms_asset['port'] = host['login_port'] = local_bind_port
+                servers.append(server)
+
+        # 网域不可连接的，就不继续执行此资源的后续任务了
+        for a in set(not_valid):
+            info['all']['hosts'].pop(a)
+        self.json_to_file(runner.inventory, info)
+        self.gateway_servers[runner.id] = servers
+
+    def local_gateway_clean(self, runner):
+        servers = self.gateway_servers.get(runner.id, [])
+        for s in servers:
+            try:
+                s.stop()
+            except Exception:
+                pass
 
 
 class PlaybookCallback(DefaultCallback):
@@ -37,7 +96,6 @@ class BasePlaybookManager:
         # 根据执行方式就行分组, 不同资产的改密、推送等操作可能会使用不同的执行方式
         # 然后根据执行方式分组, 再根据 bulk_size 分组, 生成不同的 playbook
         self.playbooks = []
-        self.gateway_servers = dict()
         params = self.execution.snapshot.get('params')
         self.params = params or {}
 
@@ -157,22 +215,19 @@ class BasePlaybookManager:
             os.chmod(key_path, 0o400)
         return key_path
 
-    def generate_inventory(self, platformed_assets, inventory_path):
+    def generate_inventory(self, platformed_assets, inventory_path, protocol):
         inventory = JMSInventory(
             assets=platformed_assets,
             account_prefer=self.ansible_account_prefer,
             account_policy=self.ansible_account_policy,
             host_callback=self.host_callback,
             task_type=self.__class__.method_type(),
+            protocol=protocol,
         )
         inventory.write_to_file(inventory_path)
 
-    def generate_playbook(self, platformed_assets, platform, sub_playbook_dir):
-        method_id = getattr(platform.automation, '{}_method'.format(self.__class__.method_type()))
-        method = self.method_id_meta_mapper.get(method_id)
-        if not method:
-            logger.error("Method not found: {}".format(method_id))
-            return
+    @staticmethod
+    def generate_playbook(method, sub_playbook_dir):
         method_playbook_dir_path = method['dir']
         sub_playbook_path = os.path.join(sub_playbook_dir, 'project', 'main.yml')
         shutil.copytree(method_playbook_dir_path, os.path.dirname(sub_playbook_path))
@@ -204,12 +259,20 @@ class BasePlaybookManager:
                 sub_dir = '{}_{}'.format(platform.name, i)
                 playbook_dir = os.path.join(self.runtime_dir, sub_dir)
                 inventory_path = os.path.join(self.runtime_dir, sub_dir, 'hosts.json')
-                self.generate_inventory(_assets, inventory_path)
-                playbook_path = self.generate_playbook(_assets, platform, playbook_dir)
+
+                method_id = getattr(platform.automation, '{}_method'.format(self.__class__.method_type()))
+                method = self.method_id_meta_mapper.get(method_id)
+
+                if not method:
+                    logger.error("Method not found: {}".format(method_id))
+                    continue
+                protocol = method.get('protocol')
+                self.generate_inventory(_assets, inventory_path, protocol)
+                playbook_path = self.generate_playbook(method, playbook_dir)
                 if not playbook_path:
                     continue
 
-                runer = PlaybookRunner(
+                runer = SuperPlaybookRunner(
                     inventory_path,
                     playbook_path,
                     self.runtime_dir,
@@ -237,80 +300,28 @@ class BasePlaybookManager:
             for host in hosts:
                 result = cb.host_results.get(host)
                 if state == 'ok':
-                    self.on_host_success(host, result)
+                    self.on_host_success(host, result.get('ok', ''))
                 elif state == 'skipped':
                     pass
                 else:
                     error = hosts.get(host)
-                    self.on_host_error(host, error, result)
+                    self.on_host_error(
+                        host, error,
+                        result.get('failures', '')
+                        or result.get('dark', '')
+                    )
 
     def on_runner_failed(self, runner, e):
         print("Runner failed: {} {}".format(e, self))
 
     @staticmethod
-    def file_to_json(path):
-        with open(path, 'r') as f:
-            d = json.load(f)
-        return d
-
-    @staticmethod
     def json_dumps(data):
         return json.dumps(data, indent=4, sort_keys=True)
-
-    @staticmethod
-    def json_to_file(path, data):
-        with open(path, 'w') as f:
-            json.dump(data, f, indent=4, sort_keys=True)
-
-    def local_gateway_prepare(self, runner):
-        info = self.file_to_json(runner.inventory)
-        servers, not_valid = [], []
-        for k, host in info['all']['hosts'].items():
-            jms_asset, jms_gateway = host.get('jms_asset'), host.get('gateway')
-            if not jms_gateway:
-                continue
-            try:
-                server = SSHTunnelForwarder(
-                    (jms_gateway['address'], jms_gateway['port']),
-                    ssh_username=jms_gateway['username'],
-                    ssh_password=jms_gateway['secret'],
-                    ssh_pkey=jms_gateway['private_key_path'],
-                    remote_bind_address=(jms_asset['address'], jms_asset['port'])
-                )
-                server.start()
-            except Exception as e:
-                err_msg = 'Gateway is not active: %s' % jms_asset.get('name', '')
-                print(f'\033[31m {err_msg} 原因: {e} \033[0m\n')
-                not_valid.append(k)
-            else:
-                host['ansible_host'] = jms_asset['address'] = '127.0.0.1'
-                host['ansible_port'] = jms_asset['port'] = server.local_bind_port
-                servers.append(server)
-
-        # 网域不可连接的，就不继续执行此资源的后续任务了
-        for a in set(not_valid):
-            info['all']['hosts'].pop(a)
-        self.json_to_file(runner.inventory, info)
-        self.gateway_servers[runner.id] = servers
-
-    def local_gateway_clean(self, runner):
-        servers = self.gateway_servers.get(runner.id, [])
-        for s in servers:
-            try:
-                s.stop()
-            except Exception:
-                pass
-
-    def before_runner_start(self, runner):
-        self.local_gateway_prepare(runner)
-
-    def after_runner_end(self, runner):
-        self.local_gateway_clean(runner)
 
     def delete_runtime_dir(self):
         if settings.DEBUG_DEV:
             return
-        shutil.rmtree(self.runtime_dir)
+        shutil.rmtree(self.runtime_dir, ignore_errors=True)
 
     def run(self, *args, **kwargs):
         print(">>> 任务准备阶段\n")
@@ -326,14 +337,16 @@ class BasePlaybookManager:
         for i, runner in enumerate(runners, start=1):
             if len(runners) > 1:
                 print(">>> 开始执行第 {} 批任务".format(i))
-            self.before_runner_start(runner)
+            ssh_tunnel = SSHTunnelManager()
+            ssh_tunnel.local_gateway_prepare(runner)
             try:
+                kwargs.update({"clean_workspace": False})
                 cb = runner.run(**kwargs)
                 self.on_runner_success(runner, cb)
             except Exception as e:
                 self.on_runner_failed(runner, e)
             finally:
-                self.after_runner_end(runner)
+                ssh_tunnel.local_gateway_clean(runner)
                 print('\n')
         self.execution.status = 'success'
         self.execution.date_finished = timezone.now()

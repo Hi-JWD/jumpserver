@@ -2,6 +2,7 @@
 from django.urls import path
 from rest_framework_bulk.routes import BulkRouter
 
+from labels.api import LabelViewSet
 from .. import api
 
 app_name = 'assets'
@@ -17,12 +18,12 @@ router.register(r'clouds', api.CloudViewSet, 'cloud')
 router.register(r'gpts', api.GPTViewSet, 'gpt')
 router.register(r'customs', api.CustomViewSet, 'custom')
 router.register(r'platforms', api.AssetPlatformViewSet, 'platform')
-router.register(r'labels', api.LabelViewSet, 'label')
 router.register(r'nodes', api.NodeViewSet, 'node')
 router.register(r'domains', api.DomainViewSet, 'domain')
 router.register(r'gateways', api.GatewayViewSet, 'gateway')
 router.register(r'favorite-assets', api.FavoriteAssetViewSet, 'favorite-asset')
 router.register(r'protocol-settings', api.PlatformProtocolViewSet, 'protocol-setting')
+router.register(r'labels', LabelViewSet, 'label')
 
 urlpatterns = [
     # path('assets/<uuid:pk>/gateways/', api.AssetGatewayListApi.as_view(), name='asset-gateway-list'),

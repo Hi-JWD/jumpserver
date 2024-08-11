@@ -171,11 +171,12 @@ class Applet(JMSBaseModel):
         if not hosts:
             return None
 
-        spec_label = asset.labels.filter(name__in=['AppletHost', '发布机']).first()
-        if spec_label:
-            matched = [host for host in hosts if host.name == spec_label.value]
+        spec_label = asset.labels.filter(label__name__in=['AppletHost', '发布机']).first()
+        if spec_label and spec_label.label:
+            label_value = spec_label.label.value
+            matched = [host for host in hosts if host.name == label_value]
             if matched:
-                return matched[0]
+                return random.choice(matched)
 
         hosts = [h for h in hosts if h.auto_create_accounts]
         prefer_key = self.host_prefer_key_tpl.format(user.id)
@@ -299,10 +300,9 @@ class Applet(JMSBaseModel):
         res = {
             'host': host,
             'account': account,
-            'lock_key': lock_key,
-            'ttl': ttl
+            'lock_key': lock_key
         }
-        logger.debug('Select host and account: {}'.format(res))
+        logger.debug('Select host and account: {}-{}'.format(host.name, account.username))
         return res
 
     def delete(self, using=None, keep_parents=False):

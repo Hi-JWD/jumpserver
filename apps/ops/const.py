@@ -37,6 +37,7 @@ class CreateMethods(models.TextChoices):
 class Types(models.TextChoices):
     adhoc = 'adhoc', _('Adhoc')
     playbook = 'playbook', _('Playbook')
+    upload_file = 'upload_file', _('Upload File')
 
 
 class RunasPolicies(models.TextChoices):
@@ -53,6 +54,7 @@ class JobModules(models.TextChoices):
     postgresql = 'postgresql', _('PostgreSQL')
     sqlserver = 'sqlserver', _('SQLServer')
     raw = 'raw', _('Raw')
+    huawei = 'huawei', _('HUAWEI')
 
 
 class AdHocModules(models.TextChoices):

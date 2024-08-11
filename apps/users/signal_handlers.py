@@ -13,8 +13,9 @@ from audits.models import UserSession
 from authentication.backends.oauth2.signals import oauth2_create_or_update_user
 from authentication.backends.oidc.signals import openid_create_or_update_user
 from authentication.backends.saml2.signals import saml2_create_or_update_user
-from common.const.crontab import CRONTAB_AT_PM_TWO
+from common.const.crontab import CRONTAB_AT_AM_TWO
 from common.decorators import on_transaction_commit
+from common.sessions.cache import user_session_manager
 from common.utils import get_logger
 from jumpserver.utils import get_current_request
 from ops.celery.decorator import register_as_period_task
@@ -64,16 +65,15 @@ def user_authenticated_handle(user, created, source, attrs=None, **kwargs):
 
 @receiver(post_save, sender=User)
 def save_passwd_change(sender, instance: User, **kwargs):
+    if instance.source != User.Source.local.value or not instance.password:
+        return
+
     passwords = UserPasswordHistory.objects \
         .filter(user=instance) \
         .order_by('-date_created') \
-        .values_list('password', flat=True)
-    passwords = passwords[:int(settings.OLD_PASSWORD_HISTORY_LIMIT_COUNT)]
+        .values_list('password', flat=True)[:settings.OLD_PASSWORD_HISTORY_LIMIT_COUNT]
 
-    for p in passwords:
-        if instance.password == p:
-            break
-    else:
+    if instance.password not in list(passwords):
         UserPasswordHistory.objects.create(
             user=instance, password=instance.password,
             date_created=instance.date_password_last_updated
@@ -163,13 +163,14 @@ def on_openid_create_or_update_user(sender, request, user, created, name, userna
         user.save()
 
 
-@shared_task(verbose_name=_('Clean audits session task log'))
-@register_as_period_task(crontab=CRONTAB_AT_PM_TWO)
-def clean_audits_log_period():
+@shared_task(verbose_name=_('Clean up expired user sessions'))
+@register_as_period_task(crontab=CRONTAB_AT_AM_TWO)
+def clean_expired_user_session_period():
     UserSession.clear_expired_sessions()
 
 
 @receiver(user_logged_out)
 def user_logged_out_callback(sender, request, user, **kwargs):
     session_key = request.session.session_key
+    user_session_manager.remove(session_key)
     UserSession.objects.filter(key=session_key).delete()

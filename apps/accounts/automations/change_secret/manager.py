@@ -4,11 +4,12 @@ from copy import deepcopy
 
 from django.conf import settings
 from django.utils import timezone
-from openpyxl import Workbook
+from django.utils.translation import gettext_lazy as _
+from xlsxwriter import Workbook
 
-from accounts.const import AutomationTypes, SecretType, SSHKeyStrategy, SecretStrategy
+from accounts.const import AutomationTypes, SecretType, SSHKeyStrategy, SecretStrategy, ChangeSecretRecordStatusChoice
 from accounts.models import ChangeSecretRecord
-from accounts.notifications import ChangeSecretExecutionTaskMsg
+from accounts.notifications import ChangeSecretExecutionTaskMsg, ChangeSecretFailedMsg
 from accounts.serializers import ChangeSecretRecordBackUpSerializer
 from assets.const import HostTypes
 from common.utils import get_logger
@@ -26,7 +27,7 @@ class ChangeSecretManager(AccountBasePlaybookManager):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.record_id = self.execution.snapshot.get('record_id')
+        self.record_map = self.execution.snapshot.get('record_map', {})
         self.secret_type = self.execution.snapshot.get('secret_type')
         self.secret_strategy = self.execution.snapshot.get(
             'secret_strategy', SecretStrategy.custom
@@ -118,14 +119,24 @@ class ChangeSecretManager(AccountBasePlaybookManager):
             else:
                 new_secret = self.get_secret(secret_type)
 
-            if self.record_id is None:
+            if new_secret is None:
+                print(f'new_secret is None, account: {account}')
+                continue
+
+            asset_account_id = f'{asset.id}-{account.id}'
+            if asset_account_id not in self.record_map:
                 recorder = ChangeSecretRecord(
                     asset=asset, account=account, execution=self.execution,
                     old_secret=account.secret, new_secret=new_secret,
                 )
                 records.append(recorder)
             else:
-                recorder = ChangeSecretRecord.objects.get(id=self.record_id)
+                record_id = self.record_map[asset_account_id]
+                try:
+                    recorder = ChangeSecretRecord.objects.get(id=record_id)
+                except ChangeSecretRecord.DoesNotExist:
+                    print(f"Record {record_id} not found")
+                    continue
 
             self.name_recorder_mapper[h['name']] = recorder
 
@@ -139,7 +150,7 @@ class ChangeSecretManager(AccountBasePlaybookManager):
                 'name': account.name,
                 'username': account.username,
                 'secret_type': secret_type,
-                'secret': new_secret,
+                'secret': account.escape_jinja2_syntax(new_secret),
                 'private_key_path': private_key_path,
                 'become': account.get_ansible_become_auth(),
             }
@@ -153,24 +164,43 @@ class ChangeSecretManager(AccountBasePlaybookManager):
         recorder = self.name_recorder_mapper.get(host)
         if not recorder:
             return
-        recorder.status = 'success'
+        recorder.status = ChangeSecretRecordStatusChoice.success.value
         recorder.date_finished = timezone.now()
-        recorder.save()
+
         account = recorder.account
         if not account:
             print("Account not found, deleted ?")
             return
         account.secret = recorder.new_secret
-        account.save(update_fields=['secret'])
+        account.date_updated = timezone.now()
+
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                recorder.save()
+                account.save(update_fields=['secret', 'version', 'date_updated'])
+                break
+            except Exception as e:
+                retry_count += 1
+                if retry_count == max_retries:
+                    self.on_host_error(host, str(e), result)
+                else:
+                    print(f'retry {retry_count} times for {host} recorder save error: {e}')
+                    time.sleep(1)
 
     def on_host_error(self, host, error, result):
         recorder = self.name_recorder_mapper.get(host)
         if not recorder:
             return
-        recorder.status = 'failed'
+        recorder.status = ChangeSecretRecordStatusChoice.failed.value
         recorder.date_finished = timezone.now()
         recorder.error = error
-        recorder.save()
+        try:
+            recorder.save()
+        except Exception as e:
+            print(f"\033[31m Save {host} recorder error: {e} \033[0m\n")
 
     def on_runner_failed(self, runner, e):
         logger.error("Account error: ", e)
@@ -182,23 +212,56 @@ class ChangeSecretManager(AccountBasePlaybookManager):
             return False
         return True
 
+    @staticmethod
+    def get_summary(recorders):
+        total, succeed, failed = 0, 0, 0
+        for recorder in recorders:
+            if recorder.status == ChangeSecretRecordStatusChoice.success.value:
+                succeed += 1
+            else:
+                failed += 1
+            total += 1
+
+        summary = _('Success: %s, Failed: %s, Total: %s') % (succeed, failed, total)
+        return summary
+
     def run(self, *args, **kwargs):
         if self.secret_type and not self.check_secret():
             return
         super().run(*args, **kwargs)
-        if self.record_id:
-            return
-        recorders = self.name_recorder_mapper.values()
-        recorders = list(recorders)
-        self.send_recorder_mail(recorders)
+        recorders = list(self.name_recorder_mapper.values())
+        summary = self.get_summary(recorders)
+        print(summary, end='')
 
-    def send_recorder_mail(self, recorders):
+        if self.record_map:
+            return
+
+        failed_recorders = [
+            r for r in recorders
+            if r.status == ChangeSecretRecordStatusChoice.failed.value
+        ]
+
         recipients = self.execution.recipients
-        if not recorders or not recipients:
+        recipients = User.objects.filter(id__in=list(recipients.keys()))
+        if not recipients:
             return
 
-        recipients = User.objects.filter(id__in=list(recipients.keys()))
+        if failed_recorders:
+            name = self.execution.snapshot.get('name')
+            execution_id = str(self.execution.id)
+            _ids = [r.id for r in failed_recorders]
+            asset_account_errors = ChangeSecretRecord.objects.filter(
+                id__in=_ids).values_list('asset__name', 'account__username', 'error')
 
+            for user in recipients:
+                ChangeSecretFailedMsg(name, execution_id, user, asset_account_errors).publish()
+
+        if not recorders:
+            return
+
+        self.send_recorder_mail(recipients, recorders, summary)
+
+    def send_recorder_mail(self, recipients, recorders, summary):
         name = self.execution.snapshot['name']
         path = os.path.join(os.path.dirname(settings.BASE_DIR), 'tmp')
         filename = os.path.join(path, f'{name}-{local_now_filename()}-{time.time()}.xlsx')
@@ -208,11 +271,10 @@ class ChangeSecretManager(AccountBasePlaybookManager):
         for user in recipients:
             attachments = []
             if user.secret_key:
-                password = user.secret_key.encode('utf8')
                 attachment = os.path.join(path, f'{name}-{local_now_filename()}-{time.time()}.zip')
-                encrypt_and_compress_zip_file(attachment, password, [filename])
+                encrypt_and_compress_zip_file(attachment, user.secret_key, [filename])
                 attachments = [attachment]
-            ChangeSecretExecutionTaskMsg(name, user).publish(attachments)
+            ChangeSecretExecutionTaskMsg(name, user, summary).publish(attachments)
         os.remove(filename)
 
     @staticmethod
@@ -227,8 +289,9 @@ class ChangeSecretManager(AccountBasePlaybookManager):
 
         rows.insert(0, header)
         wb = Workbook(filename)
-        ws = wb.create_sheet('Sheet1')
-        for row in rows:
-            ws.append(row)
-        wb.save(filename)
+        ws = wb.add_worksheet('Sheet1')
+        for row_index, row_data in enumerate(rows):
+            for col_index, col_data in enumerate(row_data):
+                ws.write_string(row_index, col_index, col_data)
+        wb.close()
         return True

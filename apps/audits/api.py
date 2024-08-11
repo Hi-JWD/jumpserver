@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 #
-
 from importlib import import_module
 
 from django.conf import settings
 from django.db.models import F, Value, CharField, Q
+from django.db.models.functions import Cast
 from django.http import HttpResponse, FileResponse
 from django.utils.encoding import escape_uri_path
 from rest_framework import generics
@@ -19,6 +19,7 @@ from common.const.http import GET, POST
 from common.drf.filters import DatetimeRangeFilterBackend
 from common.permissions import IsServiceAccount
 from common.plugins.es import QuerySet as ESQuerySet
+from common.sessions.cache import user_session_manager
 from common.storage.ftp_file import FTPFileStorageHandler
 from common.utils import is_uuid, get_logger, lazyproperty
 from orgs.mixins.api import OrgReadonlyModelViewSet, OrgModelViewSet
@@ -29,7 +30,7 @@ from terminal.models import default_storage
 from users.models import User
 from .backends import TYPE_ENGINE_MAPPING
 from .const import ActivityChoices
-from .filters import UserSessionFilterSet
+from .filters import UserSessionFilterSet, OperateLogFilterSet
 from .models import (
     FTPLog, UserLoginLog, OperateLog, PasswordChangeLog,
     ActivityLog, JobLog, UserSession
@@ -40,6 +41,7 @@ from .serializers import (
     PasswordChangeLogSerializer, ActivityUnionLogSerializer,
     FileSerializer, UserSessionSerializer
 )
+from .utils import construct_userlogin_usernames
 
 logger = get_logger(__name__)
 
@@ -63,7 +65,7 @@ class FTPLogViewSet(OrgModelViewSet):
     date_range_filter_fields = [
         ('date_start', ('date_from', 'date_to'))
     ]
-    filterset_fields = ['user', 'asset', 'account', 'filename']
+    filterset_fields = ['user', 'asset', 'account', 'filename', 'session']
     search_fields = filterset_fields
     ordering = ['-date_start']
     http_method_names = ['post', 'get', 'head', 'options', 'patch']
@@ -125,15 +127,16 @@ class UserLoginCommonMixin:
 
 class UserLoginLogViewSet(UserLoginCommonMixin, OrgReadonlyModelViewSet):
     @staticmethod
-    def get_org_members():
-        users = current_org.get_members().values_list('username', flat=True)
+    def get_org_member_usernames():
+        user_queryset = current_org.get_members()
+        users = construct_userlogin_usernames(user_queryset)
         return users
 
     def get_queryset(self):
         queryset = super().get_queryset()
         if current_org.is_root():
             return queryset
-        users = self.get_org_members()
+        users = self.get_org_member_usernames()
         queryset = queryset.filter(username__in=users)
         return queryset
 
@@ -163,7 +166,7 @@ class ResourceActivityAPIView(generics.ListAPIView):
             q |= Q(user=str(user))
         queryset = OperateLog.objects.filter(q, org_q).annotate(
             r_type=Value(ActivityChoices.operate_log, CharField()),
-            r_detail_id=F('id'), r_detail=Value(None, CharField()),
+            r_detail_id=Cast(F('id'), CharField()), r_detail=Value(None, CharField()),
             r_user=F('user'), r_action=F('action'),
         ).values(*fields)[:limit]
         return queryset
@@ -201,10 +204,7 @@ class OperateLogViewSet(OrgReadonlyModelViewSet):
     date_range_filter_fields = [
         ('datetime', ('date_from', 'date_to'))
     ]
-    filterset_fields = [
-        'user', 'action', 'resource_type', 'resource',
-        'remote_addr'
-    ]
+    filterset_class = OperateLogFilterSet
     search_fields = ['resource', 'user']
     ordering = ['-datetime']
 
@@ -268,7 +268,7 @@ class UserSessionViewSet(CommonApiMixin, viewsets.ModelViewSet):
         return user_ids
 
     def get_queryset(self):
-        keys = UserSession.get_keys()
+        keys = user_session_manager.get_keys()
         queryset = UserSession.objects.filter(key__in=keys)
         if current_org.is_root():
             return queryset
@@ -286,8 +286,7 @@ class UserSessionViewSet(CommonApiMixin, viewsets.ModelViewSet):
             return Response(status=status.HTTP_200_OK)
 
         keys = queryset.values_list('key', flat=True)
-        session_store_cls = import_module(settings.SESSION_ENGINE).SessionStore
         for key in keys:
-            session_store_cls(key).delete()
+            user_session_manager.remove(key)
         queryset.delete()
         return Response(status=status.HTTP_200_OK)

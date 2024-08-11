@@ -277,6 +277,9 @@ class LDAPCacheUtil(object):
 
 
 class LDAPSyncUtil(object):
+    class LDAPSyncUtilException(Exception):
+        pass
+
     CACHE_KEY_LDAP_USERS_SYNC_TASK_ERROR_MSG = 'CACHE_KEY_LDAP_USERS_SYNC_TASK_ERROR_MSG'
 
     CACHE_KEY_LDAP_USERS_SYNC_TASK_STATUS = 'CACHE_KEY_LDAP_USERS_SYNC_TASK_STATUS'
@@ -328,34 +331,29 @@ class LDAPSyncUtil(object):
 
     def get_task_error_msg(self):
         logger.info('Get task error msg')
-        error_msg = cache.get(self.CACHE_KEY_LDAP_USERS_SYNC_TASK_ERROR_MSG)
+        error_msg = cache.get(self.CACHE_KEY_LDAP_USERS_SYNC_TASK_ERROR_MSG, '')
         return error_msg
 
     def delete_task_error_msg(self):
         logger.info('Delete task error msg')
         cache.delete(self.CACHE_KEY_LDAP_USERS_SYNC_TASK_ERROR_MSG)
 
-    def pre_sync(self):
-        self.set_task_status(self.TASK_STATUS_IS_RUNNING)
-
     def sync(self):
         users = self.server_util.search()
         self.cache_util.set_users(users)
 
-    def post_sync(self):
-        self.set_task_status(self.TASK_STATUS_IS_OVER)
-
     def perform_sync(self):
         logger.info('Start perform sync ldap users from server to cache')
         try:
-            self.pre_sync()
+            ok, msg = LDAPTestUtil().test_config()
+            if not ok:
+                raise self.LDAPSyncUtilException(msg)
             self.sync()
         except Exception as e:
             error_msg = str(e)
             logger.error(error_msg)
             self.set_task_error_msg(error_msg)
         finally:
-            self.post_sync()
             logger.info('End perform sync ldap users from server to cache')
             close_old_connections()
 
@@ -402,11 +400,14 @@ class LDAPImportUtil(object):
         logger.info('Start perform import ldap users, count: {}'.format(len(users)))
         errors = []
         objs = []
+        new_users = []
         group_users_mapper = defaultdict(set)
         for user in users:
             groups = user.pop('groups', [])
             try:
                 obj, created = self.update_or_create(user)
+                if created:
+                    new_users.append(obj)
                 objs.append(obj)
             except Exception as e:
                 errors.append({user['username']: str(e)})
@@ -423,14 +424,13 @@ class LDAPImportUtil(object):
         for org in orgs:
             self.bind_org(org, objs, group_users_mapper)
         logger.info('End perform import ldap users')
-        return errors
+        return new_users, errors
 
-    @staticmethod
-    def exit_user_group(user_groups_mapper):
+    def exit_user_group(self, user_groups_mapper):
         # 通过对比查询本次导入用户需要移除的用户组
         group_remove_users_mapper = defaultdict(set)
         for user, current_groups in user_groups_mapper.items():
-            old_groups = set(user.groups.all())
+            old_groups = set(user.groups.filter(name__startswith=self.user_group_name_prefix))
             exit_groups = old_groups - current_groups
             logger.debug(f'Ldap user {user} exits user groups {exit_groups}')
             for g in exit_groups:
@@ -650,9 +650,9 @@ class LDAPTestUtil(object):
     # test login
 
     def _test_before_login_check(self, username, password):
-        ok, msg = self.test_config()
-        if not ok:
-            raise LDAPConfigurationError(msg)
+        from settings.ws import CACHE_KEY_LDAP_TEST_CONFIG_TASK_STATUS, TASK_STATUS_IS_OVER
+        if not cache.get(CACHE_KEY_LDAP_TEST_CONFIG_TASK_STATUS):
+            self.test_config()
 
         backend = LDAPAuthorizationBackend()
         ok, msg = backend.pre_check(username, password)

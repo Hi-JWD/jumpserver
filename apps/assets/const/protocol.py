@@ -23,6 +23,7 @@ class Protocol(ChoicesMixin, models.TextChoices):
     postgresql = 'postgresql', 'PostgreSQL'
     sqlserver = 'sqlserver', 'SQLServer'
     db2 = 'db2', 'DB2'
+    dameng = 'dameng', 'Dameng'
     clickhouse = 'clickhouse', 'ClickHouse'
     redis = 'redis', 'Redis'
     mongodb = 'mongodb', 'MongoDB'
@@ -38,6 +39,14 @@ class Protocol(ChoicesMixin, models.TextChoices):
             cls.ssh: {
                 'port': 22,
                 'secret_types': ['password', 'ssh_key'],
+                'setting': {
+                    'old_ssh_version': {
+                        'type': 'bool',
+                        'default': False,
+                        'label': _('Old SSH version'),
+                        'help_text': _('Old SSH version like openssh 5.x or 6.x')
+                    }
+                }
             },
             cls.sftp: {
                 'port': 22,
@@ -177,6 +186,12 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 'secret_types': ['password'],
                 'xpack': True,
             },
+            cls.dameng: {
+                'port': 5236,
+                'required': True,
+                'secret_types': ['password'],
+                'xpack': True,
+            },
             cls.clickhouse: {
                 'port': 9000,
                 'required': True,
@@ -187,6 +202,20 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 'port': 27017,
                 'required': True,
                 'secret_types': ['password'],
+                'setting': {
+                    'auth_source': {
+                        'type': 'str',
+                        'default': 'admin',
+                        'label': _('Auth source'),
+                        'help_text': _('The database to authenticate against')
+                    },
+                    'connection_options': {
+                        'type': 'str',
+                        'default': '',
+                        'label': _('Connection options'),
+                        'help_text': _('The connection specific options eg. retryWrites=false&retryReads=false')
+                    }
+                }
             },
             cls.redis: {
                 'port': 6379,
@@ -270,7 +299,7 @@ class Protocol(ChoicesMixin, models.TextChoices):
                         'label': _('API mode'),
                         'choices': [
                             ('gpt-3.5-turbo', 'GPT-3.5 Turbo'),
-                            ('gpt-3.5-turbo-16k', 'GPT-3.5 Turbo 16K'),
+                            ('gpt-3.5-turbo-1106', 'GPT-3.5 Turbo 1106'),
                         ]
                     }
                 }
@@ -280,7 +309,8 @@ class Protocol(ChoicesMixin, models.TextChoices):
             choices = protocols[cls.chatgpt]['setting']['api_mode']['choices']
             choices.extend([
                 ('gpt-4', 'GPT-4'),
-                ('gpt-4-32k', 'GPT-4 32K'),
+                ('gpt-4-turbo', 'GPT-4 Turbo'),
+                ('gpt-4o', 'GPT-4o'),
             ])
         return protocols
 

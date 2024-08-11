@@ -155,10 +155,6 @@ def is_uuid(seq):
 
 
 def get_request_ip(request):
-    x_real_ip = request.META.get('HTTP_X_REAL_IP', '')
-    if x_real_ip:
-        return x_real_ip
-
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')
     if x_forwarded_for and x_forwarded_for[0]:
         login_ip = x_forwarded_for[0]
@@ -224,7 +220,7 @@ def timeit(func):
         now = time.time()
         result = func(*args, **kwargs)
         using = (time.time() - now) * 1000
-        msg = "End call {}, using: {:.1f}ms".format(name, using)
+        msg = "Ends  call: {}, using: {:.1f}ms".format(name, using)
         logger.debug(msg)
         return result
 

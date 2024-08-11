@@ -8,8 +8,9 @@ from django.utils.translation import gettext_lazy as _
 from accounts.const import AliasAccount
 from accounts.models import Account
 from assets.models import Asset
-from common.utils import date_expired_default
+from common.utils import date_expired_default, lazyproperty
 from common.utils.timezone import local_now
+from labels.mixins import LabeledMixin
 from orgs.mixins.models import JMSOrgBaseModel
 from orgs.mixins.models import OrgManager
 from perms.const import ActionChoices
@@ -56,7 +57,7 @@ def default_protocols():
     return ['all']
 
 
-class AssetPermission(JMSOrgBaseModel):
+class AssetPermission(LabeledMixin, JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
     users = models.ManyToManyField(
         'users.User', related_name='%(class)ss', blank=True, verbose_name=_("User")
@@ -68,7 +69,7 @@ class AssetPermission(JMSOrgBaseModel):
         'assets.Asset', related_name='granted_by_permissions', blank=True, verbose_name=_("Asset")
     )
     nodes = models.ManyToManyField(
-        'assets.Node', related_name='granted_by_permissions', blank=True, verbose_name=_("Nodes")
+        'assets.Node', related_name='granted_by_permissions', blank=True, verbose_name=_("Node")
     )
     # 特殊的账号: @ALL, @INPUT @USER 默认包含，将来在全局设置中进行控制.
     accounts = models.JSONField(default=list, verbose_name=_("Account"))
@@ -104,7 +105,23 @@ class AssetPermission(JMSOrgBaseModel):
             return True
         return False
 
-    def get_all_users(self, flat=False):
+    @lazyproperty
+    def users_amount(self):
+        return self.users.count()
+
+    @lazyproperty
+    def user_groups_amount(self):
+        return self.user_groups.count()
+
+    @lazyproperty
+    def assets_amount(self):
+        return self.assets.count()
+
+    @lazyproperty
+    def nodes_amount(self):
+        return self.nodes.count()
+
+    def get_all_users(self):
         from users.models import User
         user_ids = self.users.all().values_list('id', flat=True)
         group_ids = self.user_groups.all().values_list('id', flat=True)
@@ -113,9 +130,7 @@ class AssetPermission(JMSOrgBaseModel):
         qs1_ids = User.objects.filter(id__in=user_ids).distinct().values_list('id', flat=True)
         qs2_ids = User.objects.filter(groups__id__in=group_ids).distinct().values_list('id', flat=True)
         qs_ids = list(qs1_ids) + list(qs2_ids)
-        if flat:
-            return qs_ids
-        qs = User.objects.filter(id__in=qs_ids)
+        qs = User.objects.filter(id__in=qs_ids, is_service_account=False)
         return qs
 
     def get_all_assets(self, flat=False):
@@ -144,11 +159,14 @@ class AssetPermission(JMSOrgBaseModel):
 
     @classmethod
     def get_all_users_for_perms(cls, perm_ids, flat=False):
-        user_ids = cls.users.through.objects.filter(assetpermission_id__in=perm_ids) \
+        user_ids = cls.users.through.objects \
+            .filter(assetpermission_id__in=perm_ids) \
             .values_list('user_id', flat=True).distinct()
-        group_ids = cls.user_groups.through.objects.filter(assetpermission_id__in=perm_ids) \
+        group_ids = cls.user_groups.through.objects \
+            .filter(assetpermission_id__in=perm_ids) \
             .values_list('usergroup_id', flat=True).distinct()
-        group_user_ids = User.groups.through.objects.filter(usergroup_id__in=group_ids) \
+        group_user_ids = User.groups.through.objects \
+            .filter(usergroup_id__in=group_ids) \
             .values_list('user_id', flat=True).distinct()
         user_ids = set(user_ids) | set(group_user_ids)
         if flat:
