@@ -1014,15 +1014,6 @@ msgstr "* パスワードの長さの範囲6-30ビット"
 msgid "Automation task execution"
 msgstr "自動タスク実行履歴"
 
-#: accounts/signal_handlers.py:47
-#: accounts/serializers/automations/change_secret.py:149 audits/const.py:61
-#: audits/models.py:64 audits/signal_handlers/activity_log.py:33
-#: common/const/choices.py:18 ops/const.py:72 ops/serializers/celery.py:40
-#: reports/models.py:59 terminal/const.py:77
-#: terminal/models/session/sharing.py:121 tickets/views/approve.py:117
-msgid "Success"
-msgstr "成功"
-
 #: accounts/signal_handlers.py:46
 #, python-format
 msgid "Push related accounts to assets: %s, by system"
@@ -2266,11 +2257,6 @@ msgstr "資産数量"
 #: assets/serializers/gateway.py:23 common/validators.py:34
 msgid "This field must be unique."
 msgstr "このフィールドは一意である必要があります。"
-
-#: assets/serializers/label.py:12 reports/tasks/report/asset.py:63
-#: reports/tasks/report/asset.py:93
-msgid "Assets amount"
-msgstr "資産額"
 
 #: assets/serializers/node.py:17
 msgid "value"
@@ -3751,12 +3737,6 @@ msgstr "タイミングトリガー"
 msgid "Ready"
 msgstr "の準備を"
 
-#: common/const/choices.py:17 ops/const.py:73
-#: common/const/choices.py:16 terminal/const.py:76 tickets/const.py:29
-#: tickets/const.py:39
-msgid "Pending"
-msgstr "未定"
-
 #: common/const/choices.py:17 ops/const.py:71 reports/models.py:58
 msgid "Running"
 msgstr "ランニング"
@@ -4917,11 +4897,6 @@ msgstr "システムロールバインディング"
 #: rbac/serializers/permission.py:25 users/serializers/profile.py:108
 msgid "Perms"
 msgstr "パーマ"
-
-#: rbac/serializers/role.py:27 reports/tasks/report/user.py:124
-#: users/serializers/group.py:30
-msgid "Users amount"
-msgstr "ユーザー数"
 
 #: rbac/serializers/role.py:28 terminal/models/applet/applet.py:34
 #: terminal/models/virtualapp/virtualapp.py:20
@@ -7149,10 +7124,6 @@ msgstr "使用メモリ"
 msgid "Disk Used"
 msgstr "使用済みディスク"
 
-#: terminal/models/component/status.py:19
-msgid "Connections"
-msgstr "接続"
-
 #: terminal/models/component/status.py:20
 msgid "Threads"
 msgstr "スレッド"
@@ -7789,11 +7760,6 @@ msgstr "端末の状態を定期的にクリーンアップする"
 #: terminal/tasks.py:39
 msgid "Clean orphan session"
 msgstr "オフライン セッションをクリアする"
-
-#: terminal/tasks.py:87
-#: terminal/tasks.py:62
-msgid "Upload session replay to external storage"
-msgstr "セッションの記録を外部ストレージにアップロードする"
 
 #: terminal/tasks.py:91
 msgid "Run applet host deployment"
