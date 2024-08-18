@@ -176,7 +176,7 @@ class WorkerPool(object):
         filename: str = f'{execution.id}.bs'
         filepath = os.path.join(settings.BEHEMOTH_DIR, filename)
         with open(filepath, 'w') as f:
-            f.write(json.dumps(data, cls=JSONEncoder))
+            f.write(json.dumps(data, cls=JSONEncoder, ensure_ascii=False))
         if execution.category == ExecutionCategory.file:
             cmd_file = default_storage.path(commands[0].input)
         return filepath, cmd_file

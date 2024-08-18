@@ -80,7 +80,7 @@ class BasePlanSerializer(serializers.ModelSerializer):
     ), label=_('Playback'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
-    category = LabeledChoiceField(choices=PlanCategory.choices, label=_('Category'))
+    category = LabeledChoiceField(required=False, choices=PlanCategory.choices, label=_('Category'))
 
     class Meta:
         model = Plan
@@ -128,8 +128,8 @@ class SyncPlanSerializer(BasePlanSerializer):
             return {'ttl': -1, 'users': []}
 
     def validate(self, attrs):
-        attrs = super().validate(attrs)
         attrs['category'] = PlanCategory.sync
+        attrs = super().validate(attrs)
         return attrs
 
     @staticmethod
@@ -196,6 +196,11 @@ class DeployPlanSerializer(BasePlanSerializer):
             choice_data = [{'id': 'default', 'label': _('Default')}]
         choices = [(c['id'], c['label']) for c in choice_data]
         self.fields['c_type'].choices = choices
+
+    def validate(self, attrs):
+        attrs['category'] = PlanCategory.deploy
+        attrs = super().validate(attrs)
+        return attrs
 
 
 class BaseCreateExecutionSerializer(serializers.ModelSerializer):

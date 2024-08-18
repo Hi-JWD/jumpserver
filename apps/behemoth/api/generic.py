@@ -337,7 +337,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
 
 class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Plan
-    search_fields = ['name']
+    search_fields = ['name', 'created_by']
     filterset_fields = ['name', 'category']
     serializer_classes = {
         'default': serializers.DeployPlanSerializer,
