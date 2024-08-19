@@ -34,9 +34,10 @@ def run_task_sync(executions: list[Execution], users: list[str]):
             if execution.plan.category == PlanCategory.sync:
                 environment = execution.plan.environment
                 if execution.asset_name and execution.account_username:
-                    asset = environment.assets.filter(name__endswith=execution.asset_name).first()
+                    new_asset_name = execution.asset_name.replace('：', ':').split(':', 1)[-1]
+                    asset = environment.assets.filter(name__endswith=new_asset_name).first()
                     if not asset:
-                        raise JMSException('环境[%s]下未找到资产[%s]' % (environment, execution.asset_name))
+                        raise JMSException('环境[%s]下未找到资产[%s]' % (environment, exexcution.asset_name))
 
                     account = asset.accounts.filter(username=execution.account_username).first()
                     if not account:
