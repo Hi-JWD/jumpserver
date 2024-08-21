@@ -24,6 +24,13 @@ class DatabaseSerializer(AssetSerializer):
         super().__init__(*args, **kwargs)
         self.set_db_name_required()
 
+    @staticmethod
+    def validate_name(name):
+        name = name.replace('：', ':')
+        if ':' not in name:
+            raise serializers.ValidationError(_("Name must contain ':' characters"))
+        return name
+
     def get_platform(self):
         platform = None
         platform_id = None

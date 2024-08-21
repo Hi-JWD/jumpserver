@@ -3,7 +3,7 @@ from django.utils.translation import gettext as _
 
 from common.serializers.fields import ObjectRelatedField
 from common.serializers import CommonModelSerializer
-from ..models import Playback, MonthlyVersion, PlaybackExecution, Execution
+from ..models import Playback, PlaybackExecution, Execution
 
 
 class SimplePlaybackSerializer(CommonModelSerializer):
@@ -13,15 +13,11 @@ class SimplePlaybackSerializer(CommonModelSerializer):
 
 
 class PlaybackSerializer(CommonModelSerializer):
-    monthly_version = ObjectRelatedField(
-        required=True, queryset=MonthlyVersion.objects, label=_('Monthly version')
-    )
-
     class Meta:
         model = Playback
         fields_mini = ['id', 'name']
         fields_small = fields_mini + ['created_by', 'date_created']
-        fields = fields_small + ['monthly_version', 'comment']
+        fields = fields_small + ['comment']
 
 
 class PlaybackTaskSerializer(serializers.Serializer):

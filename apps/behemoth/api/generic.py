@@ -22,7 +22,7 @@ from behemoth.const import (
 from behemoth.libs.pools.worker import worker_pool
 from behemoth.models import (
     Environment, Playback, Plan, Iteration, Execution, Command,
-    PlaybackExecution, MonthlyVersion
+    PlaybackExecution
 )
 from common.utils import is_uuid, get_logger
 from common.exceptions import JMSException
@@ -66,6 +66,7 @@ class ExecutionMixin:
 
 class EnvironmentViewSet(OrgBulkModelViewSet):
     model = Environment
+    ordering_fields = ('-date_created',)
     search_fields = ['name']
     serializer_classes = {
         'default': serializers.EnvironmentSerializer,
@@ -95,35 +96,9 @@ class EnvironmentViewSet(OrgBulkModelViewSet):
                 return Response(status=http_status.HTTP_400_BAD_REQUEST, data=serializer.errors)
 
 
-class MonthlyVersionViewSet(OrgBulkModelViewSet):
-    model = MonthlyVersion
-    search_fields = ['name']
-    serializer_classes = {
-        'default': serializers.MonthlyVersionSerializer,
-        'get_playbacks': serializers.SimplePlaybackSerializer,
-    }
-    rbac_perms = {
-        'get_playbacks': ['behemoth.view_playbacks']
-    }
-
-    @action(methods=['PATCH', 'DELETE'], detail=True, url_path='playbacks')
-    def get_playbacks(self, request, *args, **kwargs):
-        obj = self.get_object()
-        serializer = serializers.PlaybackMonthlyVersionSerializer(data=request.data)
-        if serializer.is_valid():
-            assets = serializer.validated_data.get('playbacks')
-            action_ = serializer.validated_data['action']
-            if action_ == 'remove':
-                obj.playbacks.remove(*tuple(assets))
-            else:
-                obj.playbacks.add(*tuple(assets))
-            return Response(status=http_status.HTTP_200_OK)
-        else:
-            return Response(status=http_status.HTTP_400_BAD_REQUEST, data=serializer.errors)
-
-
 class PlaybackExecutionViewSet(OrgBulkModelViewSet):
     model = PlaybackExecution
+    ordering_fields = ('date_created',)
     search_fields = ['plan_name', 'execution__version', 'execution__name']
     http_method_names = ('get', 'delete', 'head', 'options',)
     serializer_class = serializers.PlaybackExecutionSerializer
@@ -140,8 +115,8 @@ class PlaybackExecutionViewSet(OrgBulkModelViewSet):
 
 class PlaybackViewSet(OrgBulkModelViewSet):
     model = Playback
+    ordering_fields = ('-date_created',)
     search_fields = ['name']
-    filterset_fields = ['monthly_version']
     serializer_classes = {
         'default': serializers.PlaybackSerializer,
         'insert_pause': serializers.InsertPauseSerializer,
@@ -337,6 +312,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
 
 class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Plan
+    ordering_fields = ('-date_created',)
     search_fields = ['name', 'created_by']
     filterset_fields = ['name', 'category']
     serializer_classes = {
@@ -357,16 +333,45 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         return qs
 
     @staticmethod
-    def _handle_zip_file(file, entry):
+    def get_filename(filename):
+        encodings = ['utf-8', 'gbk']
+        for encoding in encodings:
+            try:
+                filename = filename.encode('cp437').decode(encoding)
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                continue
+            else:
+                break
+        return filename
+
+    @staticmethod
+    def convert_path(content: bytes):
+        new = ''
+        try:
+            for item in content.decode().split('\n'):
+                if not item:
+                    continue
+                if item.strip().startswith('@'):
+                    item = item.replace('\\', '/')
+                new += item + '\n'
+        except Exception:
+            new = content
+        return new.encode()
+
+    def _handle_zip_file(self, file, entry):
+        new_zip_data = io.BytesIO()
         with zipfile.ZipFile(file, 'r') as zip_file:
-            new_zip_data = io.BytesIO()
             with zipfile.ZipFile(new_zip_data, 'w') as new_zip_file:
                 for zip_info in zip_file.infolist():
+                    filename = self.get_filename(zip_info.filename)
                     with zip_file.open(zip_info.filename) as source_file:
-                        new_zip_file.writestr(zip_info, source_file.read())
+                        content = source_file.read()
+                        if entry == filename:
+                            content = self.convert_path(content)
+                        new_zip_file.writestr(filename, content)
                 new_zip_file.writestr('entry.bs', entry)
         new_zip_data.seek(0)
-        return ContentFile(new_zip_data.read(), name=file.name)
+        return ContentFile(new_zip_data.read(), name=self.get_filename(file.name))
 
     @action(['POST'], detail=True, url_path='upload')
     def upload_command_file(self, request, *args, **kwargs):

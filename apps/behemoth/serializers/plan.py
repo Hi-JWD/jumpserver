@@ -15,7 +15,7 @@ from assets.models import Database
 from accounts.models import Account
 from behemoth.models import (
     Plan, Playback, Environment, Command, PlaybackExecution,
-    Execution, ObjectExtend, MonthlyVersion
+    Execution, ObjectExtend
 )
 from behemoth.libs.parser.handle import parse_sql as oracle_parser
 from behemoth.const import (
@@ -75,9 +75,7 @@ class CommandSerializer(SimpleCommandSerializer):
 
 
 class BasePlanSerializer(serializers.ModelSerializer):
-    playback = ObjectRelatedField(queryset=Playback.objects, attrs=(
-        'id', 'name', 'monthly_version_id'
-    ), label=_('Playback'))
+    playback = ObjectRelatedField(queryset=Playback.objects, label=_('Monthly version'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
     category = LabeledChoiceField(required=False, choices=PlanCategory.choices, label=_('Category'))

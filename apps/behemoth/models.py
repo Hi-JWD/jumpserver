@@ -259,10 +259,6 @@ class Environment(JMSOrgBaseModel):
 
 class Playback(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
-    monthly_version = models.ForeignKey(
-        'MonthlyVersion', on_delete=models.CASCADE, related_name='playbacks',
-        null=True, verbose_name=_('Monthly version')
-    )
 
     def create_pause(self, pause_data):
         execution = Execution.objects.create(name=_('Pause'), category=ExecutionCategory.pause)
@@ -384,10 +380,6 @@ class PlaybackExecution(JMSOrgBaseModel):
 
     class Meta:
         ordering = ('date_created',)
-
-
-class MonthlyVersion(JMSOrgBaseModel):
-    name = models.CharField(max_length=128, verbose_name=_('Name'))
 
 
 class Instruction(JMSOrgBaseModel):
