@@ -329,7 +329,7 @@ class ObjectExtend(models.Model):
 class Execution(JMSOrgBaseModel):
     name = models.CharField(default='', max_length=128, verbose_name=_('Name'))
     plan = models.ForeignKey(
-        Plan, null=True, on_delete=models.CASCADE, related_name='executions', verbose_name=_('Plan')
+        Plan, null=True, on_delete=models.SET_NULL, related_name='executions', verbose_name=_('Plan')
     )
     category = models.CharField(
         max_length=32, default=ExecutionCategory.cmd,

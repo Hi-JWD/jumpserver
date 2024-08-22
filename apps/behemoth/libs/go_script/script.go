@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
@@ -196,66 +195,16 @@ func (s *LocalScriptHandler) CheckHasErrorCode(result string) bool {
 }
 
 func (s *LocalScriptHandler) IsZipFile() bool {
-	f, err := os.Open(s.opts.CmdFile)
-	if err != nil {
-		return false
-	}
-	defer func(f *os.File) {
-		err = f.Close()
-	}(f)
-
-	buf := make([]byte, 4)
-	n, err := f.Read(buf)
-	if err != nil {
-		return false
-	}
-	if n < 4 {
-		return false
-	}
-	return bytes.Equal(buf, []byte("PK\x03\x04"))
+	// 客户环境无法拿出来压缩包，无法知道为啥解压失败的问题，故这里只判断文件后缀
+	return strings.HasSuffix(s.opts.CmdFile, ".zip")
 }
 
 func (s *LocalScriptHandler) unzipFile() (string, error) {
-	r, err := zip.OpenReader(s.opts.CmdFile)
+	destDir := filepath.Dir(s.opts.CmdFile)
+	cmd := exec.Command("unzip", "-o", s.opts.CmdFile, "-d", destDir)
+	err := cmd.Run()
 	if err != nil {
 		return "", err
-	}
-	defer func(r *zip.ReadCloser) {
-		err = r.Close()
-	}(r)
-
-	destDir := filepath.Dir(s.opts.CmdFile)
-	for _, f := range r.File {
-		fPath := filepath.Join(destDir, f.Name)
-		if f.FileInfo().IsDir() {
-			err = os.MkdirAll(fPath, f.Mode())
-			if err != nil {
-				return "", err
-			}
-		} else {
-			err = func() error {
-				rc, err := f.Open()
-				if err != nil {
-					return err
-				}
-				defer func(rc io.ReadCloser) {
-					err = rc.Close()
-				}(rc)
-
-				outFile, err := os.Create(fPath)
-				if err != nil {
-					return err
-				}
-				defer func(outFile *os.File) {
-					err = outFile.Close()
-				}(outFile)
-				_, err = io.Copy(outFile, rc)
-				return err
-			}()
-			if err != nil {
-				return "", err
-			}
-		}
 	}
 	return destDir, nil
 }
