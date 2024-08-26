@@ -345,6 +345,10 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         return filename
 
     @staticmethod
+    def remove_bom(content: bytes):
+        return content[3:] if content.startswith(b'\xef\xbb\xbf') else content
+
+    @staticmethod
     def convert_path(content: bytes):
         new = ''
         try:
@@ -366,6 +370,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
                     filename = self.get_filename(zip_info.filename)
                     with zip_file.open(zip_info.filename) as source_file:
                         content = source_file.read()
+                        content = self.remove_bom(content)
                         if entry == filename:
                             content = self.convert_path(content)
                         new_zip_file.writestr(filename, content)
