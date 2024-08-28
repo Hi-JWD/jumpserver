@@ -79,23 +79,13 @@ class BasePlanSerializer(serializers.ModelSerializer):
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
     category = LabeledChoiceField(required=False, choices=PlanCategory.choices, label=_('Category'))
+    execution = serializers.SerializerMethodField(label=_('Execution'))
 
     class Meta:
         model = Plan
         fields_mini = ['id', 'name', 'category']
         fields_small = fields_mini + ['environment', 'playback', 'plan_strategy']
-        fields = fields_small + ['created_by', 'comment', 'date_created']
-
-
-class SyncPlanSerializer(BasePlanSerializer):
-    users = serializers.SerializerMethodField(label=_('Users'))
-    playback_executions = serializers.ListSerializer(
-        child=serializers.CharField(max_length=36), label=_('Playback executions')
-    )
-    execution = serializers.SerializerMethodField(label=_('Execution'))
-
-    class Meta(BasePlanSerializer.Meta):
-        fields = BasePlanSerializer.Meta.fields + ['users', 'execution', 'playback_executions']
+        fields = fields_small + ['execution', 'created_by', 'comment', 'date_created']
 
     @staticmethod
     def get_execution(obj):
@@ -108,6 +98,16 @@ class SyncPlanSerializer(BasePlanSerializer):
             else:
                 status = e['status']
         return {'task_id': task_id, 'status': status}
+
+
+class SyncPlanSerializer(BasePlanSerializer):
+    users = serializers.SerializerMethodField(label=_('Users'))
+    playback_executions = serializers.ListSerializer(
+        child=serializers.CharField(max_length=36), label=_('Playback executions')
+    )
+
+    class Meta(BasePlanSerializer.Meta):
+        fields = BasePlanSerializer.Meta.fields + ['users', 'playback_executions']
 
     @staticmethod
     def get_users(obj):

@@ -5,6 +5,7 @@ import zipfile
 from django.utils.translation import gettext_lazy as _
 from django.core.cache import cache
 from django.conf import settings
+from django.http import FileResponse
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from rest_framework.decorators import action
@@ -26,7 +27,7 @@ from behemoth.models import (
 )
 from common.utils import is_uuid, get_logger
 from common.exceptions import JMSException
-from common.utils.timezone import local_now_display
+from common.utils.timezone import local_now_display, local_now_filename
 from orgs.mixins.api import OrgBulkModelViewSet
 from orgs.utils import get_current_org_id
 
@@ -145,7 +146,8 @@ class CommandViewSet(OrgBulkModelViewSet):
         ('format_commands', serializers.FormatCommandSerializer),
     )
     rbac_perms = {
-        'format_commands': 'behemoth.view_command'
+        'format_commands': 'behemoth.view_command',
+        'download': 'behemoth.view_command'
     }
 
     def allow_bulk_destroy(self, qs, filtered):
@@ -154,6 +156,27 @@ class CommandViewSet(OrgBulkModelViewSet):
     def perform_destroy(self, instance):
         instance.has_delete = True
         instance.save(update_fields=['has_delete'])
+
+    @action(methods=['GET'], detail=True, url_path='download')
+    def download(self, request, *args, **kwargs):
+        command_attr = request.query_params.get('type')
+        if command_attr not in ('input', 'output'):
+            return Response({'error': f'Invalid param type : {command_attr}'}, status=400)
+
+        command = self.get_object()
+        path_or_content = getattr(command, command_attr, '')
+        if not path_or_content or not default_storage.exists(path_or_content):
+            prefix = request.query_params.get('filename', _('Command'))
+            filename = '%s_%s.sql' % (prefix, local_now_filename())
+            file = io.BytesIO()
+            file.write(path_or_content.encode() + b'\n')
+            file.seek(0)
+        else:
+            filename = os.path.basename(path_or_content)
+            file = open(default_storage.path(path_or_content), 'rb')
+
+        response = FileResponse(file, filename=filename, as_attachment=True)
+        return response
 
     @staticmethod
     def cache_command(mark_id, item):
@@ -316,7 +339,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
     search_fields = ['name', 'created_by']
     filterset_fields = ['name', 'category']
     serializer_classes = {
-        'default': serializers.DeployPlanSerializer,
+        'default': serializers.BasePlanSerializer,
         'deploy': serializers.DeployPlanSerializer,
         'sync': serializers.SyncPlanSerializer,
         'upload_command_file': serializers.SyncPlanUploadSerializer,
