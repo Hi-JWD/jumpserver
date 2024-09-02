@@ -68,7 +68,7 @@ class UserReport(BaseReport):
             elif not user.is_active:
                 self.disabled_user_count += 1
 
-            if (local_now() - user.date_joined).days < self.time_period:
+            if self.date_start < user.date_joined < self.date_end:
                 self.new_user_count += 1
             user_source_counter.update([user.get_source_display()])
 
@@ -140,9 +140,9 @@ class UserReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('In the past %s days, logged in %s times '
+                'data': _('From %s, to %s, logged in %s times '
                           'with %s people, as shown below:') % (
-                    self.time_period, total_login, len(sessions)
+                    self.date_start_display, self.date_end_display, total_login, len(sessions)
                 )
             },
             {
@@ -182,16 +182,16 @@ class UserReport(BaseReport):
 
     def get_summary(self):
         self._get_other_data()
-        summary = _('There are currently %s user groups and %s users, '
+        summary = _('From %s, to %s, there are currently %s user groups and %s users, '
                     'including %s valid users and %s disabled users. '
                     'User sources are %s, %s system administrators, '
                     '%s organizational administrators, and %s other users. '
-                    '%s new users have been added in the past %s, '
-                    'and users have logged in %s times, successfully '
-                    '%s times, and failed %s times.') % (
+                    '%s new users have been added, and users have logged in %s times, '
+                    'successfully %s times, and failed %s times.') % (
+            self.date_start_display, self.date_end_display,
             self.user_group_count, self.user_count, self.valid_user_count,
             self.disabled_user_count, self.user_source, self.system_admin_count,
-            self.org_admin_count, self.other_user_count, self.time_period,
+            self.org_admin_count, self.other_user_count,
             self.new_user_count, self.login_count, self.login_success_count,
             self.login_failed_count
         )

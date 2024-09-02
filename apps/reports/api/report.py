@@ -1,6 +1,4 @@
 from django.http import FileResponse, HttpResponse
-from django.utils.translation import gettext_lazy as _
-from django.utils.encoding import escape_uri_path
 from django.core.files.storage import default_storage
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -75,8 +73,4 @@ class ReportExecutionViewSet(ModelViewSet):
             logger.error(f'User({request.user}) failed to find this path: {local_path}. Error: {err}')
             return HttpResponse(status=status.HTTP_404_NOT_FOUND)
 
-        response = FileResponse(file)
-        response['Content-Type'] = 'application/octet-stream'
-        filename = escape_uri_path(f'{instance.report_type}_{local_now_display()}')
-        response["Content-Disposition"] = f"attachment; filename*=UTF-8''{filename}.pdf"
-        return response
+        return FileResponse(file, as_attachment=True, filename=f'report-{local_now_display()}.pdf')

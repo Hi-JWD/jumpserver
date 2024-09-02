@@ -52,7 +52,8 @@ def format_seconds(seconds):
         result += _('%s hour ') % int(hours)
     if minutes:
         result += _('%s minute ') % int(minutes)
-    result += _('%s second') % int(seconds)
+    if not result or seconds:
+        result += _('%s second') % int(seconds)
     return result.strip()
 
 

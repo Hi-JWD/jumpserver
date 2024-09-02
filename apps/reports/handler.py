@@ -1,9 +1,12 @@
 import os
 
+from datetime import timedelta
+
 from django.utils.translation import gettext_lazy as _
 from django.core.files.storage import default_storage
+from django.utils.dateparse import parse_datetime
 
-from common.utils.timezone import local_now_date_display
+from common.utils.timezone import local_now_date_display, local_now, as_current_tz
 from .tasks.report.common import get_report_templates
 from .tools.pdf import PDFDocument
 
@@ -11,6 +14,7 @@ from .tools.pdf import PDFDocument
 class ReportFileHandler(object):
     def __init__(self, execution):
         self.execution = execution
+        self.statistical_cycle = execution.report.statistical_cycle
         self.file_type = execution.report.file_type
         self.rel_path, self.abs_path = self._get_filepath()
 
@@ -40,6 +44,15 @@ class ReportFileHandler(object):
         save_func = getattr(self, f'_save_with_{self.file_type}')
         return save_func(data)
 
+    def _compute_statistical_cycle(self):
+        if period := self.statistical_cycle.get('period'):
+            end = local_now()
+            start = end - timedelta(days=int(period))
+        else:
+            start = as_current_tz(parse_datetime(self.statistical_cycle.get('dateStart')))
+            end = as_current_tz(parse_datetime(self.statistical_cycle.get('dateEnd')))
+        return start, end
+
     def run(self):
         """
         1、根据execution的报表分类获取报表的类
@@ -51,9 +64,10 @@ class ReportFileHandler(object):
             raise ValueError(_('Report not activated'))
 
         data = []
+        date_start, date_end = self._compute_statistical_cycle()
         for report_class in self._get_report_class():
             instance = report_class(
-                file_type=self.file_type, period=self.execution.report.period
+                file_type=self.file_type, date_start=date_start, date_end=date_end
             )
             instance_data = instance.generate_data()
             if not instance_data:

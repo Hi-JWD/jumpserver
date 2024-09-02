@@ -31,7 +31,7 @@ class Report(PeriodTaskModelMixin, JMSBaseModel):
     recipients = models.ManyToManyField(
         'users.User', blank=True, verbose_name=_("Recipient")
     )
-    period = models.IntegerField(default=30, verbose_name=_('Statistical cycle'),)
+    statistical_cycle = models.JSONField(default=dict, verbose_name=_('Statistical cycle'))
     is_active = models.BooleanField(default=True, verbose_name=_('Active'))
 
     def get_register_task(self):

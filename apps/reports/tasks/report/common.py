@@ -6,13 +6,13 @@ _report_templates = {}
 
 
 def get_report_templates(template_class_names=None, get_name=False):
-    if not template_class_names:
+    if template_class_names is None:
         return _report_templates
 
     result = {}
     for class_name, item in _report_templates.items():
         if class_name in template_class_names:
-            item = item.NAME if get_name else item
+            item = str(item.NAME) if get_name else item
             result[class_name] = item
     return result
 
@@ -26,9 +26,12 @@ def register_report_template(report_class):
 class BaseReport:
     NAME = ''
 
-    def __init__(self, file_type, period, *args, **kwargs):
+    def __init__(self, file_type, date_start, date_end, *args, **kwargs):
         self.file_type = file_type
-        self.time_period = period
+        self.date_start = date_start
+        self.date_end = date_end
+        self.date_start_display = self.date_start.strftime('%Y-%m-%d %H:%M:%S')
+        self.date_end_display = self.date_end.strftime('%Y-%m-%d %H:%M:%S')
 
     def get_title(self):
         return self.NAME
@@ -37,10 +40,9 @@ class BaseReport:
     def get_info_from_counter(counter, default_name='', default_count=0):
         try:
             item, count = counter.most_common(1)[0]
-        except:
+        except: # noqa
             item, count = default_name, default_count
         return item, count
-
 
     @staticmethod
     def get_summary():

@@ -1,3 +1,4 @@
+from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext_lazy as _
 from django.core.files.storage import default_storage
 from rest_framework import serializers
@@ -16,17 +17,33 @@ class ReportSerializer(PeriodTaskSerializerMixin, serializers.ModelSerializer):
         model = Report
         fields = [
             'id', 'name', 'category', 'category_display',
-            'file_type', 'date_created', 'created_by',
-            'is_periodic', 'crontab', 'interval', 'comment', 'period', 'is_active'
+            'file_type', 'date_created', 'created_by', 'statistical_cycle',
+            'is_periodic', 'crontab', 'interval', 'comment', 'is_active'
         ]
+        extra_kwargs = {
+            'category': {'required': True},
+            'statistical_cycle': {'required': True}
+        }
 
     @staticmethod
     def get_category_display(obj):
         return get_report_templates(obj.category, get_name=True).values()
 
     @staticmethod
-    def validate_category(category):
-        return category
+    def _valid_time(time_string):
+        return parse_datetime(time_string) is not None
+
+    def validate_statistical_cycle(self, statistical_cycle):
+        period = statistical_cycle.get('period', '')
+        if period and not str(period).isdigit():
+            raise serializers.ValidationError(_('Period must be an integer'))
+        start, end = statistical_cycle.get('dateStart', ''), statistical_cycle.get('dateEnd', '')
+        if start and end and (not self._valid_time(start) or not self._valid_time(end)):
+            raise serializers.ValidationError(_('The date format must be ISO format'))
+
+        if not period and not (start and end):
+            raise serializers.ValidationError(_('Period and date must be set one'))
+        return statistical_cycle
 
 
 class ReportExecutionSerializer(serializers.ModelSerializer):

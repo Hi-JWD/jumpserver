@@ -2686,7 +2686,7 @@ msgstr "认证令牌"
 msgid "WeCom"
 msgstr "企业微信"
 
-#: audits/signal_handlers/login_log.py:38 authentication/views/feishu.py:105
+#: audits/signal_handlers/login_log.py:38 authentication/views/feishu.py:97
 #: authentication/views/login.py:89 notifications/backends/__init__.py:14
 #: settings/serializers/auth/feishu.py:10 users/models/user.py:762
 #: users/models/user.py:872
@@ -2694,13 +2694,13 @@ msgid "FeiShu"
 msgstr "飞书"
 
 #: audits/signal_handlers/login_log.py:40 authentication/views/login.py:101
-#: authentication/views/slack.py:87 notifications/backends/__init__.py:16
+#: authentication/views/slack.py:79 notifications/backends/__init__.py:16
 #: settings/serializers/auth/slack.py:10 users/models/user.py:764
 #: users/models/user.py:874
 msgid "Slack"
 msgstr ""
 
-#: audits/signal_handlers/login_log.py:41 authentication/views/dingtalk.py:161
+#: audits/signal_handlers/login_log.py:41 authentication/views/dingtalk.py:153
 #: authentication/views/login.py:83 notifications/backends/__init__.py:12
 #: settings/serializers/auth/dingtalk.py:10 users/models/user.py:761
 #: users/models/user.py:871
@@ -2972,21 +2972,21 @@ msgstr "手机号没有设置"
 msgid "SSO auth closed"
 msgstr "SSO 认证关闭了"
 
-#: authentication/errors/mfa.py:18 authentication/views/wecom.py:59
+#: authentication/errors/mfa.py:18 authentication/views/wecom.py:51
 msgid "WeCom is already bound"
 msgstr "企业微信已经绑定"
 
-#: authentication/errors/mfa.py:23 authentication/views/wecom.py:159
-#: authentication/views/wecom.py:201
+#: authentication/errors/mfa.py:23 authentication/views/wecom.py:151
+#: authentication/views/wecom.py:193
 msgid "WeCom is not bound"
 msgstr "没有绑定企业微信"
 
-#: authentication/errors/mfa.py:28 authentication/views/dingtalk.py:213
-#: authentication/views/dingtalk.py:255
+#: authentication/errors/mfa.py:28 authentication/views/dingtalk.py:205
+#: authentication/views/dingtalk.py:247
 msgid "DingTalk is not bound"
 msgstr "钉钉没有绑定"
 
-#: authentication/errors/mfa.py:33 authentication/views/feishu.py:138
+#: authentication/errors/mfa.py:33 authentication/views/feishu.py:130
 msgid "FeiShu is not bound"
 msgstr "没有绑定飞书"
 
@@ -3154,6 +3154,7 @@ msgid "Input secret"
 msgstr "自定义密码"
 
 #: authentication/models/connection_token.py:42
+#: reports/tasks/report/session.py:135
 msgid "Connect method"
 msgstr "连接方式"
 
@@ -3162,10 +3163,12 @@ msgid "Connect options"
 msgstr "连接项"
 
 #: authentication/models/connection_token.py:44
+#: reports/tasks/report/session.py:80 reports/tasks/report/user.py:151
 msgid "User display"
 msgstr "用户名称"
 
 #: authentication/models/connection_token.py:45
+#: reports/tasks/report/asset.py:133 reports/tasks/report/session.py:99
 msgid "Asset display"
 msgstr "资产名称"
 
@@ -3239,6 +3242,7 @@ msgid "binding reminder"
 msgstr "绑定提醒"
 
 #: authentication/serializers/connect_token_secret.py:116
+#: reports/tasks/report/user.py:124
 msgid "Is builtin"
 msgstr "内置的"
 
@@ -3708,7 +3712,7 @@ msgstr "定时触发"
 msgid "Ready"
 msgstr "准备"
 
-#: common/const/choices.py:17 ops/const.py:73
+#: common/const/choices.py:17 ops/const.py:73 reports/models.py:58
 msgid "Running"
 msgstr "运行中"
 
@@ -4013,11 +4017,11 @@ msgstr "%s 小时 "
 msgid "%s minute "
 msgstr "%s 分钟 "
 
-#: common/utils/timezone.py:55
+#: common/utils/timezone.py:56
+#, python-format
 msgid "%s second"
 msgstr "%s 秒"
 
-#: common/utils/translate.py:45
 #: common/utils/translate.py:46
 #, python-format
 msgid "Hello %s"
@@ -4728,17 +4732,17 @@ msgstr "资产授权规则将要过期"
 msgid "asset permissions of organization {}"
 msgstr "组织 ({}) 的资产授权"
 
-#: perms/serializers/permission.py:186 rbac/serializers/role.py:27
+#: perms/serializers/permission.py:176 rbac/serializers/role.py:27
 #: reports/tasks/report/user.py:124 users/serializers/group.py:54
 #: users/serializers/group.py:60
 msgid "Users amount"
 msgstr "用户数量"
 
-#: perms/serializers/permission.py:187
+#: perms/serializers/permission.py:177
 msgid "User groups amount"
 msgstr "用户组数量"
 
-#: perms/serializers/permission.py:189
+#: perms/serializers/permission.py:179
 msgid "Nodes amount"
 msgstr "节点数量"
 
@@ -4882,7 +4886,7 @@ msgstr "系统角色绑定"
 msgid "Perms"
 msgstr "权限"
 
-#: rbac/serializers/role.py:28 terminal/models/applet/applet.py:34
+#: rbac/serializers/role.py:28 terminal/models/applet/applet.py:35
 #: terminal/models/virtualapp/virtualapp.py:20
 msgid "Display name"
 msgstr "显示名称"
@@ -4966,7 +4970,7 @@ msgstr "一般设置"
 msgid "View permission tree"
 msgstr "查看授权树"
 
-#: reports/handler.py:51
+#: reports/handler.py:62
 msgid "Report not activated"
 msgstr "报告未激活"
 
@@ -4981,6 +4985,18 @@ msgstr "报告类型"
 #: reports/models.py:34
 msgid "Statistical cycle"
 msgstr "收集周期"
+
+#: reports/serializers/report.py:39
+msgid "Period must be an integer"
+msgstr "Period 必须是整数"
+
+#: reports/serializers/report.py:42
+msgid "The date format must be ISO format"
+msgstr "时间格式必须是 ISO 格式"
+
+#: reports/serializers/report.py:45
+msgid "Period and date must be set one"
+msgstr "便捷周期和指定日期必须设置一个"
 
 #: reports/tasks/report/asset.py:23
 msgid "Asset basic data report"
@@ -5036,45 +5052,45 @@ msgstr ""
 "当前共有资产 %s 个，共 %s 种类型资产，账号共 %s 个，其中特权账号 %s 个，普通"
 "账号 %s 个。"
 
-#: reports/tasks/report/session.py:19
+#: reports/tasks/report/session.py:18
 msgid "Session Basic Data Report"
 msgstr "会话基础数据报表"
 
 #: reports/tasks/report/session.py:73
 #, python-format
 msgid ""
-"In the past %s days, a total of %s people have generated sessions, with user "
-"%s being the most frequently used and generating %s sessions, as shown below:"
+"From %s, to %s, a total of %s people have generated sessions, with user %s "
+"being the most frequently used and generating %s sessions, as shown below:"
 msgstr ""
-"近 %s 天，共有 %s 人产生会话，其中用户 %s 使用最频繁，产生会话 %s 个，如下所"
+"从 %s，到 %s，共有 %s 人产生会话，其中用户 %s 使用最频繁，产生会话 %s 个，如下所"
 "示："
 
-#: reports/tasks/report/session.py:81 reports/tasks/report/session.py:99
-#: reports/tasks/report/session.py:118 reports/tasks/report/session.py:137
-#: reports/tasks/report/session.py:160 terminal/models/component/status.py:19
+#: reports/tasks/report/session.py:80 reports/tasks/report/session.py:99
+#: reports/tasks/report/session.py:117 reports/tasks/report/session.py:135
+#: reports/tasks/report/session.py:158 terminal/models/component/status.py:19
 msgid "Connections"
 msgstr "连接数"
 
 #: reports/tasks/report/session.py:92
 #, python-format
 msgid ""
-"In the past %s days, a total of %s assets have been active, of which %s have "
-"been connected %s times, as shown below:"
-msgstr "近 %s 天内，共有 %s 个资产较为活跃，其中 %s 被连接 %s 次，如下所示："
+"From %s, to %s, a total of %s assets have been active, of which %s have been "
+"connected %s times, as shown below:"
+msgstr "从 %s 到 %s，共有 %s 个资产较为活跃，其中 %s 被连接 %s 次，如下所示："
 
 #: reports/tasks/report/session.py:111
 #, python-format
 msgid ""
-"There are %s types of connection asset agreements in the past %s days, as "
-"shown below:"
-msgstr "近 %s 天内，连接资产协议有 %s 种，如下所示："
+"From %s, to %s, there are %s types of connection asset agreements, as shown "
+"below:"
+msgstr "从 %s 到 %s，连接资产协议有 %s 种，如下所示："
 
-#: reports/tasks/report/session.py:130
+#: reports/tasks/report/session.py:129
 #, python-format
-msgid "There are %s ways to connect assets in the past %s days, as follows:"
-msgstr "近 %s 天内，连接资产方式有 %s 种，如下所示："
+msgid "From %s, to %s, there are %s ways to connect assets, as follows:"
+msgstr "从 %s 到 %s，连接资产方式有 %s 种，如下所示："
 
-#: reports/tasks/report/session.py:145
+#: reports/tasks/report/session.py:143
 #, python-format
 msgid "%s-%s hours"
 msgstr "%s-%s 小时"
@@ -5082,43 +5098,43 @@ msgstr "%s-%s 小时"
 #: reports/tasks/report/session.py:151
 #, python-format
 msgid ""
-"In the past %s days, a total of %s sessions have been generated, with the "
-"longest being %s and the shortest being %s, as shown below:"
-msgstr "近 %s 天内，共产生会话 %s 个，其中最长 %s，最短为 %s，如下所示："
+"From %s, to %s, a total of %s sessions have been generated, with the longest "
+"being %s and the shortest being %s, as shown below:"
+msgstr "从 %s 到 %s，共产生会话 %s 个，其中最长 %s，最短为 %s，如下所示："
 
-#: reports/tasks/report/session.py:160
+#: reports/tasks/report/session.py:158
 msgid "Duration range"
 msgstr "时长范围"
 
-#: reports/tasks/report/session.py:167
+#: reports/tasks/report/session.py:165
 msgid "Number of sessions per user"
 msgstr "各用户会话数"
 
-#: reports/tasks/report/session.py:171
+#: reports/tasks/report/session.py:169
 msgid "Number of active assets"
 msgstr "活跃资产数"
 
-#: reports/tasks/report/session.py:175
+#: reports/tasks/report/session.py:173
 msgid "Number of sessions per protocol"
 msgstr "各协议会话数"
 
-#: reports/tasks/report/session.py:179
+#: reports/tasks/report/session.py:177
 msgid "Number of sessions per connection method"
 msgstr "各连接方式产生会话数"
 
-#: reports/tasks/report/session.py:183
+#: reports/tasks/report/session.py:181
 msgid "Session duration"
 msgstr "会话时长数"
 
 #: reports/tasks/report/session.py:189
 #, python-format
 msgid ""
-"In the past %s days, a total of %s sessions have been generated, with %s "
+"From %s, to %s, a total of %s sessions have been generated, with %s "
 "connected sessions. The maximum duration of a single session is %s, and the "
 "minimum duration is %s. Files have been uploaded %s times and downloaded %s "
 "times."
 msgstr ""
-"近 %s 天内，共产生会话 %s 个，连接会话人数 %s 人，单个会话时间最长 %s，最短 "
+"从 %s 到 %s，共产生会话 %s 个，连接会话人数 %s 人，单个会话时间最长 %s，最短 "
 "%s，上传文件 %s 次，下载文件 %s 次。"
 
 #: reports/tasks/report/user.py:27
@@ -5154,8 +5170,8 @@ msgstr "角色名称"
 
 #: reports/tasks/report/user.py:143
 #, python-format
-msgid "In the past %s days, logged in %s times with %s people, as shown below:"
-msgstr "近 %s 天内，登录 %s 次, 登录人数 %s 人，如下所示："
+msgid "From %s, to %s, logged in %s times with %s people, as shown below:"
+msgstr "从 %s 到 %s，登录 %s 次, 登录人数 %s 人，如下所示："
 
 #: reports/tasks/report/user.py:151
 msgid "Number of logins"
@@ -5172,14 +5188,14 @@ msgstr "用户登陆次数 (Top 10)"
 #: reports/tasks/report/user.py:185
 #, python-format
 msgid ""
-"There are currently %s user groups and %s users, including %s valid users "
-"and %s disabled users. User sources are %s, %s system administrators, %s "
-"organizational administrators, and %s other users. %s new users have been "
-"added in the past %s, and users have logged in %s times, successfully %s "
+"From %s, to %s, there are currently %s user groups and %s users, including "
+"%s valid users and %s disabled users. User sources are %s, %s system "
+"administrators, %s organizational administrators, and %s other users. %s new "
+"users have been added, and users have logged in %s times, successfully %s "
 "times, and failed %s times."
 msgstr ""
-"当前共有用户组 %s 个，用户 %s 个，其中有效用户 %s 个，禁用用户 %s 个，用户来"
-"源: %s, 系统管理员 %s 个，组织管理员 %s 个，其他用户 %s 个。近 %s 内新增用户 "
+"从 %s 到 %s，共有用户组 %s 个，用户 %s 个，其中有效用户 %s 个，禁用用户 %s 个，用户来"
+"源: %s, 系统管理员 %s 个，组织管理员 %s 个，其他用户 %s 个。新增用户 "
 "%s 个，用户产生登录行为 %s 次，成功 %s 次，失败 %s 次。"
 
 #: reports/tasks/tasks.py:12
@@ -7084,10 +7100,6 @@ msgstr "内存使用"
 #: terminal/models/component/status.py:18
 msgid "Disk Used"
 msgstr "磁盘使用"
-
-#: terminal/models/component/status.py:19
-msgid "Connections"
-msgstr "连接数"
 
 #: terminal/models/component/status.py:20
 msgid "Threads"

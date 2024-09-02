@@ -1,5 +1,4 @@
 from collections import Counter
-from datetime import datetime, timedelta
 
 from django.utils.translation import gettext_lazy as _
 
@@ -21,7 +20,6 @@ class SessionReport(BaseReport):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._time_ago = datetime.today().date() - timedelta(days=self.time_period)
         # summary 数据
         self.session_count = 0
         self.session_user_count = 0
@@ -33,7 +31,7 @@ class SessionReport(BaseReport):
         self._session_data = self._get_session_data()
 
     def _get_session_data(self):
-        sessions = Session.objects.filter(date_end__gt=self._time_ago)
+        sessions = Session.objects.filter(date_end__range=(self.date_start, self.date_end))
         user_counter, asset_counter = Counter(), Counter()
         connect_counter, protocol_counter = Counter(), Counter()
         period_counter = Counter()
@@ -70,10 +68,11 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('In the past %s days, a total of %s people have generated sessions, '
+                'data': _('From %s, to %s, a total of %s people have generated sessions, '
                           'with user %s being the most frequently used and generating %s sessions, '
                           'as shown below:') % (
-                    self.time_period, self.session_user_count, max_user_name, max_user_count
+                    self.date_start_display, self.date_end_display,
+                    self.session_user_count, max_user_name, max_user_count
                 )
             },
             {
@@ -89,9 +88,10 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('In the past %s days, a total of %s assets have been active, '
+                'data': _('From %s, to %s, a total of %s assets have been active, '
                           'of which %s have been connected %s times, as shown below:') % (
-                    self.time_period, len(asset_counter.keys()), max_asset_name, max_asset_count
+                    self.date_start_display, self.date_end_display,
+                    len(asset_counter.keys()), max_asset_name, max_asset_count
                 )
             },
             {
@@ -108,9 +108,8 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('There are %s types of connection asset agreements '
-                          'in the past %s days, as shown below:') % (
-                    self.time_period, len(protocol_counter.keys())
+                'data': _('From %s, to %s, there are %s types of connection asset agreements, as shown below:') % (
+                    self.date_start_display, self.date_end_display, len(protocol_counter.keys())
                 )
             },
             {
@@ -127,9 +126,8 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('There are %s ways to connect '
-                          'assets in the past %s days, as follows:') % (
-                    self.time_period, len(connect_counter.keys())
+                'data': _('From %s, to %s, there are %s ways to connect assets, as follows:') % (
+                    self.date_start_display, self.date_end_display, len(connect_counter.keys())
                 )
             },
             {
@@ -148,10 +146,10 @@ class SessionReport(BaseReport):
         return [
             {
                 'type': c.TEXT,
-                'data': _('In the past %s days, a total of %s sessions have '
+                'data': _('From %s, to %s, a total of %s sessions have '
                           'been generated, with the longest being %s and the '
                           'shortest being %s, as shown below:') % (
-                    self.time_period, sum(period_counter.values()),
+                    self.date_start_display, self.date_end_display, sum(period_counter.values()),
                     period_data['max_period'], period_data['min_period']
                 )
             },
@@ -186,13 +184,13 @@ class SessionReport(BaseReport):
         ]
 
     def get_summary(self):
-        summary = _('In the past %s days, a total of %s sessions '
+        summary = _('From %s, to %s, a total of %s sessions '
                     'have been generated, with %s connected sessions. '
                     'The maximum duration of a single session is %s, '
                     'and the minimum duration is %s. Files have been '
                     'uploaded %s times and downloaded %s times.') % (
-            self.time_period, self.session_count, self.session_user_count,
-            self.max_conn_time, self.min_conn_time, self.upload_count,
-            self.download_count
+            self.date_start_display, self.date_end_display, self.session_count,
+            self.session_user_count, self.max_conn_time, self.min_conn_time,
+            self.upload_count, self.download_count
         )
         return summary
