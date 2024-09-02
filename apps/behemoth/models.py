@@ -287,7 +287,7 @@ class Plan(JMSOrgBaseModel):
         choices=PlanCategory.choices, verbose_name=_('Category')
     )
     environment = models.ForeignKey(
-        Environment, on_delete=models.CASCADE, related_name='instructions', verbose_name=_('Environment')
+        Environment, on_delete=models.CASCADE, related_name='plans', verbose_name=_('Environment')
     )
     asset = models.ForeignKey(Database, null=True, on_delete=models.SET_NULL, verbose_name=_('Asset'))
     account = models.ForeignKey(Account, null=True, on_delete=models.SET_NULL, verbose_name=_('Account'))
@@ -296,10 +296,12 @@ class Plan(JMSOrgBaseModel):
     )
     status = models.CharField(max_length=32, default=TaskStatus.not_start, verbose_name=_('Status'))
     c_type = models.CharField(max_length=32, default='default', verbose_name=_('Custom type'))
+    need_review = models.BooleanField(default=False, verbose_name=_('Need review'))
 
     class Meta:
         verbose_name = _('Plan')
         ordering = ('-date_created',)
+        unique_together = [('org_id', 'name')]
 
     def create_execution(self, with_auth=False, **other):
         request = get_current_request()

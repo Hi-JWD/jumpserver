@@ -1,11 +1,12 @@
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from django.utils import timezone
 from django.http.response import JsonResponse
+from django.core.cache import cache
 from rest_framework.views import APIView
 from rest_framework.request import Request
 
-from behemoth.models import Execution
+from behemoth.models import Execution, Environment
 from common.utils import lazyproperty
 from orgs.utils import current_org
 from orgs.caches import OrgResourceStatisticsCache
@@ -55,6 +56,7 @@ class IndexApi(DateTimeMixin, APIView):
     rbac_perms = {
         'GET': ['rbac.view_console'],
     }
+    ENV_CACHE_KEY = 'behemoth:index:environment:{}:{}'
 
     @staticmethod
     def get_dates_top10_executions():
@@ -77,8 +79,46 @@ class IndexApi(DateTimeMixin, APIView):
             len(date_group_map.get(str(d), set())) for d in self.dates_list
         ]
 
+    def get_dates_metrics_total_count_active_executions_random(self):
+        import random
+        dates = self.get_dates_metrics_date()
+        envs = []
+        for env in Environment.objects.all():
+            data = []
+            for __ in dates:
+                success, failed = random.randint(0, 100), random.randint(0, 10)
+                data.append({'success': success, 'failed': failed})
+            envs.append({'name': env.name, 'data': data})
+        return {'date': dates, 'data': envs}
+
     def get_dates_metrics_total_count_active_executions(self):
-        return self.get_date_metrics(Execution.objects, 'date_updated', 'id')
+        def _compute_timeout(current, days):
+            hour = 3600
+            if current == local_now().date():
+                return hour
+            return hour * 24 * (days - (local_now().date() - current).days)
+
+        dates = self.get_dates_metrics_date()
+        envs = []
+        for env in Environment.objects.all():
+            temp_data = OrderedDict({d: {'success': 0, 'failed': 0} for d in dates})
+            for plan in env.plans.all():
+                current_date, end_date = self.date_start_end
+                while current_date <= end_date:
+                    cache_key = self.ENV_CACHE_KEY.format(plan.id, current_date)
+                    cache_result = cache.get(cache_key)
+                    if cache_result is not None:
+                        qs = cache_result
+                    else:
+                        qs = plan.executions.all()
+                        qs = qs.filter(date_updated__range=(current_date, current_date + timezone.timedelta(days=1)))
+                        qs = list(qs.filter(status__in=['success', 'failed']).values_list('date_updated', 'status'))
+                        cache.set(cache_key, qs, _compute_timeout(current_date, self.days))
+                    current_date += timezone.timedelta(days=1)
+                    for datetime_obj, status in qs:
+                        temp_data[datetime_obj.strftime('%m-%d')][status] += 1
+            envs.append({'name': env.name, 'data': list(temp_data.values())})
+        return {'date': dates, 'data': envs}
 
     def get(self, request, *args, **kwargs):
         data = {}
@@ -110,11 +150,8 @@ class IndexApi(DateTimeMixin, APIView):
             })
 
         if query_params.get('dates_metrics'):
-            data.update({
-                'dates_metrics_date': self.get_dates_metrics_date(),
-                'dates_metrics_total_count_active_executions': self.get_dates_metrics_total_count_active_executions(),
-            })
-
+            result = self.get_dates_metrics_total_count_active_executions()
+            data['dates_metrics_total_count_active_executions'] = result
         if query_params.get('dates_top10_executions'):
             data.update({
                 'dates_top10_executions': self.get_dates_top10_executions(),

@@ -4,13 +4,14 @@ from typing import AnyStr, Dict
 
 from rest_framework import serializers
 from django.utils.translation import gettext as _
-from django.db import transaction, models
+from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
 
 from common.serializers.fields import ObjectRelatedField, LabeledChoiceField
 from common.utils import random_string
 from common.serializers import FileSerializer
+from orgs.mixins.serializers import BulkOrgResourceModelSerializer
 from assets.models import Database
 from accounts.models import Account
 from behemoth.models import (
@@ -74,7 +75,7 @@ class CommandSerializer(SimpleCommandSerializer):
         ]
 
 
-class BasePlanSerializer(serializers.ModelSerializer):
+class BasePlanSerializer(BulkOrgResourceModelSerializer):
     playback = ObjectRelatedField(queryset=Playback.objects, label=_('Monthly version'))
     environment = ObjectRelatedField(queryset=Environment.objects, label=_('Environment'))
     plan_strategy = LabeledChoiceField(choices=PlanStrategy.choices, label=_('Plan strategy'))
@@ -107,7 +108,7 @@ class SyncPlanSerializer(BasePlanSerializer):
     )
 
     class Meta(BasePlanSerializer.Meta):
-        fields = BasePlanSerializer.Meta.fields + ['users', 'playback_executions']
+        fields = BasePlanSerializer.Meta.fields + ['need_review', 'users', 'playback_executions']
 
     @staticmethod
     def get_users(obj):
@@ -173,9 +174,12 @@ class SyncPlanSerializer(BasePlanSerializer):
 
 class DeployPlanSerializer(BasePlanSerializer):
     asset = ObjectRelatedField(
-        queryset=Database.objects, attrs=('id', 'name', 'address', 'type'), label=_('Asset')
+        queryset=Database.objects, attrs=('id', 'name', 'address', 'type'),
+        required=False, label=_('Asset'), allow_null=True,
     )
-    account = ObjectRelatedField(queryset=Account.objects, label=_('Account'))
+    account = ObjectRelatedField(
+        queryset=Account.objects, label=_('Account'), required=False, allow_null=True,
+    )
     playback_strategy = LabeledChoiceField(
         choices=PlaybackStrategy.choices, label=_('Playback strategy')
     )
@@ -274,3 +278,7 @@ class CommandExecutionSerializer(BaseCreateExecutionSerializer):
 class SyncPlanUploadSerializer(FileSerializer):
     version = serializers.CharField(max_length=256, label=_('Version'))
     zip_entry_file = serializers.CharField(default='', max_length=256, label=_('Zip entry file'))
+
+
+class RemotePullDeploySerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=['remote_pull'])

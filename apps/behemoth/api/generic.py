@@ -21,6 +21,7 @@ from behemoth.const import (
     PLAN_TASK_ACTIVE_KEY, ExecutionCategory
 )
 from behemoth.libs.pools.worker import worker_pool
+from behemoth.libs.deploy_plan import custom_remote_pull_method
 from behemoth.models import (
     Environment, Playback, Plan, Iteration, Execution, Command,
     PlaybackExecution
@@ -343,11 +344,24 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         'deploy': serializers.DeployPlanSerializer,
         'sync': serializers.SyncPlanSerializer,
         'upload_command_file': serializers.SyncPlanUploadSerializer,
+        'handle_remote_pull': serializers.RemotePullDeploySerializer,
     }
     rbac_perms = {
         'start_sync_task': 'behemoth.change_execution',
+        'handle_remote_pull': 'behemoth.add_plan',
         'upload_command_file': ['behemoth.add_plan', 'behemoth.add_execution', 'behemoth.add_command']
     }
+
+    @action(methods=['POST'], detail=False, url_path='tasks')
+    def handle_remote_pull(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            data = custom_remote_pull_method()
+        except Exception as error:
+            raise JMSException(_('Remote pull failed: %s') % error)
+
+        return Response(data=data, status=http_status.HTTP_200_OK)
 
     def get_queryset(self):
         qs = self.model.objects.all()
@@ -436,7 +450,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         user_set = list(set(users))
         participants = getattr(settings, 'SYNC_PLAN_REQUIRED_PARTICIPANTS', 2)
         wait_timeout = getattr(settings, 'SYNC_PLAN_WAIT_PARTICIPANT_IDLE', 3600)
-        if len(user_set) >= participants:
+        if len(user_set) >= participants or not obj.need_review:
             cache.set(PLAN_TASK_ACTIVE_KEY.format(obj.id), user_set, timeout=wait_timeout * 24 * 7)
             return self.start_task(
                 obj.executions.all(), user_set, response_data={'users': [str(request.user)]}
