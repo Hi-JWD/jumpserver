@@ -56,6 +56,8 @@ class Client(object):
     def get(self):
         new_result = []
         for item in self._get_remote():
+            if not item.get('param_env_name'):
+                continue
             if Plan.objects.filter(name=item['name'], org_id=current_org.id).exists():
                 continue
 
@@ -66,8 +68,8 @@ class Client(object):
             for k in self.convert_fields.keys():
                 old_value = item.get(k)
                 name, value = self.get_obj(k, old_value)
-                new_item[name] = value
-                if not value:
+                new_item[name] = value or '-'
+                if not value and name in self.i18n_map:
                     i18n_name = self.i18n_map[name]
                     new_item['tip'].append(f'系统中不存在名称为 [{old_value}] 的 [{i18n_name}] ')
                     new_item['selectable'] = False
