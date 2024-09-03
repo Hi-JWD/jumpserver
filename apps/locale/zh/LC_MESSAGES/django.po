@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JumpServer 0.3.3\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-08-06 15:17+0800\n"
+"POT-Creation-Date: 2024-09-03 14:34+0800\n"
 "PO-Revision-Date: 2021-05-20 10:54+0800\n"
 "Last-Translator: ibuler <ibuler@qq.com>\n"
 "Language-Team: JumpServer team<ibuler@qq.com>\n"
@@ -54,8 +54,8 @@ msgstr "Access key"
 
 #: accounts/const/account.py:9 assets/models/_user.py:48
 #: authentication/backends/passkey/models.py:16
-#: authentication/models/sso_token.py:14 behemoth/serializers/plan.py:39
-#: behemoth/serializers/plan.py:195 settings/serializers/feature.py:52
+#: authentication/models/sso_token.py:14 behemoth/serializers/plan.py:41
+#: behemoth/serializers/plan.py:212 settings/serializers/feature.py:52
 msgid "Token"
 msgstr "Token"
 
@@ -108,7 +108,7 @@ msgstr "更新"
 
 #: accounts/const/account.py:34 accounts/const/automation.py:109
 #: accounts/serializers/automations/change_secret.py:164 audits/const.py:62
-#: audits/signal_handlers/activity_log.py:33 behemoth/api/generic.py:292
+#: audits/signal_handlers/activity_log.py:33 behemoth/api/generic.py:291
 #: behemoth/const.py:21 behemoth/const.py:27 common/const/choices.py:19
 #: ops/const.py:76 terminal/const.py:80 xpack/plugins/cloud/const.py:47
 msgid "Failed"
@@ -275,8 +275,8 @@ msgstr "用户 %s 查看/导出 了密码"
 #: acls/serializers/base.py:123 assets/models/asset/common.py:95
 #: assets/models/asset/common.py:350 assets/models/cmd_filter.py:36
 #: audits/models.py:58 authentication/models/connection_token.py:36
-#: behemoth/models.py:296 behemoth/models.py:348
-#: behemoth/serializers/execution.py:17 behemoth/serializers/plan.py:168
+#: behemoth/models.py:292 behemoth/models.py:344
+#: behemoth/serializers/execution.py:17 behemoth/serializers/plan.py:178
 #: perms/models/asset_permission.py:69 perms/serializers/permission.py:36
 #: terminal/backends/command/models.py:17 terminal/models/session/session.py:32
 #: terminal/notifications.py:155 terminal/serializers/command.py:17
@@ -296,7 +296,7 @@ msgid "Su from"
 msgstr "切换自"
 
 #: accounts/models/account.py:55 assets/const/protocol.py:177
-#: behemoth/models.py:357 behemoth/serializers/plan.py:262
+#: behemoth/models.py:353 behemoth/serializers/plan.py:279
 #: settings/serializers/auth/cas.py:20 terminal/models/applet/applet.py:35
 #: terminal/models/virtualapp/virtualapp.py:21
 msgid "Version"
@@ -318,8 +318,8 @@ msgstr "来源 ID"
 #: acls/serializers/base.py:124 acls/templates/acls/asset_login_reminder.html:7
 #: assets/serializers/asset/common.py:128 assets/serializers/gateway.py:28
 #: audits/models.py:59 authentication/api/connection_token.py:411
-#: behemoth/models.py:297 behemoth/models.py:350
-#: behemoth/serializers/execution.py:18 behemoth/serializers/plan.py:170
+#: behemoth/models.py:293 behemoth/models.py:346
+#: behemoth/serializers/execution.py:18 behemoth/serializers/plan.py:181
 #: ops/models/base.py:18 perms/models/asset_permission.py:75
 #: perms/serializers/permission.py:41 settings/serializers/msg.py:33
 #: terminal/backends/command/models.py:18 terminal/models/session/session.py:34
@@ -420,7 +420,7 @@ msgid "Trigger mode"
 msgstr "触发模式"
 
 #: accounts/models/automations/backup_account.py:133 audits/models.py:203
-#: behemoth/models.py:354 terminal/models/session/sharing.py:125
+#: behemoth/models.py:350 terminal/models/session/sharing.py:125
 #: xpack/plugins/cloud/models.py:213
 msgid "Reason"
 msgstr "原因"
@@ -509,9 +509,9 @@ msgstr "结束日期"
 
 #: accounts/models/automations/change_secret.py:44
 #: assets/models/automations/base.py:113 audits/models.py:208
-#: audits/serializers.py:54 behemoth/models.py:233 behemoth/models.py:301
-#: behemoth/models.py:355 behemoth/serializers/execution.py:19
-#: behemoth/serializers/plan.py:68 ops/models/base.py:49 ops/models/job.py:233
+#: audits/serializers.py:54 behemoth/models.py:233 behemoth/models.py:297
+#: behemoth/models.py:351 behemoth/serializers/execution.py:19
+#: behemoth/serializers/plan.py:70 ops/models/base.py:49 ops/models/job.py:233
 #: terminal/models/applet/applet.py:320 terminal/models/applet/host.py:140
 #: terminal/models/component/status.py:30
 #: terminal/models/virtualapp/virtualapp.py:99
@@ -588,7 +588,6 @@ msgstr "触发方式"
 #: authentication/serializers/connect_token_secret.py:119
 #: authentication/templates/authentication/_access_key_modal.html:34
 #: behemoth/serializers/environment.py:13
-#: behemoth/serializers/monthly_version.py:13
 #: tickets/serializers/ticket/ticket.py:21
 msgid "Action"
 msgstr "动作"
@@ -641,9 +640,9 @@ msgstr "密码规则"
 #: authentication/backends/passkey/models.py:10
 #: authentication/serializers/connect_token_secret.py:113
 #: authentication/serializers/connect_token_secret.py:169
-#: behemoth/models.py:253 behemoth/models.py:261 behemoth/models.py:280
-#: behemoth/models.py:336 behemoth/models.py:392 behemoth/models.py:408
-#: behemoth/serializers/plan.py:194 labels/models.py:11 ops/mixin.py:21
+#: behemoth/models.py:253 behemoth/models.py:261 behemoth/models.py:276
+#: behemoth/models.py:332 behemoth/models.py:400
+#: behemoth/serializers/plan.py:211 labels/models.py:11 ops/mixin.py:21
 #: ops/models/adhoc.py:20 ops/models/celery.py:15 ops/models/celery.py:80
 #: ops/models/job.py:142 ops/models/playbook.py:28 ops/serializers/job.py:18
 #: orgs/models.py:82 perms/models/asset_permission.py:61 rbac/models/role.py:29
@@ -789,10 +788,10 @@ msgstr "账号存在策略"
 #: assets/models/label.py:21 assets/models/platform.py:95
 #: assets/serializers/asset/common.py:125 assets/serializers/cagegory.py:12
 #: assets/serializers/platform.py:140 assets/serializers/platform.py:229
-#: behemoth/models.py:291 behemoth/models.py:329 behemoth/models.py:342
-#: behemoth/serializers/execution.py:20 perms/serializers/user_permission.py:26
-#: settings/models.py:35 tickets/models/ticket/apply_application.py:13
-#: users/models/preference.py:12
+#: behemoth/models.py:287 behemoth/models.py:325 behemoth/models.py:338
+#: behemoth/serializers/execution.py:20 behemoth/serializers/plan.py:82
+#: perms/serializers/user_permission.py:26 settings/models.py:35
+#: tickets/models/ticket/apply_application.py:13 users/models/preference.py:12
 msgid "Category"
 msgstr "类别"
 
@@ -879,7 +878,7 @@ msgstr "ID"
 #: assets/models/cmd_filter.py:24 assets/models/label.py:16 audits/models.py:54
 #: audits/models.py:90 audits/models.py:172 audits/models.py:269
 #: audits/serializers.py:171 authentication/models/connection_token.py:32
-#: authentication/models/sso_token.py:16 behemoth/models.py:353
+#: authentication/models/sso_token.py:16 behemoth/models.py:349
 #: notifications/models/notification.py:12
 #: perms/api/user_permission/mixin.py:55 perms/models/asset_permission.py:63
 #: perms/serializers/permission.py:32 rbac/builtin.py:124
@@ -1178,7 +1177,7 @@ msgstr "审批人"
 msgid "Active"
 msgstr "激活中"
 
-#: acls/models/base.py:81 behemoth/serializers/plan.py:91 users/apps.py:9
+#: acls/models/base.py:81 behemoth/serializers/plan.py:105 users/apps.py:9
 #: users/models/preference.py:16
 msgid "Users"
 msgstr "用户管理"
@@ -1190,9 +1189,10 @@ msgid "Accounts"
 msgstr "账号管理"
 
 #: acls/models/command_acl.py:16 assets/models/cmd_filter.py:60
-#: behemoth/const.py:59 behemoth/models.py:240 behemoth/serializers/plan.py:35
-#: ops/serializers/job.py:70 terminal/const.py:87
-#: terminal/models/session/session.py:43 terminal/serializers/command.py:18
+#: behemoth/api/generic.py:170 behemoth/const.py:59 behemoth/models.py:240
+#: behemoth/serializers/plan.py:37 ops/serializers/job.py:70
+#: terminal/const.py:87 terminal/models/session/session.py:43
+#: terminal/serializers/command.py:18
 #: terminal/templates/terminal/_msg_command_alert.html:12
 #: terminal/templates/terminal/_msg_command_execute_alert.html:10
 #: terminal/templates/terminal/_msg_command_warning.html:23
@@ -1205,7 +1205,7 @@ msgid "Regex"
 msgstr "正则表达式"
 
 #: acls/models/command_acl.py:26 assets/models/cmd_filter.py:79
-#: behemoth/models.py:396 settings/models.py:182
+#: behemoth/models.py:388 settings/models.py:182
 #: settings/serializers/feature.py:19 xpack/plugins/license/models.py:30
 msgid "Content"
 msgstr "内容"
@@ -1443,7 +1443,7 @@ msgid "Connect failed"
 msgstr "连接失败"
 
 #: assets/const/automation.py:6 audits/const.py:6 audits/const.py:44
-#: audits/signal_handlers/activity_log.py:62 behemoth/tasks.py:61
+#: audits/signal_handlers/activity_log.py:62 behemoth/tasks.py:63
 #: common/utils/ip/geoip/utils.py:31 common/utils/ip/geoip/utils.py:37
 #: common/utils/ip/utils.py:104
 msgid "Unknown"
@@ -1505,11 +1505,11 @@ msgid "Web"
 msgstr "Web"
 
 #: assets/const/category.py:15 assets/const/worker.py:10 behemoth/models.py:57
-#: behemoth/models.py:345
+#: behemoth/models.py:341
 msgid "Worker"
 msgstr "工作机"
 
-#: assets/const/category.py:17 behemoth/models.py:302
+#: assets/const/category.py:17 behemoth/models.py:298
 #: common/sdk/sms/endpoint.py:20
 msgid "Custom type"
 msgstr "自定义"
@@ -1949,7 +1949,7 @@ msgid "Asset group"
 msgstr "资产组"
 
 #: assets/models/group.py:31 assets/models/platform.py:19
-#: assets/serializers/platform.py:121 behemoth/serializers/plan.py:186
+#: assets/serializers/platform.py:121 behemoth/serializers/plan.py:198
 #: settings/serializers/behemoth.py:23
 #: xpack/plugins/cloud/providers/nutanix.py:30
 msgid "Default"
@@ -1988,6 +1988,7 @@ msgstr "新节点"
 
 #: assets/models/node.py:467 audits/backends/db.py:57 audits/backends/db.py:58
 #: audits/backends/es.py:78 audits/backends/es.py:79
+#: behemoth/libs/pools/worker.py:286 behemoth/libs/pools/worker.py:287
 msgid "empty"
 msgstr "空"
 
@@ -2109,8 +2110,8 @@ msgstr "账号移除方式"
 msgid "Remove account params"
 msgstr "账号移除参数"
 
-#: assets/models/platform.py:97 behemoth/models.py:53 behemoth/models.py:328
-#: behemoth/models.py:385 tickets/models/ticket/general.py:298
+#: assets/models/platform.py:97 behemoth/models.py:53 behemoth/models.py:324
+#: behemoth/models.py:381 tickets/models/ticket/general.py:298
 msgid "Meta"
 msgstr "元数据"
 
@@ -2187,6 +2188,10 @@ msgstr "无效的数据"
 #: assets/serializers/asset/database.py:13
 msgid "Default database"
 msgstr "默认数据库"
+
+#: assets/serializers/asset/database.py:31
+msgid "Name must contain ':' characters"
+msgstr "名称中必须包含 ':' 字符"
 
 #: assets/serializers/asset/gpt.py:20
 msgid ""
@@ -2502,7 +2507,7 @@ msgstr "会话日志"
 msgid "Login log"
 msgstr "登录日志"
 
-#: audits/const.py:51 behemoth/models.py:360 terminal/models/applet/host.py:144
+#: audits/const.py:51 behemoth/models.py:356 terminal/models/applet/host.py:144
 #: terminal/models/component/task.py:22
 msgid "Task"
 msgstr "任务"
@@ -3294,7 +3299,7 @@ msgstr "动作"
 msgid "Is expired"
 msgstr "已过期"
 
-#: authentication/serializers/password_mfa.py:29 behemoth/api/generic.py:381
+#: authentication/serializers/password_mfa.py:29 behemoth/api/generic.py:428
 #: users/templates/users/forgot_password.html:153
 msgid "The {} cannot be empty"
 msgstr "{} 不能为空"
@@ -3694,31 +3699,36 @@ msgstr "从企业微信获取用户失败"
 msgid "Please login with a password and then bind the WeCom"
 msgstr "请使用密码登录，然后绑定企业微信"
 
-#: behemoth/api/generic.py:43
+#: behemoth/api/generic.py:48
 msgid "Task is running or finished"
 msgstr "任务正在执行或者已经结束，请刷新任务列表"
 
-#: behemoth/api/generic.py:227
+#: behemoth/api/generic.py:226
 #, python-format
 msgid "Task status: %s"
 msgstr "任务状态: %s"
 
-#: behemoth/api/generic.py:269
+#: behemoth/api/generic.py:268
 msgid "The task is not running!"
 msgstr "任务不在运行中！"
 
-#: behemoth/api/generic.py:275 common/exceptions.py:15
+#: behemoth/api/generic.py:274 common/exceptions.py:15
 #, python-format
 msgid "%s object does not exist."
 msgstr "%s 对象不存在"
 
-#: behemoth/api/generic.py:286
+#: behemoth/api/generic.py:285
 msgid "Command input"
 msgstr "命令内容"
 
-#: behemoth/api/generic.py:288
+#: behemoth/api/generic.py:287
 msgid "Command output"
 msgstr "命令输出"
+
+#: behemoth/api/generic.py:362
+#, python-format
+msgid "Remote pull failed: %s"
+msgstr "远程拉取失败：%s"
 
 #: behemoth/apps.py:10
 msgid "Behemoth"
@@ -3733,7 +3743,7 @@ msgid "Executing"
 msgstr "执行中"
 
 #: behemoth/const.py:19 behemoth/const.py:60 behemoth/exceptions.py:7
-#: behemoth/models.py:236 behemoth/models.py:268
+#: behemoth/models.py:236 behemoth/models.py:264
 msgid "Pause"
 msgstr "暂停"
 
@@ -3784,6 +3794,16 @@ msgstr "同步"
 #: behemoth/const.py:54
 msgid "Deploy"
 msgstr "部署"
+
+#: behemoth/custom_files/deploy/main.py:19 behemoth/models.py:290
+#: behemoth/serializers/plan.py:80
+msgid "Environment"
+msgstr "环境"
+
+#: behemoth/custom_files/deploy/main.py:19 behemoth/models.py:295
+#: behemoth/models.py:376
+msgid "Playback"
+msgstr "回放"
 
 #: behemoth/libs/pools/worker.py:132
 msgid "Not found a valid worker"
@@ -3903,13 +3923,13 @@ msgstr "输入"
 msgid "Output"
 msgstr "输出"
 
-#: behemoth/models.py:232 behemoth/models.py:397
+#: behemoth/models.py:232 behemoth/models.py:389
 #: terminal/serializers/storage.py:204
 msgid "Index"
 msgstr "索引"
 
-#: behemoth/models.py:234 behemoth/models.py:382
-#: behemoth/serializers/plan.py:95 behemoth/serializers/playback.py:34
+#: behemoth/models.py:234 behemoth/models.py:378
+#: behemoth/serializers/plan.py:83 behemoth/serializers/playback.py:30
 msgid "Execution"
 msgstr "执行"
 
@@ -3917,61 +3937,51 @@ msgstr "执行"
 msgid "Timestamp"
 msgstr "时间戳"
 
-#: behemoth/models.py:264 behemoth/serializers/playback.py:17
-msgid "Monthly version"
-msgstr "月度版本"
-
-#: behemoth/models.py:283 behemoth/serializers/plan.py:81
+#: behemoth/models.py:279 behemoth/serializers/plan.py:81
 msgid "Plan strategy"
 msgstr "计划策略"
 
-#: behemoth/models.py:287 behemoth/serializers/plan.py:172
+#: behemoth/models.py:283 behemoth/serializers/plan.py:184
 msgid "Playback strategy"
 msgstr "回放策略"
 
-#: behemoth/models.py:294 behemoth/serializers/plan.py:80
-msgid "Environment"
-msgstr "环境"
+#: behemoth/models.py:299
+msgid "Need review"
+msgstr "需要复核"
 
-#: behemoth/models.py:299 behemoth/models.py:380
-#: behemoth/serializers/monthly_version.py:11
-#: behemoth/serializers/monthly_version.py:22 behemoth/serializers/plan.py:79
-msgid "Playback"
-msgstr "回放"
-
-#: behemoth/models.py:305 behemoth/models.py:338 behemoth/models.py:399
+#: behemoth/models.py:302 behemoth/models.py:334 behemoth/models.py:391
 msgid "Plan"
 msgstr "计划"
 
-#: behemoth/models.py:327
+#: behemoth/models.py:323
 msgid "Model object"
 msgstr "模型对象"
 
-#: behemoth/models.py:332
+#: behemoth/models.py:328
 msgid "Object extend"
 msgstr "对象拓展"
 
-#: behemoth/models.py:351
+#: behemoth/models.py:347
 msgid "Asset name"
 msgstr "资产名称"
 
-#: behemoth/models.py:352
+#: behemoth/models.py:348
 msgid "Account username"
 msgstr "账号用户名"
 
-#: behemoth/models.py:356
+#: behemoth/models.py:352
 msgid "Task ID"
 msgstr "任务ID"
 
-#: behemoth/models.py:383
+#: behemoth/models.py:379
 msgid "Plan name"
 msgstr "计划名称"
 
-#: behemoth/models.py:403
+#: behemoth/models.py:395
 msgid "Instruction"
 msgstr "指令"
 
-#: behemoth/models.py:411
+#: behemoth/models.py:403
 msgid "Iteration"
 msgstr "迭代"
 
@@ -3979,19 +3989,23 @@ msgstr "迭代"
 msgid "Command execution completed"
 msgstr "命令执行成功"
 
-#: behemoth/serializers/plan.py:37
+#: behemoth/serializers/plan.py:39
 msgid "Commands"
 msgstr "命令"
 
-#: behemoth/serializers/plan.py:93
+#: behemoth/serializers/plan.py:79
+msgid "Monthly version"
+msgstr "月度版本"
+
+#: behemoth/serializers/plan.py:107
 msgid "Playback executions"
 msgstr "回放任务"
 
-#: behemoth/serializers/plan.py:174 terminal/models/component/terminal.py:88
+#: behemoth/serializers/plan.py:186 terminal/models/component/terminal.py:88
 msgid "type"
 msgstr "类型"
 
-#: behemoth/serializers/plan.py:263
+#: behemoth/serializers/plan.py:280
 msgid "Zip entry file"
 msgstr "zip 文件入口"
 
@@ -4005,7 +4019,7 @@ msgid ""
 "There are %s batches of tasks in total. The %sth task has started to execute."
 msgstr "总共有 %s 批任务，第 %s 个任务开始执行"
 
-#: behemoth/tasks.py:61
+#: behemoth/tasks.py:63
 #, python-format
 msgid "%s's task execution failed: %s"
 msgstr "任务 %s 执行失败: %s"

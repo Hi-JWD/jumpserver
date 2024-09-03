@@ -14,10 +14,11 @@ RUN wget https://golang.org/dl/go1.20.5.linux-amd64.tar.gz && \
 
 # 设置 Go 环境变量
 ENV PATH="/usr/local/go/bin:${PATH}"
+ARG GOPROXY=https://goproxy.io
 
 # 复制并编译你的 Go 项目
 COPY . /myapp
 WORKDIR /myapp
-RUN go build -o parse_linux.so -buildmode=c-shared parse.go
+RUN go mod tidy
 
 CMD ["/bin/bash"]
