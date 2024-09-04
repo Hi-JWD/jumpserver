@@ -260,6 +260,11 @@ class Environment(JMSOrgBaseModel):
 class Playback(JMSOrgBaseModel):
     name = models.CharField(max_length=128, verbose_name=_('Name'))
 
+    class Meta:
+        verbose_name = _('Playback')
+        ordering = ('-date_created',)
+        unique_together = [('org_id', 'name')]
+
     def create_pause(self, pause_data):
         execution = Execution.objects.create(name=_('Pause'), category=ExecutionCategory.pause)
         Command.objects.create(

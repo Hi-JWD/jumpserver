@@ -173,6 +173,6 @@ class SimpleMetadataWithFilters(SimpleMetadata):
         for k, v in meta_get.items():
             if k in filterset_fields:
                 v["filter"] = True
-            if k in order_fields:
+            if k in order_fields or f'-{k}' in order_fields:
                 v["order"] = True
         return metadata

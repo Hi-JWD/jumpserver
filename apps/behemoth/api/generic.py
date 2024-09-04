@@ -69,7 +69,7 @@ class ExecutionMixin:
 class EnvironmentViewSet(OrgBulkModelViewSet):
     model = Environment
     ordering_fields = ('-date_created',)
-    search_fields = ['name']
+    search_fields = ['name', 'created_by']
     serializer_classes = {
         'default': serializers.EnvironmentSerializer,
         'get_assets': serializers.AssetSerializer,
@@ -118,7 +118,7 @@ class PlaybackExecutionViewSet(OrgBulkModelViewSet):
 class PlaybackViewSet(OrgBulkModelViewSet):
     model = Playback
     ordering_fields = ('-date_created',)
-    search_fields = ['name']
+    search_fields = ['name', 'created_by']
     serializer_classes = {
         'default': serializers.PlaybackSerializer,
         'insert_pause': serializers.InsertPauseSerializer,
@@ -199,7 +199,7 @@ class CommandViewSet(OrgBulkModelViewSet):
 class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
     model = Execution
     ordering_fields = ('-date_created',)
-    search_fields = ['name', 'version']
+    search_fields = ['name', 'version', 'created_by']
     filterset_fields = ['name', 'status']
     serializer_classes = {
         'default': serializers.ExecutionSerializer,
