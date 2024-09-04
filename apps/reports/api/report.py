@@ -9,7 +9,7 @@ from common.utils.http import is_true
 from common.const.choices import Trigger
 from common.const.http import GET
 from common.api import JMSModelViewSet
-from common.utils.timezone import local_now_display
+from common.utils.timezone import local_now_filename
 from common.utils import get_logger
 from rbac.permissions import RBACPermission
 from reports import serializers
@@ -61,8 +61,7 @@ class ReportExecutionViewSet(ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(
-        methods=[GET], detail=True, url_path='file/download',
-        permission_classes=[RBACPermission, ],
+        methods=[GET], detail=True, url_path='file/download', permission_classes=[RBACPermission,],
     )
     def download(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -73,4 +72,5 @@ class ReportExecutionViewSet(ModelViewSet):
             logger.error(f'User({request.user}) failed to find this path: {local_path}. Error: {err}')
             return HttpResponse(status=status.HTTP_404_NOT_FOUND)
 
-        return FileResponse(file, as_attachment=True, filename=f'report-{local_now_display()}.pdf')
+        filename = f'{instance.report.name}-{local_now_filename()}.pdf'
+        return FileResponse(file, as_attachment=True, filename=filename)
