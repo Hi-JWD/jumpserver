@@ -44,6 +44,7 @@ ARG TOOLS="                           \
         wget"
 
 ARG APT_MIRROR=http://mirrors.ustc.edu.cn
+#ARG APT_MIRROR=http://mirrors.tuna.tsinghua.edu.cn
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=core-apt \
     --mount=type=cache,target=/var/lib/apt,sharing=locked,id=core-apt \
     sed -i "s@http://.*.debian.org@${APT_MIRROR}@g" /etc/apt/sources.list \
@@ -98,6 +99,7 @@ ARG TOOLS="                           \
         wget"
 
 ARG APT_MIRROR=http://mirrors.ustc.edu.cn
+#ARG APT_MIRROR=http://mirrors.tuna.tsinghua.edu.cn
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=core-apt \
     --mount=type=cache,target=/var/lib/apt,sharing=locked,id=core-apt \
     sed -i "s@http://.*.debian.org@${APT_MIRROR}@g" /etc/apt/sources.list \
