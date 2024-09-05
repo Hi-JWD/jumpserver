@@ -428,6 +428,10 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
                     _('The {} cannot be empty').format('zip_entry_file')
                 )
             file = self._handle_zip_file(file, entry)
+        else:
+            file.seek(0)
+            content = self.remove_bom(file.read())
+            file = ContentFile(content, name=self.get_filename(file.name))
 
         name, ext = os.path.splitext(file.name)
         file_name = f'{name}-{local_now_display("%Y_%m_%d_%H_%M_%S")}{ext}'
