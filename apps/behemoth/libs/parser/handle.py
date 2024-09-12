@@ -9,7 +9,7 @@ from django.conf import settings
 from common.utils import get_logger
 
 
-if platform.system() == "Darwin":
+if platform.system() == 'Darwin':
     so_dir = 'parse_darwin.so'
 else:
     so_dir = 'parse_linux.so'
@@ -17,9 +17,12 @@ else:
 
 logger = get_logger(__file__)
 
-lib = ctypes.CDLL(os.path.join(settings.APPS_DIR, 'behemoth', 'libs', 'parser', so_dir))
-lib.Parse.argtypes = [ctypes.c_char_p] # noqa
-lib.Parse.restype = ctypes.c_char_p
+try:
+    lib = ctypes.CDLL(os.path.join(settings.APPS_DIR, 'behemoth', 'libs', 'parser', so_dir))
+    lib.Parse.argtypes = [ctypes.c_char_p] # noqa
+    lib.Parse.restype = ctypes.c_char_p
+except Exception as error:
+    logger.error('Failed to load parse lib')
 
 
 def parse_sql(sql: str) -> List[str]:
