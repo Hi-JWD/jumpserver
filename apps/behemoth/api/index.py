@@ -116,6 +116,8 @@ class IndexApi(DateTimeMixin, APIView):
                         cache.set(cache_key, qs, _compute_timeout(current_date, self.days))
                     current_date += timezone.timedelta(days=1)
                     for datetime_obj, status in qs:
+                        if not temp_data.get(datetime_obj.strftime('%m-%d'), None):
+                            continue
                         temp_data[datetime_obj.strftime('%m-%d')][status] += 1
             envs.append({'name': env.name, 'data': list(temp_data.values())})
         return {'date': dates, 'data': envs}
