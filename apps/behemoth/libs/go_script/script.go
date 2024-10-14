@@ -244,6 +244,7 @@ func (s *LocalScriptHandler) CreateTempFile() (string, error) {
 			s.cmdDir = filepath.Join(destDir, parts[0])
 			realEntryFile = strings.Join(parts[1:], string(filepath.Separator))
 		} else {
+			s.cmdDir = destDir
 			realEntryFile = entryFile
 		}
 	}
@@ -279,9 +280,7 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 		args = append(args, "-L", "-S", connectionStr, "@"+path)
 	}
 	cmd := exec.Command(s.opts.Script, args...)
-	if s.cmdDir != "" {
-		cmd.Dir = s.cmdDir
-	}
+	cmd.Dir = s.cmdDir
 	output, err := cmd.CombinedOutput()
 	ret := string(output)
 	if s.opts.Script == "mysql" {
