@@ -373,6 +373,9 @@ class Execution(JMSOrgBaseModel):
         queryset = cmd_storage.get_queryset().filter(execution_id=self.id)
         if not get_all:
             queryset = queryset.exclude(status=CommandStatus.success)
+        if self.category == ExecutionCategory.file:
+            result = queryset.first()
+            queryset = [result] if result else []
         return queryset
 
 

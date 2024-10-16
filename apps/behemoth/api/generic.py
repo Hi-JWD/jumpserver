@@ -197,6 +197,8 @@ class CommandViewSet(OrgBulkModelViewSet):
 
 
 class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
+    cache_key = 'TREE_INFO_WITH_ZIP_{}'
+
     model = Execution
     ordering_fields = ('-date_created',)
     search_fields = ['name', 'version', 'created_by']
@@ -211,6 +213,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
         'update_command': 'behemoth.change_command',
         'get_commands': 'behemoth.view_command',
         'operate_task': 'behemoth.change_command | behemoth.change_execution',
+        'get_file_tree_info': 'behemoth.view_command'
     }
 
     def get_queryset(self):
@@ -329,9 +332,99 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
         ).first()
 
     @staticmethod
-    def _type_for_health(execution, *args, **kwargs):
-        # TODO 想办法证明这个任务正在执行，这个接口10秒1次
-        pass
+    def _get_content_from_file(filename):
+        try:
+            with open(filename, 'r') as f:
+                content = f.read()
+        except: # noqa
+            content = '读取文件内容失败，只支持读取文本文件类型'
+        return content
+
+    def _get_tree_info_from_zip(self, filename):
+        def load_tree_info_from_dir(dirname, first=True):
+            basename = '/' if first else os.path.basename(dirname)
+            root_id = 'root' if first else ''
+            result = {
+                'name': basename, 'id': root_id, 'children': []
+            }
+            try:
+                for item in os.listdir(dirname):
+                    item_path = os.path.join(dirname, item)
+                    if os.path.isfile(item_path):
+                        name = _('Zip entry file') if item == 'entry.bs' else item
+                        result['children'].append({
+                            'name': name, 'id': item_path[len(unpack_dir)+1:],
+                        })
+                    elif os.path.isdir(item_path):
+                        sub_result = load_tree_info_from_dir(item_path, False)
+                        result['children'].extend(sub_result)
+            except Exception: # noqa
+                pass
+            return [result]
+
+        execution_id = os.path.basename(os.path.dirname(filename))
+        cache_key = self.cache_key.format(execution_id)
+        tree_info = cache.get(cache_key, {}).get('tree_info')
+        if tree_info:
+            return tree_info
+
+        unpack_dir = os.path.join(os.path.dirname(filename), 'jms_unpack')
+        if not os.path.exists(unpack_dir):
+            zipfile.ZipFile(filename).extractall(unpack_dir)
+
+        tree_info = load_tree_info_from_dir(unpack_dir)
+        data = {'unpack_dir': unpack_dir, 'tree_info': tree_info}
+        cache.set(cache_key, data, timeout=3600)
+        return tree_info
+
+    def __get_tree_info(self):
+        execution = self.get_object()
+        if execution.category != ExecutionCategory.file:
+            return Response({'error': 'Not support'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        response = Response({'tree': [], 'type': 'empty'})
+        commands = execution.get_commands()
+        if not commands or not default_storage.exists(commands[0].input):
+            return response
+
+        filename = default_storage.path(commands[0].input)
+        if zipfile.is_zipfile(filename):
+            tree = self._get_tree_info_from_zip(filename)
+            return Response({'tree': tree, 'type': 'zip'})
+
+        content = self._get_content_from_file(filename)
+        tree = [{'name': os.path.basename(commands[0].input), 'children': []}]
+        return Response({'tree': tree, 'content': content, 'type': 'sql'})
+
+    def __get_file_info(self):
+        execution_id = self.kwargs.get('pk')
+        path = self.request.query_params.get('path')
+        if not execution_id or not path:
+            return Response(
+                {'error': 'Invalid params, must contains pk and path'}, 400
+            )
+
+        error_msg = _('%s object does not exist.') % _('File')
+        cache_key = self.cache_key.format(execution_id)
+        unpack_dir = cache.get(cache_key, {}).get('unpack_dir')
+        if not unpack_dir:
+            return Response({'error': error_msg}, status=400)
+
+        real_path = os.path.join(unpack_dir, path)
+        if not os.path.exists(real_path):
+            return Response({'error': error_msg}, status=400)
+        content = self._get_content_from_file(real_path)
+        return Response({'content': content})
+
+    @action(methods=['GET'], detail=True, url_path='file-info')
+    def get_file_tree_info(self, request, *args, **kwargs):
+        req_action = request.query_params.get('action')
+        if req_action ==  'tiers':
+            return self.__get_tree_info()
+        elif req_action == 'detail':
+            return self.__get_file_info()
+        else:
+            return Response({'error': 'Not support'}, status=http_status.HTTP_400_BAD_REQUEST)
 
 
 class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
@@ -433,13 +526,11 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
             content = self.remove_bom(file.read())
             file = ContentFile(content, name=self.get_filename(file.name))
 
-        name, ext = os.path.splitext(file.name)
-        file_name = f'{name}-{local_now_display("%Y_%m_%d_%H_%M_%S")}{ext}'
         execution = self.get_object().create_execution(
-            with_auth=True, name=file_name, category=ExecutionCategory.file,
+            with_auth=True, name=file.name, category=ExecutionCategory.file,
             version=serializer.validated_data['version']
         )
-        to = f'behemoth/commands/{execution.id}/{file_name}'
+        to = f'behemoth/commands/{execution.id}/{file.name}'
         relative_path = default_storage.save(to, file)
         Command.objects.create(
             input=f'{relative_path}', index=0, execution_id=execution.id,
