@@ -35,16 +35,20 @@ def run_task_sync(executions: list[Execution], users: list[str]):
                 environment = execution.plan.environment
                 if execution.asset_name and execution.account_username:
                     new_asset_name = execution.asset_name.replace('：', ':').split(':', 1)[-1]
-                    asset = environment.assets.filter(name__endswith=new_asset_name).first()
+                    asset = environment.assets.filter(name__iendswith=new_asset_name).first()
                     if not asset:
-                        raise JMSException('环境[%s]下未找到资产[%s]' % (environment, execution.asset_name))
+                        raise JMSException(f'环境[{environment}]下未找到资产[{new_asset_name}]')
+
+                    if not asset.db_name:
+                        raise JMSException(
+                            f'环境[{environment}]下的资产[{new_asset_name}]没有提供数据库名，请到管理页面更新'
+                        )
 
                     account = asset.accounts.filter(username=execution.account_username).first()
                     if not account:
+                        account_name = execution.account_username
                         raise JMSException(
-                            '环境[%s]下的资产[%s]未找到账号[%s]' % (
-                                environment, execution.asset_name, execution.account_username
-                            )
+                            f'环境[{environment}]下的资产[{new_asset_name}]未找到账号[{account_name}]'
                         )
                     execution.asset = asset
                     execution.account = account
