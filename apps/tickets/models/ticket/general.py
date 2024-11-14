@@ -377,7 +377,7 @@ class Ticket(StatusMixin, JMSBaseModel):
         date_created = as_current_tz(self.date_created)
         date_prefix = date_created.strftime('%Y%m%d')
 
-        ticket = Ticket.objects.filter(
+        ticket = Ticket.objects.all().select_for_update().filter(
             serial_num__startswith=date_prefix
         ).order_by('-serial_num').first()
 
