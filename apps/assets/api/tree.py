@@ -39,16 +39,16 @@ class NodeChildrenApi(generics.ListCreateAPIView):
         self.instance = self.get_object()
 
     def perform_create(self, serializer):
+        data = serializer.validated_data
+        _id = data.get("id")
+        value = data.get("value")
+        if value:
+            children = self.instance.get_children()
+            if children.filter(value=value).exists():
+                raise JMSException(_('The same level node name cannot be the same'))
+        else:
+            value = self.instance.get_next_child_preset_name()
         with NodeAddChildrenLock(self.instance):
-            data = serializer.validated_data
-            _id = data.get("id")
-            value = data.get("value")
-            if value:
-                children = self.instance.get_children()
-                if children.filter(value=value).exists():
-                    raise JMSException(_('The same level node name cannot be the same'))
-            else:
-                value = self.instance.get_next_child_preset_name()
             node = self.instance.create_child(value=value, _id=_id)
             # 避免查询 full value
             node._full_value = node.value
@@ -126,7 +126,7 @@ class NodeChildrenAsTreeApi(SerializeToTreeNodeMixin, NodeChildrenApi):
         include_assets = self.request.query_params.get('assets', '0') == '1'
         if not self.instance or not include_assets:
             return Asset.objects.none()
-        if self.instance.is_org_root():
+        if not self.request.GET.get('search') and self.instance.is_org_root():
             return Asset.objects.none()
         if query_all:
             assets = self.instance.get_all_assets()

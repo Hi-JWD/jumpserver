@@ -22,8 +22,10 @@ from acls.models import CommandFilterACL
 from assets.models import Asset
 from assets.automations.base.manager import SSHTunnelManager
 from common.db.encoder import ModelJSONFieldEncoder
-from ops.ansible import JMSInventory, AdHocRunner, PlaybookRunner, CommandInBlackListException, UploadFileRunner
-from ops.ansible.receptor import receptor_runner
+from ops.ansible import JMSInventory, AdHocRunner, PlaybookRunner, UploadFileRunner
+
+"""stop all ssh child processes of the given ansible process pid."""
+from ops.ansible.exception import CommandInBlackListException
 from ops.mixin import PeriodTaskModelMixin
 from ops.variables import *
 from ops.const import Types, RunasPolicies, JobStatus, JobModules
@@ -65,6 +67,7 @@ class JMSPermedInventory(JMSInventory):
 
         protocol_supported_modules_mapping = {
             'mysql': ['mysql'],
+            'mariadb': ['mysql'],
             'postgresql': ['postgresql'],
             'sqlserver': ['sqlserver'],
             'ssh': ['shell', 'python', 'win_shell', 'raw', 'huawei'],
@@ -75,7 +78,7 @@ class JMSPermedInventory(JMSInventory):
             host['error'] = "Module {} is not suitable for this asset".format(self.module)
             return host
 
-        if protocol.name in ('mysql', 'postgresql', 'sqlserver'):
+        if protocol.name in ('mariadb', 'mysql', 'postgresql', 'sqlserver'):
             host['login_host'] = asset.address
             host['login_port'] = protocol.port
             host['login_user'] = account.username
@@ -212,7 +215,8 @@ class Job(JMSOrgBaseModel, PeriodTaskModelMixin):
             return "{}:{}:{}".format(self.org.name, self.creator.name, self.playbook.name)
 
     def create_execution(self):
-        return self.executions.create(job_version=self.version, material=self.material, job_type=Types[self.type].value)
+        return self.executions.create(job_version=self.version, material=self.material, job_type=Types[self.type].value,
+                                      creator=self.creator)
 
     class Meta:
         verbose_name = _("Job")
@@ -331,6 +335,7 @@ class JobExecution(JMSOrgBaseModel):
 
             runner = AdHocRunner(
                 self.inventory_path,
+                self.job.module,
                 module,
                 timeout=self.current_job.timeout,
                 module_args=args,
@@ -473,6 +478,16 @@ class JobExecution(JMSOrgBaseModel):
             for acl in acls:
                 if self.match_command_group(acl, asset):
                     break
+        command = self.current_job.args
+        if command and set(command.split()).intersection(set(settings.SECURITY_COMMAND_BLACKLIST)):
+            CommandExecutionAlert({
+                "assets": self.current_job.assets.all(),
+                "input": self.material,
+                "risk_level": RiskLevelChoices.reject,
+                "user": self.creator,
+            }).publish_async()
+            raise CommandInBlackListException(
+                "Command is rejected by black list: {}".format(self.current_job.args))
 
     def check_danger_keywords(self):
         lines = self.job.playbook.check_dangerous_keywords()

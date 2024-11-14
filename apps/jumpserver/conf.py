@@ -489,7 +489,7 @@ class Config(dict):
         # 安全配置
         'SECURITY_MFA_AUTH': 0,  # 0 不开启 1 全局开启 2 管理员开启
         'SECURITY_MFA_AUTH_ENABLED_FOR_THIRD_PARTY': True,
-        'SECURITY_COMMAND_EXECUTION': True,
+        'SECURITY_COMMAND_EXECUTION': False,
         'SECURITY_COMMAND_BLACKLIST': [
             'reboot', 'shutdown', 'poweroff', 'halt', 'dd', 'half', 'top'
         ],
@@ -604,7 +604,6 @@ class Config(dict):
 
         # API 分页
         'MAX_LIMIT_PER_PAGE': 10000,
-        'DEFAULT_PAGE_SIZE': None,
 
         'LIMIT_SUPER_PRIV': False,
 
@@ -621,8 +620,12 @@ class Config(dict):
         'TICKET_APPLY_ASSET_SCOPE': 'all',
 
         # Ansible Receptor
-        'ANSIBLE_RECEPTOR_ENABLE': True,
-        'ANSIBLE_RECEPTOR_SOCK_PATH': '{}/data/share/control.sock'.format(PROJECT_DIR)
+        'RECEPTOR_ENABLED': False,
+        'ANSIBLE_RECEPTOR_GATEWAY_PROXY_HOST': 'jms_celery',
+        'ANSIBLE_RECEPTOR_TCP_LISTEN_ADDRESS': 'receptor:7521',
+
+        'FILE_UPLOAD_TEMP_DIR': None
+
     }
 
     old_config_map = {

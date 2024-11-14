@@ -1,4 +1,3 @@
-import ast
 import json
 import time
 
@@ -17,9 +16,9 @@ from common.signals import django_ready
 from common.utils.connection import RedisPubSub
 from jumpserver.utils import get_current_request
 from orgs.utils import get_current_org_id, set_current_org
-from .ansible.receptor.receptor_runner import receptor_ctl
 from .celery import app
 from .models import CeleryTaskExecution, CeleryTask, Job
+from .ansible.runner import interface
 
 logger = get_logger(__name__)
 
@@ -61,7 +60,7 @@ def check_registered_tasks(*args, **kwargs):
         'perms.tasks.check_asset_permission_will_expired',
         'ops.tasks.create_or_update_registered_periodic_tasks', 'perms.tasks.check_asset_permission_expired',
         'settings.tasks.ldap.import_ldap_user_periodic', 'users.tasks.check_password_expired_periodic',
-        'common.utils.verify_code.send_async', 'assets.tasks.nodes_amount.check_node_assets_amount_period_task',
+        'common.utils.verify_code.send_sms_async', 'assets.tasks.nodes_amount.check_node_assets_amount_period_task',
         'users.tasks.check_user_expired', 'orgs.tasks.refresh_org_cache_task',
         'terminal.tasks.upload_session_replay_to_external_storage', 'terminal.tasks.clean_orphan_session',
         'audits.tasks.clean_audits_log_period', 'authentication.tasks.clean_django_sessions'
@@ -141,6 +140,9 @@ def task_sent_handler(headers=None, body=None, **kwargs):
         args = []
         kwargs = {}
 
+    # 不要保存__current_lang和__current_org_id参数,防止系统任务中点击再次执行报错
+    kwargs.pop('__current_lang', None)
+    kwargs.pop('__current_org_id', None)
     data = {
         'id': i,
         'name': task,
@@ -167,7 +169,7 @@ def subscribe_stop_job_execution(sender, **kwargs):
 
     def on_stop(pid):
         logger.info(f"Stop job execution {pid} start")
-        receptor_ctl.kill_process(pid)
+        interface.kill_process(pid)
 
     job_execution_stop_pub_sub.subscribe(on_stop)
 

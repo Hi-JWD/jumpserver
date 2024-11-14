@@ -12,7 +12,8 @@ from sshtunnel import SSHTunnelForwarder
 
 from assets.automations.methods import platform_automation_methods
 from common.utils import get_logger, lazyproperty, is_openssh_format_key, ssh_pubkey_gen
-from ops.ansible import JMSInventory, SuperPlaybookRunner, DefaultCallback
+from ops.ansible import JMSInventory, DefaultCallback, SuperPlaybookRunner
+from ops.ansible.interface import interface
 
 logger = get_logger(__name__)
 
@@ -36,7 +37,7 @@ class SSHTunnelManager:
         info = self.file_to_json(runner.inventory)
         servers, not_valid = [], []
         for k, host in info['all']['hosts'].items():
-            jms_asset, jms_gateway = host.get('jms_asset'), host.get('gateway')
+            jms_asset, jms_gateway = host.get('jms_asset'), host.get('jms_gateway')
             if not jms_gateway:
                 continue
             try:
@@ -54,7 +55,9 @@ class SSHTunnelManager:
                 not_valid.append(k)
             else:
                 local_bind_port = server.local_bind_port
-                host['ansible_host'] = jms_asset['address'] = host['login_host'] = 'jms_celery'
+
+                host['ansible_host'] = jms_asset['address'] = host[
+                    'login_host'] = interface.get_gateway_proxy_host()
                 host['ansible_port'] = jms_asset['port'] = host['login_port'] = local_bind_port
                 servers.append(server)
 
@@ -110,11 +113,7 @@ class BasePlaybookManager:
         if not data:
             data = automation_params.get(method_id, {})
         params = serializer(data).data
-        return {
-            field_name: automation_params.get(field_name, '')
-            if not params[field_name] else params[field_name]
-            for field_name in params
-        }
+        return params
 
     @property
     def platform_automation_methods(self):
@@ -297,12 +296,16 @@ class BasePlaybookManager:
             for host in hosts:
                 result = cb.host_results.get(host)
                 if state == 'ok':
-                    self.on_host_success(host, result)
+                    self.on_host_success(host, result.get('ok', ''))
                 elif state == 'skipped':
                     pass
                 else:
                     error = hosts.get(host)
-                    self.on_host_error(host, error, result)
+                    self.on_host_error(
+                        host, error,
+                        result.get('failures', '')
+                        or result.get('dark', '')
+                    )
 
     def on_runner_failed(self, runner, e):
         print("Runner failed: {} {}".format(e, self))

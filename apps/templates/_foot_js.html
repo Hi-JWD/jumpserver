@@ -42,9 +42,9 @@
         $.fn.select2.defaults.set('language', getUserLang())
         const md = window.markdownit();
         const markdownContent = document.querySelector('script[type="text/markdown"]').textContent;
-        const footerElement = document.getElementById('markdown-output')
-        if (footerElement) {
-            footerElement.innerHTML = md.render(markdownContent);
+        const markdownRef = document.getElementById('markdown-output')
+        if (markdownRef) {
+            markdownRef.innerHTML = md.render(markdownContent);
         }
     });
 </script>

@@ -23,6 +23,7 @@ class Protocol(ChoicesMixin, models.TextChoices):
     postgresql = 'postgresql', 'PostgreSQL'
     sqlserver = 'sqlserver', 'SQLServer'
     db2 = 'db2', 'DB2'
+    dameng = 'dameng', 'Dameng'
     clickhouse = 'clickhouse', 'ClickHouse'
     redis = 'redis', 'Redis'
     mongodb = 'mongodb', 'MongoDB'
@@ -185,6 +186,12 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 'secret_types': ['password'],
                 'xpack': True,
             },
+            cls.dameng: {
+                'port': 5236,
+                'required': True,
+                'secret_types': ['password'],
+                'xpack': True,
+            },
             cls.clickhouse: {
                 'port': 9000,
                 'required': True,
@@ -201,6 +208,12 @@ class Protocol(ChoicesMixin, models.TextChoices):
                         'default': 'admin',
                         'label': _('Auth source'),
                         'help_text': _('The database to authenticate against')
+                    },
+                    'connection_options': {
+                        'type': 'str',
+                        'default': '',
+                        'label': _('Connection options'),
+                        'help_text': _('The connection specific options eg. retryWrites=false&retryReads=false')
                     }
                 }
             },
@@ -282,22 +295,17 @@ class Protocol(ChoicesMixin, models.TextChoices):
                 'setting': {
                     'api_mode': {
                         'type': 'choice',
-                        'default': 'gpt-3.5-turbo',
+                        'default': 'gpt-4o-mini',
                         'label': _('API mode'),
                         'choices': [
-                            ('gpt-3.5-turbo', 'GPT-3.5 Turbo'),
-                            ('gpt-3.5-turbo-16k', 'GPT-3.5 Turbo 16K'),
+                            ('gpt-4o-mini', 'GPT-4o-mini'),
+                            ('gpt-4o', 'GPT-4o'),
+                            ('gpt-4-turbo', 'GPT-4 Turbo'),
                         ]
                     }
                 }
             }
         }
-        if settings.XPACK_LICENSE_IS_VALID:
-            choices = protocols[cls.chatgpt]['setting']['api_mode']['choices']
-            choices.extend([
-                ('gpt-4', 'GPT-4'),
-                ('gpt-4-32k', 'GPT-4 32K'),
-            ])
         return protocols
 
     @classmethod

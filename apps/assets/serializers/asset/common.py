@@ -323,7 +323,9 @@ class AssetSerializer(BulkOrgResourceModelSerializer, ResourceLabelsMixin, Writa
             template_id = data.get('template', None)
             if template_id:
                 template = AccountTemplate.objects.get(id=template_id)
-                if template and template.su_from:
+                template.push_params = data.pop('push_params', {})
+                data['params'] = template.push_params
+                if template.su_from:
                     su_from_name_username_secret_type_map[template.name] = (
                         template.su_from.username, template.su_from.secret_type
                     )
@@ -381,6 +383,7 @@ class AssetSerializer(BulkOrgResourceModelSerializer, ResourceLabelsMixin, Writa
 
 
 class DetailMixin(serializers.Serializer):
+    accounts = AssetAccountSerializer(many=True, required=False, label=_('Accounts'))
     spec_info = MethodSerializer(label=_('Spec info'), read_only=True)
     gathered_info = MethodSerializer(label=_('Gathered info'), read_only=True)
     auto_config = serializers.DictField(read_only=True, label=_('Auto info'))
@@ -395,7 +398,7 @@ class DetailMixin(serializers.Serializer):
     def get_field_names(self, declared_fields, info):
         names = super().get_field_names(declared_fields, info)
         names.extend([
-            'gathered_info', 'spec_info', 'auto_config',
+            'accounts', 'gathered_info', 'spec_info', 'auto_config',
         ])
         return names
 
