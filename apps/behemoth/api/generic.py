@@ -345,7 +345,7 @@ class ExecutionViewSet(ExecutionMixin, OrgBulkModelViewSet):
             basename = '/' if first else os.path.basename(dirname)
             root_id = 'root' if first else ''
             result = {
-                'name': basename, 'id': root_id, 'children': []
+                'name': basename, 'id': '', 'children': []
             }
             try:
                 for item in os.listdir(dirname):
@@ -488,9 +488,21 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
                 if item.strip().startswith('@'):
                     item = item.replace('\\', '/')
                 new += item + '\n'
-        except Exception:
+        except Exception: # noqa
             new = content
         return new.encode()
+
+    @staticmethod
+    def decode_content(content: bytes):
+        try:
+            decoded_content = content.decode('utf-8')
+            return decoded_content.encode('utf-8')
+        except Exception: # noqa
+            try:
+                decoded_content = content.decode('gbk')
+                return decoded_content.encode('utf-8')
+            except Exception: # noqa
+                return content
 
     def _handle_zip_file(self, file, entry):
         new_zip_data = io.BytesIO()
@@ -499,10 +511,10 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
                 for zip_info in zip_file.infolist():
                     filename = self.get_filename(zip_info.filename)
                     with zip_file.open(zip_info.filename) as source_file:
-                        content = source_file.read()
-                        content = self.remove_bom(content)
-                        if entry == filename:
+                        content = self.remove_bom(source_file.read())
+                        if filename == entry:
                             content = self.convert_path(content)
+                        content = self.decode_content(content)
                         new_zip_file.writestr(filename, content)
                 new_zip_file.writestr('entry.bs', entry)
         new_zip_data.seek(0)
@@ -524,6 +536,7 @@ class PlanViewSet(ExecutionMixin, OrgBulkModelViewSet):
         else:
             file.seek(0)
             content = self.remove_bom(file.read())
+            content = self.decode_content(content)
             file = ContentFile(content, name=self.get_filename(file.name))
 
         execution = self.get_object().create_execution(
