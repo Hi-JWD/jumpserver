@@ -8,4 +8,4 @@ class GPT(Asset):
     proxy = models.CharField(max_length=128, blank=True, default='', verbose_name=_("Proxy"))
 
     class Meta:
-        verbose_name = _("Web")
+        verbose_name = _("GPT")

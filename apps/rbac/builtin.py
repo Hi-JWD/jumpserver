@@ -48,6 +48,36 @@ auditor_perms = user_perms + _auditor_perms
 
 system_auditor_perms = system_user_perms + _auditor_perms + _view_root_perms
 
+# app, model, action, resource
+security_admin_exclude_perms = (
+    ('audits', '*', '*', '*'),
+    ('perms', '*', '*', '*'),
+    ('acls', '*', '*', '*'),
+    ('terminal', 'command', '*', 'command'),
+    ('terminal', 'session', '*', 'session'),
+    ('terminal', 'session', 'add', 'supersessionsharing'),
+    ('terminal', 'session', 'validate', 'sessionactionperm'),
+    ('terminal', 'sessionreplay', '*', 'sessionreplay'),
+    ('terminal', 'sessionsharing', '*', 'sessionsharing'),
+    ('terminal', 'sessionjoinrecord', '*', 'sessionjoinrecord'),
+    ('rbac', 'menupermission', 'view', 'audit'),
+    ('ops', '*', '*', '*'),
+)
+security_confidentiality_admin_perms = (
+    ('perms', '*', '*', '*'),
+    ('acls', '*', '*', '*'),
+    ('users', 'user', 'view', 'user'),
+    ('users', 'usergroup', 'view', 'usergroup'),
+    ('assets', 'asset', 'match|view', 'asset'),
+    ('assets', 'node', 'match|view', 'node'),
+    ('assets', 'platform', 'view', 'platform'),
+    ('audits', 'passwordchangelog', 'view', 'passwordchangelog'),
+    ('audits', 'userloginlog', 'view', 'userloginlog'),
+    ('rbac', 'menupermission', 'view', 'console|audit'),
+    ('audits', '*', 'view', 'loginlog|passwordchangelog'),
+)
+security_auditor_perms = _auditor_perms + _view_root_perms
+
 app_exclude_perms = [
     ('users', 'user', 'add,delete', 'user'),
     ('orgs', 'org', 'add,delete,change', 'org'),
@@ -67,7 +97,7 @@ class PredefineRole:
     id_prefix = '00000000-0000-0000-0000-00000000000'
 
     def __init__(self, index, name, scope, perms, perms_type='include'):
-        self.id = self.id_prefix + index
+        self.id = self.id_prefix[:36-len(index)] + index
         self.name = name
         self.scope = scope
         self.perms = perms
@@ -131,6 +161,15 @@ class BuiltinRole:
     )
     org_user = PredefineRole(
         '7', gettext_noop('OrgUser'), Scope.org, user_perms
+    )
+    security_admin = PredefineRole(
+        '10', gettext_noop('SecurityAdmin'), Scope.system, security_admin_exclude_perms, 'exclude'
+    )
+    security_confidentiality_admin = PredefineRole(
+        '11', gettext_noop('SecurityConfidentialityAdmin'), Scope.system, security_confidentiality_admin_perms
+    )
+    security_auditor = PredefineRole(
+        '12', gettext_noop('SecurityAuditor'), Scope.system, security_auditor_perms
     )
     system_role_mapper = None
     org_role_mapper = None
