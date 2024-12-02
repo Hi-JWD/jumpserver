@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 #
-from importlib import import_module
-
-from django.conf import settings
 from django.db.models import F, Value, CharField, Q
 from django.db.models.functions import Cast
 from django.http import HttpResponse, FileResponse
@@ -35,6 +32,7 @@ from .models import (
     FTPLog, UserLoginLog, OperateLog, PasswordChangeLog,
     ActivityLog, JobLog, UserSession
 )
+from .mixins import SpecialAuditMixin
 from .serializers import (
     FTPLogSerializer, UserLoginLogSerializer, JobLogSerializer,
     OperateLogSerializer, OperateLogActionDetailSerializer,
@@ -125,7 +123,9 @@ class UserLoginCommonMixin:
     search_fields = ['id', 'username', 'ip', 'city']
 
 
-class UserLoginLogViewSet(UserLoginCommonMixin, OrgReadonlyModelViewSet):
+class UserLoginLogViewSet(SpecialAuditMixin, UserLoginCommonMixin, OrgReadonlyModelViewSet):
+    filter_key = 'username'
+
     @staticmethod
     def get_org_member_usernames():
         user_queryset = current_org.get_members()
@@ -232,7 +232,7 @@ class OperateLogViewSet(OrgReadonlyModelViewSet):
         return qs
 
 
-class PasswordChangeLogViewSet(OrgReadonlyModelViewSet):
+class PasswordChangeLogViewSet(SpecialAuditMixin, OrgReadonlyModelViewSet):
     model = PasswordChangeLog
     serializer_class = PasswordChangeLogSerializer
     extra_filter_backends = [DatetimeRangeFilterBackend]
@@ -242,6 +242,7 @@ class PasswordChangeLogViewSet(OrgReadonlyModelViewSet):
     filterset_fields = ['user', 'change_by', 'remote_addr']
     search_fields = filterset_fields
     ordering = ['-datetime']
+    filter_key = 'user'
 
     def get_queryset(self):
         queryset = super().get_queryset()
