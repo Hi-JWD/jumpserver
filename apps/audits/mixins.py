@@ -24,7 +24,7 @@ class SpecialAuditMixin:
         cache.set(cache_key, usernames, timeout=10)
         return usernames
 
-    def filter_audit_role_users(self):
+    def get_queryset(self):
         queryset = super().get_queryset()
         username = str(self.request.user)
         auditor_usernames = self._get_role_users('SecurityAuditor')
