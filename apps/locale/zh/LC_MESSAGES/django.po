@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JumpServer 0.3.3\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-11-25 11:58+0800\n"
+"POT-Creation-Date: 2024-12-08 20:21+0800\n"
 "PO-Revision-Date: 2021-05-20 10:54+0800\n"
 "Last-Translator: ibuler <ibuler@qq.com>\n"
 "Language-Team: JumpServer team<ibuler@qq.com>\n"
@@ -4792,12 +4792,12 @@ msgid "SecurityAdmin"
 msgstr "安全系统管理员"
 
 #: rbac/builtin.py:169
-msgid "SecurityConfidentialityAdmin"
-msgstr "安全保密管理员"
+msgid "AuthorizedAdmin"
+msgstr "授权管理员"
 
 #: rbac/builtin.py:172
-msgid "SecurityAuditor"
-msgstr "安全审计员"
+msgid "AuditorAdmin"
+msgstr "审计管理员"
 
 #: rbac/models/menu.py:13
 msgid "Menu permission"

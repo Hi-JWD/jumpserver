@@ -63,7 +63,7 @@ security_admin_exclude_perms = (
     ('rbac', 'menupermission', 'view', 'audit'),
     ('ops', '*', '*', '*'),
 )
-security_confidentiality_admin_perms = (
+authorized_admin_perms = (
     ('perms', '*', '*', '*'),
     ('acls', '*', '*', '*'),
     ('users', 'user', 'view', 'user'),
@@ -76,7 +76,7 @@ security_confidentiality_admin_perms = (
     ('rbac', 'menupermission', 'view', 'console|audit'),
     ('audits', '*', 'view', 'loginlog|passwordchangelog'),
 )
-security_auditor_perms = _auditor_perms + _view_root_perms
+auditor_admin_perms = _auditor_perms + _view_root_perms
 
 app_exclude_perms = [
     ('users', 'user', 'add,delete', 'user'),
@@ -165,11 +165,11 @@ class BuiltinRole:
     security_admin = PredefineRole(
         '10', gettext_noop('SecurityAdmin'), Scope.system, security_admin_exclude_perms, 'exclude'
     )
-    security_confidentiality_admin = PredefineRole(
-        '11', gettext_noop('SecurityConfidentialityAdmin'), Scope.system, security_confidentiality_admin_perms
+    authorized_admin = PredefineRole(
+        '11', gettext_noop('AuthorizedAdmin'), Scope.system, authorized_admin_perms
     )
-    security_auditor = PredefineRole(
-        '12', gettext_noop('SecurityAuditor'), Scope.system, security_auditor_perms
+    auditor_admin = PredefineRole(
+        '12', gettext_noop('AuditorAdmin'), Scope.system, auditor_admin_perms
     )
     system_role_mapper = None
     org_role_mapper = None
