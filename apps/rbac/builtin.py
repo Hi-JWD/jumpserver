@@ -1,4 +1,5 @@
 from django.utils.translation import gettext_noop
+from django.contrib.auth.hashers import make_password
 
 from .const import Scope, system_exclude_permissions, org_exclude_permissions
 
@@ -61,6 +62,8 @@ security_admin_exclude_perms = (
     ('terminal', 'sessionsharing', '*', 'sessionsharing'),
     ('terminal', 'sessionjoinrecord', '*', 'sessionjoinrecord'),
     ('rbac', 'menupermission', 'view', 'audit'),
+    ('rbac', 'systemrole', 'add,delete,change', '*'),
+    ('rbac', 'orgrole', 'add,delete,change', '*'),
     ('ops', '*', '*', '*'),
 )
 authorized_admin_perms = (
@@ -97,7 +100,7 @@ class PredefineRole:
     id_prefix = '00000000-0000-0000-0000-00000000000'
 
     def __init__(self, index, name, scope, perms, perms_type='include'):
-        self.id = self.id_prefix[:36-len(index)] + index
+        self.id = self.id_prefix[:36 - len(index)] + index
         self.name = name
         self.scope = scope
         self.perms = perms
@@ -131,12 +134,34 @@ class PredefineRole:
         }
         return defaults
 
+    @staticmethod
+    def create_builtin_user(role):
+        from users.models import User
+        mapping = {
+            BuiltinRole.security_admin.name: 'security_admin',
+            BuiltinRole.auditor_admin.name: 'auditor_admin',
+            BuiltinRole.authorized_admin.name: 'authorized_admin',
+        }
+
+        username = mapping.get(role.name)
+        if not username:
+            return
+
+        user, created = User.objects.get_or_create(
+            username=username, defaults={
+                'name': role.name, 'email': f"{username}@mycomany.com",
+                'password': make_password("ChangeMe"),
+            }
+        )
+        user.system_roles.set([role])
+
     def update_or_create_role(self):
         from rbac.models import Role
         defaults = self._get_defaults()
         permissions = defaults.pop('permissions', [])
         role, created = Role.objects.update_or_create(defaults, id=self.id)
         role.permissions.set(permissions)
+        self.create_builtin_user(role)
         return role, created
 
 

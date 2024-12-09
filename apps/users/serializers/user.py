@@ -153,12 +153,12 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, ResourceLa
         # 多对多字段
         fields_m2m = ["groups", "system_roles", "org_roles", "orgs_roles", "labels"]
         # 在serializer 上定义的字段
-        fields_custom = ["login_blocked", "password_strategy"]
+        fields_custom = ["login_blocked", "password_strategy", "is_special_admin"]
         fields = fields_verbose + fields_fk + fields_m2m + fields_custom
         fields_unexport = ["avatar_url", "is_service_account"]
 
         read_only_fields = [
-            "date_joined", "last_login", "created_by",
+            "date_joined", "last_login", "created_by", "is_special_admin",
             "is_first_login", *fields_xpack, "date_api_key_last_used",
         ]
         fields_only_root_org = ["orgs_roles"]
@@ -183,6 +183,13 @@ class UserSerializer(RolesSerializerMixin, CommonBulkSerializerMixin, ResourceLa
             "is_otp_secret_key_bound": {"label": _("Is OTP bound")},
             'mfa_level': {'label': _("MFA level")},
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if hasattr(self.instance, 'is_special_admin') and self.instance.is_special_admin:
+            for field in ('username', 'system_roles', 'org_roles'):
+                if field in self.fields:
+                    self.fields[field].read_only = True
 
     def get_fields(self):
         fields = super().get_fields()

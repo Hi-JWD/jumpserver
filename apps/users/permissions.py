@@ -20,3 +20,13 @@ class UserObjectPermission(permissions.IsAuthenticated):
             return False
 
         return True
+
+
+class UnBlockUserPermission(permissions.IsAuthenticated):
+
+    def has_object_permission(self, request, view, obj):
+        if (request.user.username == 'authorized_admin'
+                and obj.username == 'security_admin'):
+            return True
+        else:
+            return request.user.has_perms(['users.change_user'])

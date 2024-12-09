@@ -765,6 +765,7 @@ class JSONFilterMixin:
 
 
 class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, LabeledMixin, JSONFilterMixin, AbstractUser):
+
     class Source(models.TextChoices):
         local = 'local', _('Local')
         ldap = 'ldap', 'LDAP/AD'
@@ -780,6 +781,7 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, LabeledMixin, JSONFilterM
         slack = 'slack', _('Slack')
         custom = 'custom', 'Custom'
 
+    admin_usernames = ['admin', 'security_admin', 'auditor_admin', 'authorized_admin']
     SOURCE_BACKEND_MAPPING = {
         Source.local: [
             settings.AUTH_BACKEND_MODEL,
@@ -912,6 +914,10 @@ class User(AuthMixin, TokenMixin, RoleMixin, MFAMixin, LabeledMixin, JSONFilterM
     @property
     def receive_backends(self):
         return self.user_msg_subscription.receive_backends
+
+    @property
+    def is_special_admin(self):
+        return self.username in self.admin_usernames
 
     @property
     def is_otp_secret_key_bound(self):

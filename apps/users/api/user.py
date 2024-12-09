@@ -20,7 +20,7 @@ from ..exceptions import UnableToDeleteAllUsers
 from ..filters import UserFilter
 from ..models import User
 from ..notifications import ResetMFAMsg
-from ..permissions import UserObjectPermission
+from ..permissions import UserObjectPermission, UnBlockUserPermission
 from ..serializers import (
     UserSerializer, MiniUserSerializer, InviteSerializer, UserRetrieveSerializer
 )
@@ -191,6 +191,7 @@ class UserChangePasswordApi(UserQuerysetMixin, generics.UpdateAPIView):
 
 class UserUnblockPKApi(UserQuerysetMixin, generics.UpdateAPIView):
     serializer_class = serializers.UserSerializer
+    permission_classes = [UnBlockUserPermission, ]
 
     def perform_update(self, serializer):
         user = self.get_object()
