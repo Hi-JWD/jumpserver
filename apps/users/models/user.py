@@ -487,7 +487,7 @@ class RoleMixin:
 
         from rbac.builtin import BuiltinRole
         ids = [str(r.id) for r in self.system_roles.all()]
-        yes = BuiltinRole.system_admin.id in ids
+        yes = BuiltinRole.system_admin.id in ids or BuiltinRole.security_admin.id in ids
         self._is_superuser = yes
         return yes
 

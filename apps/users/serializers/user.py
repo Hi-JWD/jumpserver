@@ -310,14 +310,13 @@ class MiniUserSerializer(serializers.ModelSerializer):
         fields = UserSerializer.Meta.fields_mini
 
 
-class InviteSerializer(RolesSerializerMixin, serializers.Serializer):
+class InviteSerializer(serializers.Serializer):
     users = serializers.PrimaryKeyRelatedField(
         queryset=User.get_nature_users(),
         many=True,
         label=_("Select users"),
         help_text=_("For security, only list several users"),
     )
-    system_roles = None
 
 
 class ServiceAccountSerializer(serializers.ModelSerializer):

@@ -6,12 +6,14 @@ from rest_framework import generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_bulk import BulkModelViewSet
+from rest_framework.exceptions import PermissionDenied
 
 from common.api import CommonApiMixin, SuggestionMixin
 from common.drf.filters import AttrRulesFilterBackend
 from common.utils import get_logger
 from orgs.utils import current_org, tmp_to_root_org
 from rbac.models import Role, RoleBinding
+from rbac.builtin import BuiltinRole
 from rbac.permissions import RBACPermission
 from users.utils import LoginBlockUtil, MFABlockUtils
 from .mixins import UserQuerysetMixin
@@ -132,6 +134,11 @@ class UserViewSet(CommonApiMixin, UserQuerysetMixin, SuggestionMixin, BulkModelV
             self.check_object_permissions(self.request, user)
         return super().perform_bulk_update(serializer)
 
+    def perform_destroy(self, instance):
+        if instance.username in instance.admin_usernames:
+            raise PermissionDenied()
+        instance.delete()
+
     def perform_bulk_destroy(self, objects):
         for obj in objects:
             self.check_object_permissions(self.request, obj)
@@ -149,13 +156,12 @@ class UserViewSet(CommonApiMixin, UserQuerysetMixin, SuggestionMixin, BulkModelV
         validated_data = serializer.validated_data
 
         users = validated_data['users']
-        org_roles = validated_data['org_roles']
         has_self = any([str(u.id) == str(request.user.id) for u in users])
         if has_self and not request.user.is_superuser:
             error = {"error": _("Can not invite self")}
             return Response(error, status=400)
         for user in users:
-            user.org_roles.set(org_roles)
+            user.org_roles.set([BuiltinRole.org_user.get_role()])
         return Response(serializer.data, status=201)
 
     @action(methods=['post'], detail=True)
