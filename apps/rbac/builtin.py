@@ -65,6 +65,7 @@ security_admin_exclude_perms = (
     ('rbac', 'systemrole', 'add,delete,change', '*'),
     ('rbac', 'orgrole', 'add,delete,change', '*'),
     ('ops', '*', '*', '*'),
+    ('settings', 'setting', 'change', 'sms'),
 )
 authorized_admin_perms = (
     ('perms', '*', '*', '*'),
