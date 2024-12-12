@@ -27,8 +27,8 @@ class SpecialAuditMixin:
     def get_queryset(self):
         queryset = super().get_queryset()
         username = str(self.request.user)
-        auditor_usernames = self._get_role_users('SecurityAuditor')
-        sc_admin_usernames = self._get_role_users('SecurityConfidentialityAdmin')
+        auditor_usernames = self._get_role_users('AuditorAdmin')
+        sc_admin_usernames = self._get_role_users('AuthorizedAdmin')
         query_dict = {f'{self.filter_key}__in': auditor_usernames}
         if username in auditor_usernames:
             queryset = queryset.exclude(**query_dict)
