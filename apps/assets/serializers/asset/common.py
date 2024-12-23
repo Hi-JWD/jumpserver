@@ -447,12 +447,14 @@ class AssetsTaskSerializer(serializers.Serializer):
     ACTION_CHOICES = (
         ('refresh', 'refresh'),
         ('test', 'test'),
+        ('test_port', 'test_port'),
     )
     task = serializers.CharField(read_only=True)
     action = serializers.ChoiceField(choices=ACTION_CHOICES, write_only=True)
     assets = serializers.PrimaryKeyRelatedField(
         queryset=Asset.objects, required=False, allow_empty=True, many=True
     )
+    port = serializers.IntegerField(default=22, min_value=0, max_value=65535, label=_('Port'))
 
 
 class AssetTaskSerializer(AssetsTaskSerializer):
