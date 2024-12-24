@@ -1,19 +1,24 @@
 # -*- coding: utf-8 -*-
 #
-import re
-
 from django.conf import settings
 from django.core.cache import cache
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.static import serve
 from rest_framework import generics
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from common.utils import get_logger
 from jumpserver.conf import Config
+from common.permissions import OnlySuperUser
+from orgs.models import Organization
+from orgs.utils import tmp_to_org
 from rbac.permissions import RBACPermission
+from xpack.plugins.cloud.const import ProviderChoices
+from xpack.plugins.cloud.providers.huaweicloud_private import Client
+from xpack.plugins.cloud.models import Account, SyncInstanceTask
 from .. import serializers
 from ..models import Setting
 from ..signals import category_setting_updated
@@ -65,6 +70,7 @@ class SettingsApi(generics.RetrieveUpdateAPIView):
         'ticket': serializers.TicketSettingSerializer,
         'ops': serializers.OpsSettingSerializer,
         'virtualapp': serializers.VirtualAppSerializer,
+        'cloud_setting': serializers.CloudSettingSerializer,
     }
 
     rbac_category_permissions = {
@@ -199,3 +205,64 @@ class SettingsLogoApi(APIView):
         else:
             return HttpResponse(status=status.HTTP_404_NOT_FOUND)
         return serve(request, logo_path, document_root=document_root)
+
+
+class SyncOrgsApi(generics.ListCreateAPIView):
+    permission_classes = (OnlySuperUser,)
+    serializer_class = serializers.CloudRegionsSerializer
+
+    @staticmethod
+    def _get_client_attrs():
+        return {
+            'api_endpoint': settings.GLOBAL_HW_API_ENDPOINT,
+            'sc_username': settings.GLOBAL_HW_SC_USERNAME,
+            'sc_password': settings.GLOBAL_HW_SC_PASSWORD,
+            'domain_name': settings.GLOBAL_HW_SC_DOMAIN
+        }
+
+    def list(self, request, *args, **kwargs):
+        client = Client(**self._get_client_attrs())
+        regions = client.describe_regions()
+        return Response([{'id': r['id'], 'name': r['name']} for r in regions])
+
+    def get_vdc_name(self, vdc_id, vdc_map):
+        vdc = vdc_map.get(vdc_id)
+        upper_id = vdc.get('upper_vdc_id')
+        if upper_id != '0':
+            upper_names = self.get_vdc_name(upper_id, vdc_map)
+            upper_names.append(vdc)
+            return upper_names
+        else:
+            return [vdc]
+
+    def _get_resole_vdcs(self, vdcs):
+        vdc_map = {v['id']: v for v in vdcs}
+        result = [self.get_vdc_name(v['id'], vdc_map) for v in vdcs]
+        return result
+
+    def _create_org(self, vdc):
+        account_name, task_name = 'Auto-Account', 'Auto-Task'
+        org, __ = Organization.objects.get_or_create(
+            name=vdc['name'], defaults={'builtin': True}
+        )
+        with tmp_to_org(org):
+            account, __ = Account.objects.get_or_create(
+                name=account_name, defaults={
+                    'provider': ProviderChoices.huaweicloud_private,
+                    'attrs': self._get_client_attrs()
+                }
+            )
+            SyncInstanceTask.objects.get_or_create(
+                name=task_name, defaults={
+                    'account': account, 'is_periodic': True, 'interval': 1,
+                    'regions': [{'id': vdc['region_id'], 'vdcs': [vdc['id']]}],
+                }
+            )
+
+    def perform_create(self, serializer):
+        client = Client(**self._get_client_attrs())
+        for region in serializer.validated_data['regions']:
+            for vdc in self._get_resole_vdcs(client.describe_vdcs(region)):
+                if len(vdc) != 2:
+                    continue
+                self._create_org(vdc[1])

@@ -166,6 +166,7 @@ class Asset(NodesRelationMixin, LabeledMixin, AbsConnectivity, JSONFilterMixin, 
     is_active = models.BooleanField(default=True, verbose_name=_('Is active'))
     gathered_info = models.JSONField(verbose_name=_('Gathered info'), default=dict, blank=True)  # 资产的一些信息，如 硬件信息
     custom_info = models.JSONField(verbose_name=_('Custom info'), default=dict)
+    last_connection_time = models.DateTimeField(null=True, verbose_name=_('Last connection time'))
 
     objects = AssetManager.from_queryset(AssetQuerySet)()
 

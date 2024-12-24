@@ -140,7 +140,7 @@ class AssetSerializer(BulkOrgResourceModelSerializer, ResourceLabelsMixin, Writa
         ]
         read_only_fields = [
             'category', 'type', 'connectivity', 'auto_config',
-            'date_verified', 'created_by', 'date_created',
+            'date_verified', 'created_by', 'date_created', 'last_connection_time',
         ]
         fields = fields_small + fields_fk + fields_m2m + read_only_fields
         fields_unexport = ['auto_config']
