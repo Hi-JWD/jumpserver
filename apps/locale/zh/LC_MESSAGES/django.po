@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: JumpServer 0.3.3\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-12-25 11:15+0800\n"
+"POT-Creation-Date: 2024-12-25 15:33+0800\n"
 "PO-Revision-Date: 2021-05-20 10:54+0800\n"
 "Last-Translator: ibuler <ibuler@qq.com>\n"
 "Language-Team: JumpServer team<ibuler@qq.com>\n"
@@ -33,12 +33,13 @@ msgstr "成功: %s, 失败: %s, 总数: %s"
 #: authentication/confirm/password.py:26 authentication/forms.py:28
 #: authentication/templates/authentication/login.html:330
 #: settings/serializers/auth/ldap.py:25 settings/serializers/auth/ldap.py:47
-#: settings/serializers/msg.py:35 terminal/serializers/storage.py:123
-#: terminal/serializers/storage.py:142 users/forms/profile.py:21
-#: users/serializers/user.py:111
+#: settings/serializers/msg.py:35 settings/serializers/other.py:36
+#: terminal/serializers/storage.py:123 terminal/serializers/storage.py:142
+#: users/forms/profile.py:21 users/serializers/user.py:111
 #: users/templates/users/_msg_user_created.html:13
 #: users/templates/users/user_password_verify.html:18
 #: xpack/plugins/cloud/serializers/account_attrs.py:28
+#: xpack/plugins/cloud/serializers/account_attrs.py:89
 msgid "Password"
 msgstr "密码"
 
@@ -273,7 +274,8 @@ msgstr "用户 %s 查看/导出 了密码"
 #: accounts/templates/accounts/change_secret_failed_info.html:11
 #: acls/serializers/base.py:123 assets/models/asset/common.py:95
 #: assets/models/asset/common.py:351 assets/models/cmd_filter.py:36
-#: audits/models.py:58 authentication/models/connection_token.py:36
+#: assets/tasks/ping.py:65 audits/models.py:58
+#: authentication/models/connection_token.py:36
 #: perms/models/asset_permission.py:69 perms/serializers/permission.py:35
 #: terminal/backends/command/models.py:17 terminal/models/session/session.py:33
 #: terminal/notifications.py:155 terminal/serializers/command.py:17
@@ -550,10 +552,11 @@ msgstr "最后登录日期"
 #: authentication/models/temp_token.py:9
 #: authentication/templates/authentication/_msg_different_city.html:9
 #: authentication/templates/authentication/_msg_oauth_bind.html:9
-#: terminal/serializers/storage.py:136 users/forms/profile.py:31
-#: users/forms/profile.py:114 users/models/user.py:835
-#: users/templates/users/_msg_user_created.html:12
+#: settings/serializers/other.py:33 terminal/serializers/storage.py:136
+#: users/forms/profile.py:31 users/forms/profile.py:114
+#: users/models/user.py:835 users/templates/users/_msg_user_created.html:12
 #: xpack/plugins/cloud/serializers/account_attrs.py:26
+#: xpack/plugins/cloud/serializers/account_attrs.py:87
 msgid "Username"
 msgstr "用户名"
 
@@ -1491,7 +1494,8 @@ msgstr "云服务"
 msgid "Web"
 msgstr "Web"
 
-#: assets/const/category.py:16 common/sdk/sms/endpoint.py:20
+#: assets/const/category.py:16 common/sdk/sms/custom_file.py:47
+#: common/sdk/sms/endpoint.py:20
 msgid "Custom type"
 msgstr "自定义"
 
@@ -2172,7 +2176,7 @@ msgstr "端口超出范围 (0-65535)"
 msgid "Protocol is required: {}"
 msgstr "协议是必填的: {}"
 
-#: assets/serializers/asset/common.py:317
+#: assets/serializers/asset/common.py:317 labels/api.py:107
 msgid "Invalid data"
 msgstr "无效的数据"
 
@@ -2385,6 +2389,10 @@ msgid ""
 "be executed"
 msgstr "在“资产列表”中点击“测试资产端口连通性”时，将执行此任务"
 
+#: assets/tasks/ping.py:65 xpack/plugins/cloud/serializers/account_attrs.py:193
+msgid "Test port"
+msgstr "测试端口"
+
 #: assets/tasks/ping.py:66 ops/api/celery.py:66 ops/api/celery.py:81
 msgid "Waiting task start"
 msgstr "等待任务开始"
@@ -2417,6 +2425,10 @@ msgstr "没有匹配到资产，结束任务"
 #: audits/apps.py:9
 msgid "Audits"
 msgstr "日志审计"
+
+#: audits/backends/__init__.py:29 audits/const.py:51 audits/models.py:132
+msgid "Operate log"
+msgstr "操作日志"
 
 #: audits/backends/db.py:16
 msgid "The text content is too long. Use Elasticsearch to store operation logs"
@@ -2517,10 +2529,6 @@ msgstr "结束"
 msgid "Terminal"
 msgstr "终端"
 
-#: audits/const.py:51 audits/models.py:132
-msgid "Operate log"
-msgstr "操作日志"
-
 #: audits/const.py:52
 msgid "Session log"
 msgstr "会话日志"
@@ -2563,7 +2571,8 @@ msgstr "操作"
 msgid "Filename"
 msgstr "文件名"
 
-#: audits/models.py:66 common/serializers/common.py:98
+#: audits/models.py:66 common/sdk/sms/custom_file.py:47
+#: common/serializers/common.py:98
 msgid "File"
 msgstr "文件"
 
@@ -5877,6 +5886,10 @@ msgstr "云设置"
 msgid "API Endpoint"
 msgstr "API 端点"
 
+#: settings/serializers/other.py:39
+msgid "Tenant Name"
+msgstr "租户名称"
+
 #: settings/serializers/other.py:44 xpack/plugins/cloud/models.py:89
 #: xpack/plugins/cloud/serializers/task.py:163
 msgid "Regions"
@@ -6599,7 +6612,7 @@ msgstr "会话不存在: {}"
 msgid "Session is finished or the protocol not supported"
 msgstr "会话已经完成或协议不支持"
 
-#: terminal/api/session/session.py:336
+#: terminal/api/session/session.py:336 tickets/api/ticket.py:140
 msgid "User does not have permission"
 msgstr "用户没有权限"
 
@@ -9165,6 +9178,10 @@ msgstr "租户 ID"
 msgid "Subscription ID"
 msgstr "订阅 ID"
 
+#: xpack/plugins/cloud/serializers/account_attrs.py:92
+msgid "Domain name"
+msgstr "地域名称"
+
 #: xpack/plugins/cloud/serializers/account_attrs.py:104
 msgid "Auth url"
 msgstr "认证地址"
@@ -9217,10 +9234,6 @@ msgstr "主机名前缀"
 #: xpack/plugins/cloud/serializers/account_attrs.py:189
 msgid "IP segment"
 msgstr "IP 网段"
-
-#: xpack/plugins/cloud/serializers/account_attrs.py:193
-msgid "Test port"
-msgstr "测试端口"
 
 #: xpack/plugins/cloud/serializers/account_attrs.py:196
 msgid "Test timeout"
