@@ -54,6 +54,20 @@ app_exclude_perms = [
     ('rbac', '*', '*', '*'),
 ]
 
+# app, model, action, resource
+org_spec_admin_exclude_perms = [
+    ('assets', 'asset', 'add,change,delete', '*'),
+    ('assets', 'gateway', 'add,change,delete', '*'),
+    ('assets', 'domain', 'add,change,delete', '*'),
+    ('xpack', 'account', '*', '*'),
+    ('xpack', 'strategy', '*', '*'),
+    ('xpack', 'strategyaction', '*', '*'),
+    ('xpack', 'strategyrule', '*', '*'),
+    ('xpack', 'syncinstancedetail', '*', '*'),
+    ('xpack', 'syncinstancetask', '*', '*'),
+    ('xpack', 'syncinstancetaskexecution', '*', '*'),
+]
+
 need_check = [
     *auditor_perms, *user_perms, *app_exclude_perms,
     *system_exclude_permissions, *org_exclude_permissions
@@ -131,6 +145,10 @@ class BuiltinRole:
     )
     org_user = PredefineRole(
         '7', gettext_noop('OrgUser'), Scope.org, user_perms
+    )
+    org_spec_admin = PredefineRole(
+        '0', gettext_noop('OrgSpecAdmin'), Scope.org,
+        org_spec_admin_exclude_perms, 'exclude'
     )
     system_role_mapper = None
     org_role_mapper = None

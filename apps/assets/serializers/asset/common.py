@@ -9,6 +9,7 @@ from rest_framework import serializers
 from accounts.models import Account
 from accounts.serializers import AccountSerializer
 from common.const import UUID_PATTERN
+from common.exceptions import JMSException
 from common.serializers import (
     WritableNestedModelSerializer, SecretReadableMixin,
     CommonModelSerializer, MethodSerializer, ResourceLabelsMixin
@@ -18,7 +19,7 @@ from common.serializers.fields import LabeledChoiceField
 from labels.models import Label
 from orgs.mixins.serializers import BulkOrgResourceModelSerializer
 from ...const import Category, AllTypes
-from ...models import Asset, Node, Platform, Protocol
+from ...models import Asset, Node, Platform, Protocol, Host
 
 __all__ = [
     'AssetSerializer', 'AssetSimpleSerializer', 'MiniAssetSerializer',
@@ -469,3 +470,14 @@ class AssetTaskSerializer(AssetsTaskSerializer):
     accounts = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects, required=False, allow_empty=True, many=True
     )
+
+
+class SpecialRoleAssetMixin:
+    def validate_address(self, value):
+        user = self.context['request'].user
+        if user.is_org_spec_admin:
+            if not Host.objects.filter(address=value).exists():
+                raise JMSException(
+                    _('You can only create assets with the same IP that exist in the hosts.')
+                )
+        return value

@@ -491,6 +491,12 @@ class RoleMixin:
         self._is_superuser = yes
         return yes
 
+    @lazyproperty
+    def is_org_spec_admin(self):
+        from rbac.builtin import BuiltinRole
+        ids = [str(r.id) for r in self.org_roles.all()]
+        return BuiltinRole.org_spec_admin.id in ids
+
     @is_superuser.setter
     def is_superuser(self, value):
         self._is_superuser = value

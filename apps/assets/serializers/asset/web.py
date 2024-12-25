@@ -1,10 +1,10 @@
 from assets.models import Web
-from .common import AssetSerializer
+from .common import AssetSerializer, SpecialRoleAssetMixin
 
 __all__ = ['WebSerializer']
 
 
-class WebSerializer(AssetSerializer):
+class WebSerializer(SpecialRoleAssetMixin, AssetSerializer):
     class Meta(AssetSerializer.Meta):
         model = Web
         fields = AssetSerializer.Meta.fields + [

@@ -4,12 +4,12 @@ from rest_framework import serializers
 
 from assets.models import Database, Platform
 from assets.serializers.gateway import GatewayWithAccountSecretSerializer
-from .common import AssetSerializer
+from .common import AssetSerializer, SpecialRoleAssetMixin
 
 __all__ = ['DatabaseSerializer', 'DatabaseWithGatewaySerializer']
 
 
-class DatabaseSerializer(AssetSerializer):
+class DatabaseSerializer(SpecialRoleAssetMixin, AssetSerializer):
     db_name = serializers.CharField(max_length=1024, label=_('Default database'), required=True)
 
     class Meta(AssetSerializer.Meta):
