@@ -27,6 +27,8 @@ import (
 )
 
 const (
+	ContinueSQL    = "CONTINUE"
+	FailedSQL      = "EXIT SQL.SQLCODE"
 	MySQLPrefix    = "mysql> "
 	RetryTime      = 3
 	TaskStart      = "executing"
@@ -38,7 +40,7 @@ SET SERVEROUTPUT ON;
 SET SQLBLANKLINES ON;
 SET MARKUP CSV ON;
 SET FEEDBACK ON;
-WHENEVER SQLERROR EXIT SQL.SQLCODE;
+WHENEVER SQLERROR %s;
 WHENEVER OSERROR EXIT FAILURE;
 @"%s";
 EXIT;`
@@ -248,7 +250,13 @@ func (s *LocalScriptHandler) CreateTempFile() (string, error) {
 			realEntryFile = entryFile
 		}
 	}
-	content := fmt.Sprintf(OracleTemplate, realEntryFile)
+	var condition string
+	if s.opts.FailedContinue() {
+		condition = ContinueSQL
+	} else {
+		condition = FailedSQL
+	}
+	content := fmt.Sprintf(OracleTemplate, condition, realEntryFile)
 	if _, err := file.Write([]byte(content)); err != nil {
 		return "", err
 	}
@@ -266,6 +274,9 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 		database := fmt.Sprintf("-D%s", s.opts.Auth.DBName)
 		sqlPath := fmt.Sprintf("source %s", s.opts.CmdFile)
 		args = append(args, username, host, port, database, "-t", "-vvv", "-e", sqlPath)
+		if s.opts.FailedContinue() {
+			args = append(args, "-f")
+		}
 	} else if s.opts.Script == "sqlplus" {
 		connectionStr = fmt.Sprintf(
 			"%s/\"%s\"@%s:%d/%s", s.opts.Auth.Username, s.opts.Auth.Password, s.opts.Auth.Address, s.opts.Auth.Port, s.opts.Auth.DBName,
@@ -421,7 +432,12 @@ type CmdOptions struct {
 	CmdSetFilepath string   `json:"cmd_set_filepath"`
 	CmdSet         []Cmd    `json:"command_set"`
 	Encrypted      bool     `json:"encrypted_data"`
+	TaskStrategy   string   `json:"task_strategy"`
 	Envs           string   `json:"envs"`
+}
+
+func (co *CmdOptions) FailedContinue() bool {
+	return co.TaskStrategy == "failed_continue"
 }
 
 func (co *CmdOptions) ValidCmdType() bool {

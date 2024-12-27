@@ -268,6 +268,7 @@ class WorkerPool(object):
             'local_commands_file': local_cmds_file, 'org_id': str(execution.org_id),
             'envs': execution.worker.envs, 'cmd_file_real': cmd_file,
             'cmd_file': os.path.join(remote_command_dir, os.path.basename(cmd_file)),
+            'task_strategy': execution.plan.plan_strategy,
         }
 
     def __run(self, execution: Execution) -> None:
