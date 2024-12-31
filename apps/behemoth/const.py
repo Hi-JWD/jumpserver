@@ -18,6 +18,7 @@ class TaskStatus(models.TextChoices):
     executing = 'executing', _('Executing')
     pause = 'pause', _('Pause')
     success = 'success', _('Success')
+    success_with_error = 'success_with_error', '存在失败'
     failed = 'failed', _('Failed')
 
 

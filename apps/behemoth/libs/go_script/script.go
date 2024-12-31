@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -27,14 +26,15 @@ import (
 )
 
 const (
-	ContinueSQL    = "CONTINUE"
-	FailedSQL      = "EXIT SQL.SQLCODE"
-	MySQLPrefix    = "mysql> "
-	RetryTime      = 3
-	TaskStart      = "executing"
-	TaskFailed     = "failed"
-	TaskSuccess    = "success"
-	OracleTemplate = `SET ECHO ON;
+	ContinueSQL          = "CONTINUE"
+	FailedSQL            = "EXIT SQL.SQLCODE"
+	MySQLPrefix          = "mysql> "
+	RetryTime            = 3
+	TaskStart            = "executing"
+	TaskFailed           = "failed"
+	TaskSuccess          = "success"
+	TaskSuccessWithError = "success_with_error"
+	OracleTemplate       = `SET ECHO ON;
 SET TIMING OFF;
 SET SERVEROUTPUT ON;
 SET SQLBLANKLINES ON;
@@ -167,38 +167,6 @@ type LocalScriptHandler struct {
 	cmdDir      string
 }
 
-func (s *LocalScriptHandler) LoadErrorCodeFromFile() {
-	errorCodePath := "/opt/behemoth/data/error_code.json"
-	file, err := os.Open(errorCodePath)
-	defer func(file *os.File) {
-		err = file.Close()
-	}(file)
-	if err != nil {
-		return
-	}
-
-	fileContent, err := io.ReadAll(file)
-	if err != nil {
-		return
-	}
-
-	var errCodeList []string
-	err = json.Unmarshal(fileContent, &errCodeList)
-	if err != nil {
-		return
-	}
-	s.errCodeList = errCodeList
-}
-
-func (s *LocalScriptHandler) CheckHasErrorCode(result string) bool {
-	for _, code := range s.errCodeList {
-		if strings.HasPrefix(result, code) {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *LocalScriptHandler) IsZipFile() bool {
 	// 客户环境无法拿出来压缩包，无法知道为啥解压失败的问题，故这里只判断文件后缀
 	return strings.HasSuffix(s.opts.CmdFile, ".zip")
@@ -219,7 +187,6 @@ func (s *LocalScriptHandler) Connect() error {
 	if err != nil {
 		return fmt.Errorf("%s 命令不存在，请在工作机上配置相应命令", s.opts.Script)
 	}
-	s.LoadErrorCodeFromFile()
 	return nil
 }
 
@@ -304,10 +271,6 @@ func (s *LocalScriptHandler) DoCommand(command string) (string, error) {
 	ret = strings.TrimSpace(string(output))
 	if err != nil {
 		return ret, err
-	}
-	hasErr := s.CheckHasErrorCode(string(output))
-	if hasErr {
-		return ret, errors.New(ret)
 	}
 	return ret, nil
 }
@@ -434,6 +397,9 @@ type CmdOptions struct {
 	Encrypted      bool     `json:"encrypted_data"`
 	TaskStrategy   string   `json:"task_strategy"`
 	Envs           string   `json:"envs"`
+
+	errCodeList     []string
+	hasContentError bool
 }
 
 func (co *CmdOptions) FailedContinue() bool {
@@ -445,6 +411,45 @@ func (co *CmdOptions) ValidCmdType() bool {
 	for _, vType := range validType {
 		if co.CmdType == vType {
 			return true
+		}
+	}
+	return false
+}
+
+func (co *CmdOptions) LoadErrorCodeFromFile() {
+	errorCodePath := "/opt/behemoth/data/error_code.json"
+	file, err := os.Open(errorCodePath)
+	defer func(file *os.File) {
+		err = file.Close()
+	}(file)
+	if err != nil {
+		return
+	}
+
+	fileContent, err := io.ReadAll(file)
+	if err != nil {
+		return
+	}
+
+	var errCodeList []string
+	err = json.Unmarshal(fileContent, &errCodeList)
+	if err != nil {
+		return
+	}
+	co.errCodeList = errCodeList
+}
+
+func (co *CmdOptions) CheckHasErrorCode(result string) bool {
+	for _, line := range strings.Split(result, "\n") {
+		if co.Script == "sqlplus" {
+			if strings.HasPrefix(line, "ERROR at line") {
+				return true
+			}
+		}
+		for _, code := range co.errCodeList {
+			if strings.HasPrefix(line, code) {
+				return true
+			}
 		}
 	}
 	return false
@@ -719,6 +724,7 @@ func main() {
 		return
 	}
 
+	opts.LoadErrorCodeFromFile()
 	logger.Printf("Start executing the task")
 	handler := getHandler(opts)
 	if err := handler.Connect(); err != nil {
@@ -735,6 +741,7 @@ func main() {
 	var err error
 	for _, command := range opts.CmdSet {
 		result, err = handler.DoCommand(command.Value)
+		opts.hasContentError = opts.CheckHasErrorCode(result)
 		resp, err := jmsClient.CommandCB(opts.TaskID, &command, result, err)
 		if err != nil {
 			logger.Fatalf("Command callback failed: %v\n", err)
@@ -747,6 +754,10 @@ func main() {
 			return
 		}
 	}
-	_ = jmsClient.OperateTask(opts.TaskID, TaskSuccess, nil)
+	taskStatus := TaskSuccess
+	if opts.hasContentError {
+		taskStatus = TaskSuccessWithError
+	}
+	_ = jmsClient.OperateTask(opts.TaskID, taskStatus, nil)
 	logger.Printf("Task finished successfully")
 }

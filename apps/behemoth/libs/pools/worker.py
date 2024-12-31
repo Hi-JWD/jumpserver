@@ -212,6 +212,8 @@ class WorkerPool(object):
         commands = execution.get_commands(get_all=False)
         if not commands:
             print(p.yellow(_('There are no commands for this task. Skip')))
+            execution.status = TaskStatus.success
+            execution.save(update_fields=['status'])
             return None
 
         if execution.category == ExecutionCategory.pause:

@@ -42,7 +42,9 @@ class ExecutionMixin:
             executions: list[Execution], users: list, response_data: dict | None = None
     ):
         valid_executions = [
-            e for e in executions if e.status not in (TaskStatus.success, TaskStatus.executing)
+            e for e in executions if e.status not in (
+                TaskStatus.success, TaskStatus.executing, TaskStatus.success_with_error,
+            )
         ]
         if not valid_executions:
             error = _('Task is running or finished')
