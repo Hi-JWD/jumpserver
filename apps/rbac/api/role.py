@@ -125,7 +125,10 @@ class OrgRoleViewSet(RoleViewSet):
     perm_model = OrgRole
 
     def get_queryset(self):
+        from rbac.builtin import BuiltinRole as BR
         qs = super().get_queryset().filter(scope='org')
+        if self.request.user.is_org_spec_admin:
+            qs = qs.exclude(id__in=[BR.org_admin.id, BR.org_spec_admin.id])
         return qs
 
 
