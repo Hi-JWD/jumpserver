@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 #
+from urllib.parse import urlparse
 
 from django.db.models import F
 from django.db.transaction import atomic
@@ -16,6 +17,7 @@ from common.serializers import (
 )
 from common.serializers.common import DictSerializer
 from common.serializers.fields import LabeledChoiceField
+from common.utils.ip import is_ip_address
 from labels.models import Label
 from orgs.mixins.serializers import BulkOrgResourceModelSerializer
 from ...const import Category, AllTypes
@@ -474,10 +476,13 @@ class AssetTaskSerializer(AssetsTaskSerializer):
 
 class SpecialRoleAssetMixin:
     def validate_address(self, value):
+        raw_value = value
         user = self.context['request'].user
         if user.is_org_spec_admin:
+            parsed_url = urlparse(value)
+            value = getattr(parsed_url, 'hostname') or value
             if not Host.objects.filter(address=value).exists():
                 raise JMSException(
                     _('You can only create assets with the same IP that exist in the hosts.')
                 )
-        return value
+        return raw_value
